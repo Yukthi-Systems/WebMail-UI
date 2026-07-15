@@ -19,7 +19,6 @@ import { useState, useRef, useEffect } from 'react';
 import { FaPaperclip, FaTrash, FaFlag, FaEnvelope } from 'react-icons/fa';
 import { MdDriveFileMoveOutline, MdMarkEmailRead, MdMarkEmailUnread } from 'react-icons/md';
 import { decodeWords } from 'postal-mime';
-import type { SimplifiedEmail } from './dummydata';
 import BIMIAvatar from '../common/BimiAvatar';
 import { Checkbox, ContextMenu } from '@radix-ui/themes';
 import { parseEmail } from '../../utils/emailPerser';
@@ -32,6 +31,7 @@ import { getMessageId, splitAddressList } from '../../utils/emailUtils';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEmailParser } from '../../hooks/useEmailParser';
 import { isFolderThreadEnabled, shouldApplyThreading } from '../../utils/emailListUtils';
+import type { SimplifiedEmail } from '../../utils/email';
 
 interface EmailCardProps {
   email: SimplifiedEmail;
@@ -397,7 +397,7 @@ const EmailCard = ({
     if (!email.attachments || email.attachments.length === 0) return '';
     const names = email.attachments
       .slice(0, 3)
-      .map((att) => att.filename)
+      .map((att:any) => att.filename)
       .join(', ');
     if (email.attachments.length > 3) return `${names} + ${email.attachments.length - 3} more`;
     return names;

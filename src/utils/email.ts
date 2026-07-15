@@ -68,3 +68,23 @@ export const extractFullName = (fromField: string): string => {
 export const getEmailCountText = (count: number) => {
   return `${count} email${count !== 1 ? 's' : ''}`;
 };
+
+
+export interface EmailAttachment {
+  filename: string;
+  size: number; // in bytes
+  contentType: string;
+}
+
+export interface SimplifiedEmail {
+  Date: string;
+  FLAGS: string[];
+  From: string;
+  To: string;
+  Cc?: string;
+  Subject: string;
+  id: string;
+  bodyPreview?: string; // First few lines of content
+  attachments?: EmailAttachment[];
+  attachmentCount?: number;
+}

@@ -28,9 +28,7 @@ import { sidebarCollapsedAtom, sidebarPinnedAtom } from '../../../state/sidebar'
 import { FaTimes } from 'react-icons/fa';
 import BIMIAvatar from '../BimiAvatar';
 import { useLocation } from '@tanstack/react-router';
-import SearchDropdown from './search';
 import ProfileDropdown from './Profile';
-import type { SimplifiedEmail } from '../../mailbox/dummydata';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { emailAddress, selectedEmailAtom } from '../../../state/emailAddress';
 import { userSettingsAtom } from '../../../state/settings';
@@ -41,6 +39,8 @@ import { useToast } from '../../ui/ToastComponent';
 import { TourTip } from '../TourTips';
 import { useIsMobile } from '../../../hooks/use-mobile';
 import { getCompanySlugFromPath } from '../../../utils/routeUtils';
+import SearchDropdown from './search';
+
 
 const Header = () => {
   const navigate = useNavigate();
