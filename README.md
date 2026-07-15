@@ -2,6 +2,18 @@
 
 A modern, high-performance webmail application built with the latest React ecosystem. Yukthi Webmail leverages a robust technology stack designed for speed, type safety, and a premium user experience.
 
+[![Discord](https://img.shields.io/discord/29zTxvque?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/29zTxvque)
+
+> 💬 **Join our community on Discord:** [discord.gg/29zTxvque](https://discord.gg/29zTxvque) — ask questions, report bugs, share ideas, and get involved.
+
+## 📸 Screenshots
+
+<p align="center">
+  
+  <img src="public/screenshots/Screenshot_264.png" alt="Rich text email compose" width="32%" />
+  <img src="public/screenshots/Screenshot_265.png" alt="Email view" width="32%" />
+</p>
+
 ## 🚀 Features
 
 - **Modern Architecture:** Built on React 19 and Vite 6 for lightning-fast development and production performance.
@@ -112,3 +124,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
+
+Found a bug or have a feature request? [Open an issue](https://github.com/Yukthi-Systems/WebMail-UI/issues/new/choose).
+
+## 💬 Community
+
+Join our [Discord server](https://discord.gg/29zTxvque) to chat with maintainers and other contributors, ask questions, and stay up to date with the project.

@@ -1,0 +1,31 @@
+name: ❓ Question / Support
+description: Ask a question about using or setting up Yukthi Webmail
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? You'll often get a faster answer by asking in our [Discord server](https://discord.gg/29zTxvque) 💬
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What do you want to know?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Anything else that might help us answer (setup, environment, what you've already tried).
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        🔗 Come chat with us on [Discord](https://discord.gg/29zTxvque)!
