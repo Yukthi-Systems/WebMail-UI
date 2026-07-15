@@ -59,11 +59,10 @@ body:
     attributes:
       label: Additional context
       description: Add any other context about the problem here.
+      value: |
+
+
+        ---
+        💬 Discuss this issue on our [Discord](https://discord.gg/29zTxvque)
     validations:
       required: false
-
-  - type: markdown
-    attributes:
-      value: |
-        ---
-        🔗 Come chat with us on [Discord](https://discord.gg/29zTxvque)!

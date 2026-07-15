@@ -21,11 +21,10 @@ body:
     attributes:
       label: Context
       description: Anything else that might help us answer (setup, environment, what you've already tried).
+      value: |
+
+
+        ---
+        💬 Discuss this issue on our [Discord](https://discord.gg/29zTxvque)
     validations:
       required: false
-
-  - type: markdown
-    attributes:
-      value: |
-        ---
-        🔗 Come chat with us on [Discord](https://discord.gg/29zTxvque)!
