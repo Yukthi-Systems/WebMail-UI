@@ -1,0 +1,157 @@
+/*
+ * Copyright (C) 2026 Yukthi Systems Private Limited
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * version 3 along with this program. If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
+
+.error-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.error-content {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  max-width: 700px;
+  width: 100%;
+  text-align: center;
+}
+
+.error-icon {
+  color: #ff6b6b;
+  margin-bottom: 20px;
+}
+
+.error-content h1 {
+  color: #333;
+  margin-bottom: 15px;
+  font-size: 28px;
+}
+
+.error-content p {
+  color: #666;
+  margin-bottom: 30px;
+  line-height: 1.5;
+}
+
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.btn-icon {
+  margin-right: 8px;
+}
+
+.btn-primary {
+  background-color: #4c6ef5;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #3b5bdb;
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+.btn-secondary:hover {
+  background-color: #dee2e6;
+  transform: translateY(-2px);
+}
+
+.btn-logout {
+  background-color: #fa5252;
+  color: white;
+}
+
+.btn-logout:hover {
+  background-color: #e03131;
+  transform: translateY(-2px);
+}
+
+.btn-home {
+  background-color: #40c057;
+  color: white;
+}
+
+.btn-home:hover {
+  background-color: #2f9e44;
+  transform: translateY(-2px);
+}
+
+.error-details {
+  text-align: left;
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+  border-left: 4px solid #ff6b6b;
+}
+
+.error-details h3,
+.error-details h4 {
+  margin-top: 0;
+  color: #495057;
+}
+
+.error-details pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: white;
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  overflow-x: auto;
+  color: #868e96;
+}
+
+@media (max-width: 600px) {
+  .error-actions {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .error-content {
+    padding: 25px;
+  }
+}

@@ -1,0 +1,587 @@
+/*
+ * Copyright (C) 2026 Yukthi Systems Private Limited
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * version 3 along with this program. If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
+
+@import 'tailwindcss';
+
+/* Make dark: variant respond to Radix UI's .dark class (not just OS preference) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@keyframes pageLoadProgress {
+  0% {
+    width: 0%;
+    margin-left: 0%;
+  }
+  50% {
+    width: 60%;
+    margin-left: 20%;
+  }
+  100% {
+    width: 0%;
+    margin-left: 100%;
+  }
+}
+
+/* Add Radix colors to Tailwind v4 theme */
+@theme {
+  /* Radix accent colors (will use your theme's accent color - pink) */
+  --color-accent-1: var(--accent-1);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
+  --color-accent-4: var(--accent-4);
+  --color-accent-5: var(--accent-5);
+  --color-accent-6: var(--accent-6);
+  --color-accent-7: var(--accent-7);
+  --color-accent-8: var(--accent-8);
+  --color-accent-9: var(--accent-9);
+  --color-accent-10: var(--accent-10);
+  --color-accent-11: var(--accent-11);
+  --color-accent-12: var(--accent-12);
+
+  /* Radix gray colors */
+  --color-gray-1: var(--gray-1);
+  --color-gray-2: var(--gray-2);
+  --color-gray-3: var(--gray-3);
+  --color-gray-4: var(--gray-4);
+  --color-gray-5: var(--gray-5);
+  --color-gray-6: var(--gray-6);
+  --color-gray-7: var(--gray-7);
+  --color-gray-8: var(--gray-8);
+  --color-gray-9: var(--gray-9);
+  --color-gray-10: var(--gray-10);
+  --color-gray-11: var(--gray-11);
+  --color-gray-12: var(--gray-12);
+
+  /* Radix semantic colors */
+  --color-red-1: var(--red-1);
+  --color-red-2: var(--red-2);
+  --color-red-3: var(--red-3);
+  --color-red-4: var(--red-4);
+  --color-red-5: var(--red-5);
+  --color-red-6: var(--red-6);
+  --color-red-7: var(--red-7);
+  --color-red-8: var(--red-8);
+  --color-red-9: var(--red-9);
+  --color-red-10: var(--red-10);
+  --color-red-11: var(--red-11);
+  --color-red-12: var(--red-12);
+
+  --color-green-1: var(--green-1);
+  --color-green-2: var(--green-2);
+  --color-green-3: var(--green-3);
+  --color-green-4: var(--green-4);
+  --color-green-5: var(--green-5);
+  --color-green-6: var(--green-6);
+  --color-green-7: var(--green-7);
+  --color-green-8: var(--green-8);
+  --color-green-9: var(--green-9);
+  --color-green-10: var(--green-10);
+  --color-green-11: var(--green-11);
+  --color-green-12: var(--green-12);
+
+  --color-blue-1: var(--blue-1);
+  --color-blue-2: var(--blue-2);
+  --color-blue-3: var(--blue-3);
+  --color-blue-4: var(--blue-4);
+  --color-blue-5: var(--blue-5);
+  --color-blue-6: var(--blue-6);
+  --color-blue-7: var(--blue-7);
+  --color-blue-8: var(--blue-8);
+  --color-blue-9: var(--blue-9);
+  --color-blue-10: var(--blue-10);
+  --color-blue-11: var(--blue-11);
+  --color-blue-12: var(--blue-12);
+
+  --color-yellow-1: var(--yellow-1);
+  --color-yellow-2: var(--yellow-2);
+  --color-yellow-3: var(--yellow-3);
+  --color-yellow-4: var(--yellow-4);
+  --color-yellow-5: var(--yellow-5);
+  --color-yellow-6: var(--yellow-6);
+  --color-yellow-7: var(--yellow-7);
+  --color-yellow-8: var(--yellow-8);
+  --color-yellow-9: var(--yellow-9);
+  --color-yellow-10: var(--yellow-10);
+  --color-yellow-11: var(--yellow-11);
+  --color-yellow-12: var(--yellow-12);
+
+  /* Email-specific custom spacing */
+  --spacing-sidebar: 16rem;
+  --spacing-sidebar-collapsed: 4rem;
+  --spacing-email-item: 4rem;
+  --spacing-email-item-compact: 3rem;
+}
+
+#root {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+html {
+  font-size: 92%;
+}
+
+button {
+  cursor: pointer;
+}
+
+.email-viewer-container {
+  padding: 1.5rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f9fa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.email-header {
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  background: white;
+  /* border-radius: 8px; */
+  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); */
+  /* border: 1px solid #e1e5e9; */
+}
+
+.email-subject {
+  font-size: 1.3rem;
+  font-weight: 500;
+  line-height: 1;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+.email-metadata-icon {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.sender-email {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 14px;
+  color: #4b5563;
+}
+
+.email-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e1e5e9;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .email-viewer-container {
+    padding: 1rem;
+  }
+
+  .email-header {
+    padding: 1rem;
+  }
+
+  .email-subject {
+    font-size: 1.25rem;
+  }
+
+  .email-content {
+    padding: 1rem;
+  }
+}
+
+/* Folder Dialog Styles */
+.folder-dialog-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+  position: fixed;
+  inset: 0;
+  animation: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.folder-dialog-content {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow:
+    hsl(206 22% 7% / 35%) 0px 10px 38px -10px,
+    hsl(206 22% 7% / 20%) 0px 10px 20px -15px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90vw;
+  max-width: 450px;
+  max-height: 85vh;
+  padding: 24px;
+  animation: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.folder-dialog-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 18px;
+  color: #24292f;
+}
+
+.folder-dialog-description {
+  margin: 0;
+  color: #6e7781;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.folder-dialog-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid #d0d7de;
+}
+
+.breadcrumb-separator {
+  color: #6e7781;
+  display: flex;
+  align-items: center;
+}
+
+.folder-dialog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.folder-item:hover {
+  background-color: #f6f8fa;
+}
+
+.folder-item.selected {
+  background-color: #ddf4ff;
+}
+
+.folder-icon {
+  display: flex;
+  align-items: center;
+}
+
+.folder-count {
+  color: #6e7781;
+  background-color: #eaeef2;
+  padding: 2px 6px;
+  border-radius: 12px;
+}
+
+.folder-chevron {
+  color: #6e7781;
+  display: flex;
+  align-items: center;
+}
+
+.folder-dialog-actions {
+  padding-top: 16px;
+  border-top: 1px solid #d0d7de;
+}
+
+.folder-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  height: 24px;
+  width: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6e7781;
+  cursor: pointer;
+}
+
+.folder-dialog-close:hover {
+  background-color: #f6f8fa;
+  color: #24292f;
+}
+
+@keyframes overlayShow {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes contentShow {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+button {
+  cursor: pointer !important;
+}
+
+[role='menuitem'] {
+  cursor: pointer !important;
+}
+
+.rt-ScrollAreaViewport {
+  /* max-height: 350px !important; */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE, Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(calc(100% + 16px));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(100% + 16px));
+  }
+}
+
+@keyframes slideInTop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutTop {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+.toast-root[data-position='bottom-left'][data-state='open'] {
+  animation: slideIn 350ms ease-out;
+}
+
+.toast-root[data-position='bottom-left'][data-state='closed'] {
+  animation: slideOut 350ms ease-out forwards;
+}
+
+.toast-root[data-position='top-center'][data-state='open'] {
+  animation: slideInTop 350ms ease-out;
+}
+
+.toast-root[data-position='top-center'][data-state='closed'] {
+  animation: slideOutTop 350ms ease-out forwards;
+}
+.prose ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+}
+
+.prose ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+}
+
+@keyframes sidebar-hover-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* //orginal email */
+.original-email-container {
+  all: revert;
+  display: block;
+  color: var(--gray-12);
+  line-height: normal;
+  font-family: Arial, Helvetica, sans-serif;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.original-email-container ul {
+  list-style-type: disc !important;
+  margin: 1em 0 !important;
+  padding-left: 40px !important;
+  display: block !important;
+}
+
+.original-email-container ol {
+  list-style-type: decimal !important;
+  margin: 1em 0 !important;
+  padding-left: 40px !important;
+  display: block !important;
+}
+
+.original-email-container li {
+  display: list-item !important;
+  margin-bottom: 0px !important;
+}
+
+.original-email-container img {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.original-email-container a:not([style]) {
+  color: var(--accent-11);
+  text-decoration: underline;
+  word-break: break-all;
+}
+.original-email-container a[style] {
+  word-break: break-all;
+}
+
+.original-email-container p:not([style]) {
+  margin-top: 0;
+  min-height: 1em;
+}
+
+.original-email-container p:not([style]):last-child {
+  margin-bottom: 0;
+}
+
+.original-email-container br {
+  display: block;
+  content: '';
+  margin-top: 0.5em;
+}
+
+/* Wrap tables so ONLY wide tables scroll, not text */
+.original-email-container table {
+  max-width: 100%;
+  table-layout: auto;
+}
+
+/* No borders by default — don't override inline styles */
+.original-email-container td,
+.original-email-container th {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* ONLY add borders/padding when table explicitly has border > 0 */
+.original-email-container table[border='1'] td,
+.original-email-container table[border='1'] th {
+  border: 1px solid #ccc;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.original-email-container table[border='2'] td,
+.original-email-container table[border='2'] th {
+  border: 2px solid #999;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.original-email-container table[border='1'] th,
+.original-email-container table[border='2'] th {
+  background-color: var(--gray-3);
+  font-weight: 600;
+}
+
+/* pre/code blocks scroll independently */
+.original-email-container pre,
+.original-email-container code {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  max-width: 100%;
+  display: block;
+}
+
+.form-input {
+  @apply w-full px-3 py-2 bg-[var(--gray-1)] border border-[var(--gray-6)] rounded-md text-[var(--gray-12)] placeholder:text-[var(--gray-9)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-9)] focus:border-transparent transition-all;
+}
+
+.form-input:focus {
+  @apply border-[var(--accent-9)];
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--gray-7);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-9);
+}

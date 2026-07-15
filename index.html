@@ -1,0 +1,263 @@
+<!--
+  Copyright (C) 2026 Yukthi Systems Private Limited
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License version 3
+  as published by the Free Software Foundation.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  version 3 along with this program. If not, see
+  <https://www.gnu.org/licenses/>.
+-->
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f97316" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link href="/src/index.css" rel="stylesheet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <script src="/env-config.js"></script>
+    <title>Mail Service 25</title>
+    <style>
+      #global-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: var(--color-background);
+        z-index: 10000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        transition:
+          opacity 0.3s ease-out,
+          visibility 0.3s ease-out;
+      }
+
+      #global-loader.hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      /* Light mode colors */
+      :root {
+        --color-background: #ffffff;
+        --color-text: #1e293b;
+        --color-text-secondary: #64748b;
+        --color-accent: #f97316;
+        --color-accent-bg: #fed7aa;
+        --color-border: #e2e8f0;
+      }
+
+      /* Dark mode colors */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --color-background: #0f172a;
+          --color-text: #f1f5f9;
+          --color-text-secondary: #94a3b8;
+          --color-accent: #f97316;
+          --color-accent-bg: #431407;
+          --color-border: #334155;
+        }
+      }
+
+      .loader-container {
+        text-align: center;
+        max-width: 280px;
+        width: 100%;
+        padding: 0 20px;
+      }
+
+      .loader-logo {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 20px;
+        background-color: var(--color-accent);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .loader-logo-text {
+        font-size: 20px;
+        color: white;
+        font-weight: 600;
+      }
+
+      .loader-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--color-text);
+        margin-bottom: 6px;
+      }
+
+      .loader-subtitle {
+        font-size: 14px;
+        color: var(--color-text-secondary);
+        margin-bottom: 24px;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: var(--color-border);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 12px;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: var(--color-accent);
+        border-radius: 2px;
+        width: 0%;
+        animation: progressAnimation 2.5s ease-in-out infinite;
+      }
+
+      @keyframes progressAnimation {
+        0% {
+          width: 0%;
+        }
+        50% {
+          width: 70%;
+        }
+        100% {
+          width: 100%;
+        }
+      }
+
+      .status-text {
+        font-size: 12px;
+        color: var(--color-text-secondary);
+        margin-top: 12px;
+        min-height: 16px;
+      }
+
+      .loading-dots {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        margin-top: 16px;
+      }
+      .loader-logo-icon {
+        width: 28px;
+        height: 28px;
+      }
+
+      .loading-dot {
+        width: 6px;
+        height: 6px;
+        background: var(--color-accent);
+        border-radius: 50%;
+        animation: dotPulse 1.2s ease-in-out infinite;
+      }
+
+      .loading-dot:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+
+      .loading-dot:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+
+      @keyframes dotPulse {
+        0%,
+        60%,
+        100% {
+          transform: scale(1);
+          opacity: 0.6;
+        }
+        30% {
+          transform: scale(1.1);
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="global-loader">
+      <div class="loader-container">
+        <div class="loader-logo">
+          <svg
+            class="loader-logo-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3 8L10.89 13.26C11.2187 13.4793 11.6049 13.5963 12 13.5963C12.3951 13.5963 12.7813 13.4793 13.11 13.26L21 8M5 19H19C19.5304 19 20.0391 18.7893 20.4142 18.4142C20.7893 18.0391 21 17.5304 21 17V7C21 6.46957 20.7893 5.96086 20.4142 5.58579C20.0391 5.21071 19.5304 5 19 5H5C4.46957 5 3.96086 5.21071 3.58579 5.58579C3.21071 5.96086 3 6.46957 3 7V17C3 17.5304 3.21071 18.0391 3.58579 18.4142C3.96086 18.7893 4.46957 19 5 19Z"
+              stroke="white"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </div>
+
+        <h1 class="loader-title">Mail Service 25</h1>
+        <p class="loader-subtitle">Loading your workspace</p>
+
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+
+        <div class="status-text" id="status-text">Starting...</div>
+
+        <div class="loading-dots">
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="root"></div>
+
+    <script>
+      const statusMessages = ['Starting...', 'Loading...', 'Initializing...', 'Almost ready...'];
+
+      let currentMessage = 0;
+      const statusElement = document.getElementById('status-text');
+
+      const updateStatus = () => {
+        if (currentMessage < statusMessages.length - 1) {
+          currentMessage++;
+          statusElement.textContent = statusMessages[currentMessage];
+        }
+      };
+
+      const statusInterval = setInterval(updateStatus, 700);
+
+      window.hideGlobalLoader = () => {
+        clearInterval(statusInterval);
+        const loader = document.getElementById('global-loader');
+        if (loader) {
+          loader.classList.add('hidden');
+          setTimeout(() => {
+            loader.style.display = 'none';
+          }, 300);
+        }
+      };
+
+      setTimeout(() => {
+        if (
+          document.getElementById('global-loader') &&
+          !document.getElementById('global-loader').classList.contains('hidden')
+        ) {
+          window.hideGlobalLoader();
+        }
+      }, 3000);
+    </script>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
