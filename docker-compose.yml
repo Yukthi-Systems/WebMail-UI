@@ -15,7 +15,7 @@
 
 services:
   webmail-ui:
-    image: rjyspl/webmail-ui:latest
+    image: rjyspl/webmail-web-ui:latest
     container_name: webmail-ui
     # Load environment variables from the .env file
     env_file:

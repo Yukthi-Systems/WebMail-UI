@@ -10,9 +10,9 @@ A modern, high-performance webmail application built with the latest React ecosy
 
 <p align="center">
   
-  <img src="public/screenshots/Screenshot_264.png" alt="Rich text email compose" width="80%" />
+  <img src="public/screenshots/email-compose.png" alt="Rich text email compose" width="80%" />
   <br /><br />
-  <img src="public/screenshots/Screenshot_265.png" alt="Email view" width="80%" />
+  <img src="public/screenshots/email-view.png" alt="Email view" width="80%" />
 </p>
 
 ## 🚀 Features
