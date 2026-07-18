@@ -17,26 +17,26 @@
 
 // src/components/email/EmailViewer.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useEmailRaw } from '../../hooks/useEmailRaw';
-import { flagAtom } from '../../state/flags';
+import { useEmailRaw } from '../../../../hooks/useEmailRaw';
+import { flagAtom } from '../../../../state/flags';
 import { useAtom, useAtomValue } from 'jotai';
-import { useUserTimezone } from '../../hooks/useTimezone';
-import { folderDetailsAtom } from '../../state/folders';
-import { useUpdateFolderUnreadCount } from '../../hooks/useFolders';
-import { useEmailCacheUpdater } from '../../hooks/useEmailCacheUpdater';
-import { userSettingsAtom } from '../../state/settings';
+import { useUserTimezone } from '../../../../hooks/useTimezone';
+import { folderDetailsAtom } from '../../../../state/folders';
+import { useUpdateFolderUnreadCount } from '../../../../hooks/useFolders';
+import { useEmailCacheUpdater } from '../../../../hooks/useEmailCacheUpdater';
+import { userSettingsAtom } from '../../../../state/settings';
 import { useParams } from '@tanstack/react-router';
 import { ThreadView } from './ThreadView';
 import { SingleEmailView } from './SingleEmailView';
-import { useEmailParser } from '../../hooks/useEmailParser';
-import { extractIds, getMessageId } from '../../utils/emailUtils';
+import { useEmailParser } from '../../../../hooks/useEmailParser';
+import { extractIds, getMessageId } from '../../../../utils/emailUtils';
 import { Separator } from '@radix-ui/themes';
 import { FaEnvelope } from 'react-icons/fa';
 import { decodeWords } from 'postal-mime';
-import { useDeleteMail, useMoveMail } from '../../hooks/useEmails';
-import { useToast } from '../../hooks/useToast';
-import { useThreadEmails, useThreadMutations } from '../../hooks/useThreadEmails';
-import type { EmailLike } from '../../utils/emailThreading';
+import { useDeleteMail, useMoveMail } from '../../../../hooks/useEmails';
+import { useToast } from '../../../../hooks/useToast';
+import { useThreadEmails, useThreadMutations } from '../../../../hooks/useThreadEmails';
+import type { EmailLike } from '../../../../utils/emailThreading';
 import type { Attachment } from 'postal-mime';
 
 interface EmailViewerProps {

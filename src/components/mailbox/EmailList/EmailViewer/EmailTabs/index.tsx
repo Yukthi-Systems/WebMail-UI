@@ -23,13 +23,13 @@ import EmailHtmlContent from './EmailHtmlContent';
 import EmailTextContent from './EmailTextContent';
 import { ICSViewer } from './ICSViewer';
 import { useAtomValue } from 'jotai';
-import { userDetailsAtom } from '../../state/userDetails';
-import { emailAddress } from '../../state/emailAddress';
-import { useSendMail } from '../../hooks/useComposer';
-import { generateMessageId, type ComposerRequest } from '../../api/composer';
-import { useToast } from '../../hooks/useToast';
-import { SEND_DEFAULT } from '../../constants/constant';
-import { formatComposedEmailData } from '../../utils/replyForwardHelper';
+import { userDetailsAtom } from '../../../../../state/userDetails';
+import { emailAddress } from '../../../../../state/emailAddress';
+import { useSendMail } from '../../../../../hooks/useComposer';
+import { generateMessageId, type ComposerRequest } from '../../../../../api/composer';
+import { useToast } from '../../../../../hooks/useToast';
+import { SEND_DEFAULT } from '../../../../../constants/constant';
+import { formatComposedEmailData } from '../../../../../utils/replyForwardHelper';
 
 // Loose shape covering both postal-mime attachments and the composer's local
 // payload shape — filename deliberately excludes `null` (postal-mime's real

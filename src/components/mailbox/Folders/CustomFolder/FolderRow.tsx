@@ -17,8 +17,8 @@
 
 import { Button, Flex, Box } from '@radix-ui/themes';
 import { FaChevronDown, FaChevronRight } from 'react-icons/fa6';
-import FolderItem from './FolderItem';
-import DropdownWrapper, { type DropdownItem } from '../common/DropdownWrapper';
+import FolderItem from '../FolderItem';
+import DropdownWrapper, { type DropdownItem } from '../../../common/DropdownWrapper';
 import type { IconType } from 'react-icons/lib';
 import { FaEllipsisH } from 'react-icons/fa';
 

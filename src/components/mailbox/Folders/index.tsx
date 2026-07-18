@@ -27,24 +27,24 @@ import {
 } from 'react-icons/fa6';
 import DefaultFolder from './DefaultFolder';
 import CustomFolder from './CustomFolder';
-import { composerOpenAtom, createFolderOpenAtom } from '../../state/composer';
+import { composerOpenAtom, createFolderOpenAtom } from '../../../state/composer';
 import { useSetAtom, useAtom, useAtomValue } from 'jotai';
 import {
   useCreateEmailFolder,
   useDeleteEmailFolder,
   useEditEmailFolder,
-} from '../../hooks/useEmails';
-import { useToast } from '../../hooks/useToast';
+} from '../../../hooks/useEmails';
+import { useToast } from '../../../hooks/useToast';
 import { useQueryClient } from '@tanstack/react-query';
-import { useFoldersFullPath } from '../../hooks/useFolders';
-import { sidebarCollapsedAtom, sidebarHoveredAtom, sidebarPinnedAtom } from '../../state/sidebar';
-import { buildFolderTree, type FolderNode } from '../../utils/folderTree';
+import { useFoldersFullPath } from '../../../hooks/useFolders';
+import { sidebarCollapsedAtom, sidebarHoveredAtom, sidebarPinnedAtom } from '../../../state/sidebar';
+import { buildFolderTree, type FolderNode } from '../../../utils/folderTree';
 import { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
-import { folderDetailsAtom, folderQuotaAtom } from '../../state/folders';
-import StorageQuota from '../common/StorageQuota';
-import { userSettingsAtom } from '../../state/settings';
+import { folderDetailsAtom, folderQuotaAtom } from '../../../state/folders';
+import StorageQuota from '../../common/StorageQuota';
+import { userSettingsAtom } from '../../../state/settings';
 import ComposeButton, { type ComposeButtonStyle } from './ComposeButton';
-import { sortFoldersAscending } from '../../utils/folderUtils';
+import { sortFoldersAscending } from '../../../utils/folderUtils';
 
 interface FoldersProps {
   onFolderClick?: () => void;

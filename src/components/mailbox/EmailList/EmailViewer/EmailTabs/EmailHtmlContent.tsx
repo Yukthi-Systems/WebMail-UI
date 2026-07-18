@@ -18,7 +18,7 @@
 import { Button } from '@radix-ui/themes';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { FiAlertTriangle, FiEye, FiEyeOff, FiLock } from 'react-icons/fi';
-import { sanitizeHTMLContent } from '../../utils/sanitizeHTMLContent';
+import { sanitizeHTMLContent } from '../../../../../utils/sanitizeHTMLContent';
 import LinkPreviewTooltip from './LinkPreviewTooltip';
 
 interface HtmlContentAttachment {

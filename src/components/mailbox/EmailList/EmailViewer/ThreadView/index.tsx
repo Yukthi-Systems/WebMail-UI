@@ -22,9 +22,9 @@ import { BiRefresh } from 'react-icons/bi';
 import ThreadEmailCard from './ThreadEmailCard';
 import ThreadLoadingState from './ThreadLoadingState';
 import { useAtomValue } from 'jotai';
-import { userSettingsAtom } from '../../state/settings';
+import { userSettingsAtom } from '../../../../../state/settings';
 import { useMemo } from 'react';
-import type { EmailLike } from '../../utils/emailThreading';
+import type { EmailLike } from '../../../../../utils/emailThreading';
 
 interface ThreadViewProps {
   listofThreadEmails: EmailLike[];

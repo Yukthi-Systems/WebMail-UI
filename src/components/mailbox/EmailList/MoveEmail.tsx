@@ -25,10 +25,10 @@ import {
   FaCheck,
   FaTimes,
 } from 'react-icons/fa';
-import { buildFolderTree, type FolderNode } from '../../utils/folderTree';
+import { buildFolderTree, type FolderNode } from '../../../utils/folderTree';
 import { useParams } from '@tanstack/react-router';
 import { useAtomValue } from 'jotai';
-import { folderDetailsAtom } from '../../state/folders';
+import { folderDetailsAtom } from '../../../state/folders';
 
 interface Folder {
   id: string;

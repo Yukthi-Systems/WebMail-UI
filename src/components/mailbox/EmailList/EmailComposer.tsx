@@ -17,38 +17,38 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { FaPaperPlane, FaDeleteLeft, FaFloppyDisk } from 'react-icons/fa6';
-import type { Email } from '../../api/mailbox';
+import type { Email } from '../../../api/mailbox';
 import type { Email as ParsedPostalEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { useParams } from '@tanstack/react-router';
-import { useEmailRaw } from '../../hooks/useEmailRaw';
+import { useEmailRaw } from '../../../hooks/useEmailRaw';
 import PostalMime, { decodeWords } from 'postal-mime';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useSendMail, useDraftMail } from '../../hooks/useComposer';
+import { useSendMail, useDraftMail } from '../../../hooks/useComposer';
 import {
   emailComposerDataAtom,
   resetEmailComposerDataAtom,
   emailComposerOpenAtom,
   emailComposerKeepMountedAtom,
-} from '../../state/emailComposer';
-import { emailAddress } from '../../state/emailAddress';
-import RecipientField, { type RecipientFieldHandle } from '../composer/RecipientField';
-import SubjectField from '../composer/SubjectField';
-import ContentEditor from '../composer/contentEditor';
-import AttachmentUploader from '../composer/AttachmentUploader';
+} from '../../../state/emailComposer';
+import { emailAddress } from '../../../state/emailAddress';
+import RecipientField, { type RecipientFieldHandle } from '../../composer/RecipientField';
+import SubjectField from '../../composer/SubjectField';
+import ContentEditor from '../../composer/contentEditor';
+import AttachmentUploader from '../../composer/AttachmentUploader';
 import {
   toBase64,
   MAX_TOTAL_SIZE,
   MAX_INDIVIDUAL_FILE_SIZE,
   formatFileSize,
-} from '../composer/attachmentUtils';
+} from '../../composer/attachmentUtils';
 import { useDropzone } from 'react-dropzone';
 import { FaPaperclip } from 'react-icons/fa6';
-import EmailPriorityField from '../composer/EmailPriorityField';
-import { generateMessageId, sendMailV2, type ComposerRequest } from '../../api/composer';
-import { useDeleteMail } from '../../hooks/useEmails';
-import { useToast } from '../../hooks/useToast';
-import { userSettingsAtom } from '../../state/settings';
-import { folderQuotaAtom } from '../../state/folders';
+import EmailPriorityField from '../../composer/EmailPriorityField';
+import { generateMessageId, sendMailV2, type ComposerRequest } from '../../../api/composer';
+import { useDeleteMail } from '../../../hooks/useEmails';
+import { useToast } from '../../../hooks/useToast';
+import { userSettingsAtom } from '../../../state/settings';
+import { folderQuotaAtom } from '../../../state/folders';
 
 // Import Utilities
 import {
@@ -62,16 +62,16 @@ import {
   type EmailHeaders,
   type Address,
   type EmailAttachmentPayload,
-} from '../../utils/replyForwardHelper';
-import CustomModal from '../composer/CustomModal';
-import { parseEmail } from '../../utils/emailPerser';
-import { userDetailsAtom } from '../../state/userDetails';
-import { SEND_DEFAULT } from '../../constants/constant';
-import { getMessageId, normalizeFieldNames } from '../../utils/emailUtils';
-import { getEditorDimensions } from '../../utils/dimensions';
-import { useIsMobile } from '../../hooks/use-mobile';
-import type { ComposerEmail } from '../../state/emailComposer';
-import type { EmailAddress as RecipientEmailAddress } from '../../state/composer';
+} from '../../../utils/replyForwardHelper';
+import CustomModal from '../../composer/CustomModal';
+import { parseEmail } from '../../../utils/emailPerser';
+import { userDetailsAtom } from '../../../state/userDetails';
+import { SEND_DEFAULT } from '../../../constants/constant';
+import { getMessageId, normalizeFieldNames } from '../../../utils/emailUtils';
+import { getEditorDimensions } from '../../../utils/dimensions';
+import { useIsMobile } from '../../../hooks/use-mobile';
+import type { ComposerEmail } from '../../../state/emailComposer';
+import type { EmailAddress as RecipientEmailAddress } from '../../../state/composer';
 
 // Recipients built here (from parseEmailAddresses / RecipientField) use the
 // {address, name} shape, not the {email, name} shape ComposerEmail declares for

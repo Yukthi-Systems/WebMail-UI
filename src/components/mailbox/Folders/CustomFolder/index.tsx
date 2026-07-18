@@ -19,16 +19,16 @@ import { useState } from 'react';
 import { Button, Flex, Text, TextField } from '@radix-ui/themes';
 import { FaTrash, FaPlus } from 'react-icons/fa6';
 import { useForm } from 'react-hook-form';
-import type { FolderNode } from '../../utils/folderTree';
-import type { DropdownItem } from '../common/DropdownWrapper';
-import DialogWrapper from '../common/Dialoge';
+import type { FolderNode } from '../../../../utils/folderTree';
+import type { DropdownItem } from '../../../common/DropdownWrapper';
+import DialogWrapper from '../../../common/Dialoge';
 import FolderRow from './FolderRow';
 import { FaEdit } from 'react-icons/fa';
-import { MAX_FOLDER_DEPTH } from '../../constants/constant';
+import { MAX_FOLDER_DEPTH } from '../../../../constants/constant';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
-import { sortFoldersAscending } from '../../utils/folderUtils';
-import { folderSchema } from './folderSchema';
+import { sortFoldersAscending } from '../../../../utils/folderUtils';
+import { folderSchema } from '../folderSchema';
 
 const cleanFolderName = (folderName: string): string => {
   return folderName.replace(/^"(.+)"$/, '$1').replace(/\\"/g, '"');

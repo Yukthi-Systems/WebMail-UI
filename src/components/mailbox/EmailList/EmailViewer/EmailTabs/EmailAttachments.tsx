@@ -40,8 +40,8 @@ import {
   FaExclamationTriangle,
   FaEnvelope,
 } from 'react-icons/fa';
-import { useToast } from '../../hooks/useToast';
-import { sanitizeHTMLContent } from '../../utils/sanitizeHTMLContent';
+import { useToast } from '../../../../../hooks/useToast';
+import { sanitizeHTMLContent } from '../../../../../utils/sanitizeHTMLContent';
 
 /** Loose shape covering both postal-mime attachments and the composer's own attachment payloads. */
 export interface EmailAttachment {

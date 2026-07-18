@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import type { ComposeButtonStyle } from './ComposeButton';
+import type { ComposeButtonStyle } from './Folders/ComposeButton';
 
 export const COMPOSE_BUTTON_OPTIONS: {
   value: ComposeButtonStyle;

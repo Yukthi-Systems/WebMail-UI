@@ -24,57 +24,57 @@ import {
   useSeenMail,
   useUnFlaggedMail,
   useUnseenMail,
-} from '../../hooks/useEmails';
+} from '../../../hooks/useEmails';
 import { useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import EmailCard from './EmailCard';
 import EmailToolbar from './EmailToolbar';
 import EmailViewer from './EmailViewer';
-import { type Email, emailRaw } from '../../api/mailbox';
-import { useEmailRaw } from '../../hooks/useEmailRaw';
+import { type Email, emailRaw } from '../../../api/mailbox';
+import { useEmailRaw } from '../../../hooks/useEmailRaw';
 import EmailComposer from './EmailComposer';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { selectedEmailAtom } from '../../state/emailAddress';
-import { useToast } from '../../hooks/useToast';
-import ResizablePanel from '../common/ResizeblePanel';
+import { selectedEmailAtom } from '../../../state/emailAddress';
+import { useToast } from '../../../hooks/useToast';
+import ResizablePanel from '../../common/ResizeblePanel';
 import EmailEmptyState from './EmailEmptyState';
 import EmailLoadingSkeleton from './EmailSkeleton';
-import { useKeyboardNavigation } from '../../hooks/useKeyboardShortcuts';
+import { useKeyboardNavigation } from '../../../hooks/useKeyboardShortcuts';
 import {
   emailComposerDataAtom,
   emailComposerKeepMountedAtom,
   emailComposerOpenAtom,
   resetEmailComposerDataAtom,
   type EmailAttachment as ComposerAttachment,
-} from '../../state/emailComposer';
-import { rawEmailCacheKey } from '../../hooks/useEmailRaw';
-import { userSettingsAtom } from '../../state/settings';
-import { flagAtom } from '../../state/flags';
-import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../utils/emailPrint';
-import { userDetailsAtom } from '../../state/userDetails';
-import { usePanelSizes } from '../../hooks/usePanelSizes';
-import { searchStateAtom } from '../../state/search';
-import SearchResultsBanner from '../common/header/SearchResultBanner';
-import { useSearchEmails } from '../../hooks/useSearch';
-import type { SearchRequest } from '../../api/search';
-import { convertToBytes, mapComparator } from '../common/header/search/utils';
-import { useCreateEmailTemplate, useTemplateActions } from '../../hooks/useTempelate';
+} from '../../../state/emailComposer';
+import { rawEmailCacheKey } from '../../../hooks/useEmailRaw';
+import { userSettingsAtom } from '../../../state/settings';
+import { flagAtom } from '../../../state/flags';
+import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../utils/emailPrint';
+import { userDetailsAtom } from '../../../state/userDetails';
+import { usePanelSizes } from '../../../hooks/usePanelSizes';
+import { searchStateAtom } from '../../../state/search';
+import SearchResultsBanner from '../../common/header/SearchResultBanner';
+import { useSearchEmails } from '../../../hooks/useSearch';
+import type { SearchRequest } from '../../../api/search';
+import { convertToBytes, mapComparator } from '../../common/header/search/utils';
+import { useCreateEmailTemplate, useTemplateActions } from '../../../hooks/useTempelate';
 import FolderDialog from './MoveEmail';
-import type { CreateContactData } from '../../utils/contact';
-import { useCreateBulkContact } from '../../hooks/useContacts';
-import { scrapeContactsFromEmails } from '../../utils/contactScrapper';
-import { BulkCreateView } from '../contacts/BulkCreateView';
-import { getMessageId } from '../../utils/emailUtils';
-import CustomModal from '../composer/CustomModal';
-import { useIsMobile } from '../../hooks/use-mobile';
-import { folderDetailsAtom } from '../../state/folders';
+import type { CreateContactData } from '../../../utils/contact';
+import { useCreateBulkContact } from '../../../hooks/useContacts';
+import { scrapeContactsFromEmails } from '../../../utils/contactScrapper';
+import { BulkCreateView } from '../../contacts/BulkCreateView';
+import { getMessageId } from '../../../utils/emailUtils';
+import CustomModal from '../../composer/CustomModal';
+import { useIsMobile } from '../../../hooks/use-mobile';
+import { folderDetailsAtom } from '../../../state/folders';
 import {
   useUpdateFolderUnreadCount,
   useUpdateAnyFolderUnreadCount,
   useFolderUidValidity,
-} from '../../hooks/useFolders';
-import { useEmailCacheUpdater } from '../../hooks/useEmailCacheUpdater';
-import type { EmailLike } from '../../utils/emailThreading';
+} from '../../../hooks/useFolders';
+import { useEmailCacheUpdater } from '../../../hooks/useEmailCacheUpdater';
+import type { EmailLike } from '../../../utils/emailThreading';
 import type { Attachment } from 'postal-mime';
 
 interface EmailListProps {

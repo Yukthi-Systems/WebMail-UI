@@ -17,12 +17,12 @@
 
 import { Separator, Popover, Button } from '@radix-ui/themes';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useEmailRaw } from '../../hooks/useEmailRaw';
-import EmailLoadingState from './EmailLoadingState';
-import EmailParsingState from './EmailParsingState';
-import EmailErrorState from './EmailErrorState';
-import EmailNoDataState from './EmailNoDataState';
-import EmailTabs, { type ParsedEmailForTabs } from './EmailTabs';
+import { useEmailRaw } from '../../../../../../hooks/useEmailRaw';
+import EmailLoadingState from '../../EmailLoadingState';
+import EmailParsingState from '../../EmailParsingState';
+import EmailErrorState from '../../EmailErrorState';
+import EmailNoDataState from '../../EmailNoDataState';
+import EmailTabs, { type ParsedEmailForTabs } from '../../EmailTabs';
 import PostalMime, { decodeWords } from 'postal-mime';
 import {
   FaCalendarAlt,
@@ -33,19 +33,19 @@ import {
   FaRegFolder,
   FaFlag,
 } from 'react-icons/fa';
-import BIMIAvatar from '../common/BimiAvatar';
+import BIMIAvatar from '../../../../../common/BimiAvatar';
 import { Link, useParams } from '@tanstack/react-router';
-import { parseEmail } from '../../utils/emailPerser';
-import { useUserTimezone } from '../../hooks/useTimezone';
+import { parseEmail } from '../../../../../../utils/emailPerser';
+import { useUserTimezone } from '../../../../../../hooks/useTimezone';
 import { EmailActions } from './EmailActions';
-import { RecipientSection } from './RecipientSection';
+import { RecipientSection } from '../../RecipientSection';
 import {
   extractHeaders,
   getMessageId,
   normalizeFieldNames,
   parseMultipleEmails,
-} from '../../utils/emailUtils';
-import { useToast } from '../../hooks/useToast';
+} from '../../../../../../utils/emailUtils';
+import { useToast } from '../../../../../../hooks/useToast';
 import {
   useCopyMail,
   useMoveMail,
@@ -53,16 +53,16 @@ import {
   useUnseenMail,
   useFlaggedMail,
   useUnFlaggedMail,
-} from '../../hooks/useEmails';
+} from '../../../../../../hooks/useEmails';
 import { useAtomValue } from 'jotai';
-import { folderQuotaAtom } from '../../state/folders';
-import { useEmailCacheUpdater } from '../../hooks/useEmailCacheUpdater';
-import { useUpdateFolderUnreadCount } from '../../hooks/useFolders';
-import FolderDialog from './MoveEmail';
-import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../utils/emailPrint';
-import { userDetailsAtom } from '../../state/userDetails';
-import { useCreateEmailTemplate, useTemplateActions } from '../../hooks/useTempelate';
-import type { EmailLike } from '../../utils/emailThreading';
+import { folderQuotaAtom } from '../../../../../../state/folders';
+import { useEmailCacheUpdater } from '../../../../../../hooks/useEmailCacheUpdater';
+import { useUpdateFolderUnreadCount } from '../../../../../../hooks/useFolders';
+import FolderDialog from '../../../MoveEmail';
+import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../../../../utils/emailPrint';
+import { userDetailsAtom } from '../../../../../../state/userDetails';
+import { useCreateEmailTemplate, useTemplateActions } from '../../../../../../hooks/useTempelate';
+import type { EmailLike } from '../../../../../../utils/emailThreading';
 import type { Email as ParsedEmail } from 'postal-mime';
 
 interface Folder {

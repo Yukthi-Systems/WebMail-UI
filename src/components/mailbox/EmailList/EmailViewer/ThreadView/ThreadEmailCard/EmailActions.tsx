@@ -37,9 +37,9 @@ import {
   MdPersonAdd,
   MdSaveAs,
 } from 'react-icons/md';
-import DropdownWrapper from '../common/DropdownWrapper';
+import DropdownWrapper from '../../../../../common/DropdownWrapper';
 import { FaEllipsisVertical, FaRotateRight } from 'react-icons/fa6';
-import type { EmailLike } from '../../utils/emailThreading';
+import type { EmailLike } from '../../../../../../utils/emailThreading';
 
 interface EmailActionsProps {
   email: EmailLike;

@@ -18,17 +18,17 @@
 // src/components/email/SingleEmailView.tsx
 import { Popover, Button } from '@radix-ui/themes';
 import { FaCalendarAlt, FaInfoCircle, FaTimes, FaFlag } from 'react-icons/fa';
-import BIMIAvatar from '../common/BimiAvatar';
+import BIMIAvatar from '../../../common/BimiAvatar';
 import EmailLoadingState from './EmailLoadingState';
 import EmailParsingState from './EmailParsingState';
 import EmailErrorState from './EmailErrorState';
 import EmailNoDataState from './EmailNoDataState';
 import EmailTabs, { type ParsedEmailForTabs } from './EmailTabs';
 import { RecipientSection } from './RecipientSection';
-import { parseEmail } from '../../utils/emailPerser';
+import { parseEmail } from '../../../../utils/emailPerser';
 import { decodeWords, type Email as ParsedPostalEmail, type Attachment } from 'postal-mime';
-import { parseMultipleEmails, normalizeFieldNames } from '../../utils/emailUtils';
-import type { EmailLike } from '../../utils/emailThreading';
+import { parseMultipleEmails, normalizeFieldNames } from '../../../../utils/emailUtils';
+import type { EmailLike } from '../../../../utils/emailThreading';
 
 interface SingleEmailViewProps {
   rawEmail: string | undefined;

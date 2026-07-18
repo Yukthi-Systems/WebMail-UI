@@ -44,19 +44,19 @@ import {
 import { LuFlagOff } from 'react-icons/lu';
 import { RiSpam2Line } from 'react-icons/ri';
 import FolderDialog from './MoveEmail';
-import { useCopyMail, useMoveMail } from '../../hooks/useEmails';
+import { useCopyMail, useMoveMail } from '../../../hooks/useEmails';
 import { useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useUpdateAnyFolderUnreadCount } from '../../hooks/useFolders';
-import type { Email } from '../../api/mailbox';
+import { useUpdateAnyFolderUnreadCount } from '../../../hooks/useFolders';
+import type { Email } from '../../../api/mailbox';
 import { FaEllipsisH, FaExternalLinkAlt } from 'react-icons/fa';
-import DropdownWrapper, { type DropdownItem } from '../common/DropdownWrapper';
-import Pagination from '../common/Pagination';
+import DropdownWrapper, { type DropdownItem } from '../../common/DropdownWrapper';
+import Pagination from '../../common/Pagination';
 import { useAtomValue } from 'jotai';
-import { userSettingsAtom } from '../../state/settings';
-import type { LayoutType } from '../common/header/LayoutSetting';
-import { folderQuotaAtom } from '../../state/folders'; // Import folderQuotaAtom
-import { useToast } from '../../hooks/useToast';
+import { userSettingsAtom } from '../../../state/settings';
+import type { LayoutType } from '../../common/header/LayoutSetting';
+import { folderQuotaAtom } from '../../../state/folders'; // Import folderQuotaAtom
+import { useToast } from '../../../hooks/useToast';
 
 interface Folder {
   id: string;

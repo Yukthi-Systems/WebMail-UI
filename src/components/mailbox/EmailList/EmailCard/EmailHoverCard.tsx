@@ -18,8 +18,8 @@
 // src/components/email/EmailHoverCard.tsx
 import { useState } from 'react';
 import { FaPaperclip, FaChevronDown, FaChevronUp, FaCode } from 'react-icons/fa';
-import BIMIAvatar from '../common/BimiAvatar';
-import { useUserTimezone } from '../../hooks/useTimezone';
+import BIMIAvatar from '../../../common/BimiAvatar';
+import { useUserTimezone } from '../../../../hooks/useTimezone';
 
 interface Recipient {
   name: string;
