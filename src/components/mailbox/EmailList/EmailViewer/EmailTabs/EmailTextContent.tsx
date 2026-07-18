@@ -16,7 +16,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { FiChevronDown, FiChevronUp, FiCopy, FiCheck } from 'react-icons/fi';
+import { FiCopy, FiCheck } from 'react-icons/fi';
 import LinkPreviewTooltip from './LinkPreviewTooltip';
 
 interface EmailTextContentProps {
@@ -90,7 +90,7 @@ const renderRichText = (text: string) => {
 };
 
 const EmailTextContent = ({ textContent, maxHeight = 500 }: EmailTextContentProps) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded] = useState(false);
   const [showExpandButton, setShowExpandButton] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -101,10 +101,6 @@ const EmailTextContent = ({ textContent, maxHeight = 500 }: EmailTextContentProp
       setShowExpandButton(contentHeight > maxHeight);
     }
   }, [textContent, maxHeight]);
-
-  const toggleExpand = () => {
-    setIsExpanded(!isExpanded);
-  };
 
   const handleCopyText = async () => {
     try {

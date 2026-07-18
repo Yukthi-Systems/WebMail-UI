@@ -16,10 +16,8 @@
  */
 
 import { useState, useRef } from 'react';
-import { useAtomValue } from 'jotai';
 import { FiUpload, FiX, FiSearch, FiSave, FiEye } from 'react-icons/fi';
-import { apiKeyAtom } from '../../../state/auth';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import { API_CONFIG } from '../../../constants/config';
 import { BgImageService } from '../../../utils/bimiService';
 
@@ -109,7 +107,6 @@ function ImageUpload({
 }
 
 export default function BrandingManager() {
-  const apiKey = useAtomValue(apiKeyAtom);
   const toast = useToast();
 
   const [slug, setSlug] = useState('');

@@ -17,8 +17,8 @@
 
 import { useState, useRef, useLayoutEffect } from 'react';
 import { ContextMenu } from '@radix-ui/themes';
-import { getInitialName } from '../../utils/emailUtils';
-import { useToast } from '../ui/ToastComponent';
+import { getInitialName } from '../../../../utils/emailUtils';
+import { useToast } from '../../../../hooks/useToast';
 
 interface Recipient {
   name: string;

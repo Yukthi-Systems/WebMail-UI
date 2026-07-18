@@ -23,7 +23,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { FiEye, FiEyeOff, FiKey } from 'react-icons/fi';
 import { domainLoginSchema, type DomainLoginForm } from './domainSchema';
 import { apiKeyAtom } from '../../../state/auth';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 
 const DomainLogin = () => {
   const [showApiKey, setShowApiKey] = useState(false);

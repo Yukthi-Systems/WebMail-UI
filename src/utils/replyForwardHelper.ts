@@ -33,6 +33,36 @@ export type Address = {
   address: string;
 };
 
+// Attachment payload shape shared by conversion (from postal-mime) and the
+// locally-built inline-image attachments — fields are optional because each
+// producer only ever fills in a subset of them.
+export interface EmailAttachmentPayload {
+  filename?: string;
+  data?: string;
+  mime_type?: string;
+  size?: number;
+  disposition?: string;
+  content_id?: string | null;
+  cid?: string;
+  headers?: Record<string, string>;
+}
+
+// Raw attachment as handed to us by postal-mime (or something shaped like it).
+interface RawAttachmentInput {
+  content?:
+    | ArrayBuffer
+    | Uint8Array
+    | string
+    | { toString(encoding?: string): string; length: number };
+  filename?: string | null;
+  mimeType?: string;
+  contentType?: string;
+  disposition?: string | null;
+  contentId?: string;
+  cid?: string;
+  headers?: Record<string, string>;
+}
+
 // ────────────────────────────────────────────────
 // ────────────────────────────────────────────────
 
@@ -215,7 +245,9 @@ export const buildReplyHeaders = (
 // Attachments conversion (unchanged)
 // ────────────────────────────────────────────────
 
-export const convertPostalMimeAttachments = (postalMimeAttachments: any[]): any[] => {
+export const convertPostalMimeAttachments = (
+  postalMimeAttachments: RawAttachmentInput[]
+): EmailAttachmentPayload[] => {
   if (!postalMimeAttachments || !Array.isArray(postalMimeAttachments)) return [];
 
   return postalMimeAttachments
@@ -270,10 +302,10 @@ export const convertPostalMimeAttachments = (postalMimeAttachments: any[]): any[
 // Inline image handling – incoming & outgoing
 // ────────────────────────────────────────────────
 
-export const processIncomingHtml = (html: string, allAttachments: any[]) => {
+export const processIncomingHtml = (html: string, allAttachments: EmailAttachmentPayload[]) => {
   if (!html) return { html: '', regularAttachments: allAttachments || [] };
 
-  const attachmentMap = new Map<string, any>();
+  const attachmentMap = new Map<string, EmailAttachmentPayload>();
   allAttachments.forEach((att) => {
     const cid = att.content_id?.replace(/^<|>$/g, '') || null;
     if (cid) attachmentMap.set(cid, att);
@@ -314,7 +346,7 @@ export const processOutgoingHtml = (htmlContent: string) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlContent, 'text/html');
   const images = doc.querySelectorAll('img');
-  const inlineAttachments: any[] = [];
+  const inlineAttachments: EmailAttachmentPayload[] = [];
 
   images.forEach((img) => {
     const src = img.getAttribute('src');
@@ -396,8 +428,24 @@ const cleanProtectedHeaders = (headers: EmailHeaders): EmailHeaders => {
 // Format payload for backend – now with header cleaning
 // ────────────────────────────────────────────────
 
+// Composer output as handed to formatComposedEmailData — the composer/draft/
+// reply-tab call sites don't all share one concrete type, so this captures
+// only the fields actually read here, all optional to fit every caller.
+interface ComposedEmailInput {
+  html?: string;
+  text?: string;
+  subject?: string;
+  to?: Array<{ name?: string; address?: string }>;
+  cc?: Array<{ name?: string; address?: string }>;
+  bcc?: Array<{ name?: string; address?: string }>;
+  attachments?: unknown[];
+  headers?: EmailHeaders;
+  from_id?: { email?: string; name?: string };
+  messageId?: string;
+}
+
 export const formatComposedEmailData = (
-  data: any,
+  data: ComposedEmailInput,
   options: {
     folder_path: string;
     priority: EmailPriority;
@@ -409,15 +457,15 @@ export const formatComposedEmailData = (
   const { html: processedHtml, inlineAttachments } = processOutgoingHtml(data.html || '');
 
   const to = Array.isArray(data.to)
-    ? data.to.map((a: any) => ({ name: a.name || '', email: a.address || '' }))
+    ? data.to.map((a) => ({ name: a.name || '', email: a.address || '' }))
     : [];
 
   const cc = Array.isArray(data.cc)
-    ? data.cc.map((a: any) => ({ name: a.name || '', email: a.address || '' }))
+    ? data.cc.map((a) => ({ name: a.name || '', email: a.address || '' }))
     : [];
 
   const bcc = Array.isArray(data.bcc)
-    ? data.bcc.map((a: any) => ({ name: a.name || '', email: a.address || '' }))
+    ? data.bcc.map((a) => ({ name: a.name || '', email: a.address || '' }))
     : [];
 
   let headers = data.headers || {};

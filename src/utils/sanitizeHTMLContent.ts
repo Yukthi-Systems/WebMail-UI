@@ -17,15 +17,16 @@
 
 import DOMPurify from 'dompurify';
 
-//   ᠎ -   　﻿ are exotic Unicode whitespace
-// that can appear in line-wrapped email URLs; \s covers the rest.
+// Covers exotic Unicode whitespace (U+1680, U+180E, U+2000-200A, U+2028,
+// U+2029, U+202F, U+205F, U+3000, U+FEFF) that can appear in line-wrapped
+// email URLs; \s covers the rest.
 const WS_RE = /[\s\u00A0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/g;
 
 function cleanUrl(raw: string): string {
   return raw
     .replace(WS_RE, '')
     .replace(/%20/g, '')
-    .replace(/(https?):\/([^\/])/gi, '$1://$2');
+    .replace(/(https?):\/([^/])/gi, '$1://$2');
 }
 
 function isExternal(url: string): boolean {

@@ -19,13 +19,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAtom } from 'jotai';
-import { atom } from 'jotai';
 import { HiXMark, HiLightBulb } from 'react-icons/hi2';
-import { tourTipsAtom } from '../../state/tourTips';
+import { tourTipsAtom, activeTourTipAtom } from '../../state/tourTips';
 import { useSettingsBridge } from '../../hooks/useSettingsBridge';
-
-// Global atom to track which tooltip is currently active
-export const activeTourTipAtom = atom<string | null>(null);
 
 interface TourTipProps {
   id: string;
@@ -50,7 +46,6 @@ export const TourTip = ({
   delay = 500,
   offset = 12,
   className = '',
-  priority = 0,
 }: TourTipProps) => {
   const [tourTips, setTourTips] = useAtom(tourTipsAtom);
   const [activeTourTip, setActiveTourTip] = useAtom(activeTourTipAtom);
@@ -81,7 +76,7 @@ export const TourTip = ({
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [autoShow, isDismissed, delay, activeTourTip]);
+  }, [autoShow, isDismissed, delay, activeTourTip, id, setActiveTourTip]);
 
   useEffect(() => {
     if (!isVisible || !targetRef.current || !tooltipRef.current) return;

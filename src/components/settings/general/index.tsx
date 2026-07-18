@@ -17,8 +17,6 @@
 
 // General.tsx
 import {
-  Badge,
-  Box,
   Button,
   Flex,
   ScrollArea,
@@ -29,14 +27,13 @@ import {
   Text,
 } from '@radix-ui/themes';
 import { useForm, Controller } from 'react-hook-form';
-import { COLOR_MAP, COLOR_OPTIONS, LOCALES, TIMEZONES } from '../../../utils/constants';
+import { COLOR_OPTIONS, LOCALES, TIMEZONES } from '../../../utils/constants';
 import { ToggleGroup } from './ToggleGroup';
 import { SignatureSelector } from './SignatureSelector';
-import type { GeneralSettings, UserSettings } from '../../../api/user';
+import type { UserSettings } from '../../../api/user';
 import { Section } from './Section';
 import { Settings } from './Settings';
-import { useAtom, useAtomValue } from 'jotai';
-import { userSettingsAtom } from '../../../state/settings';
+import { useAtomValue } from 'jotai';
 import {
   FaGlobe,
   FaSun,
@@ -45,26 +42,24 @@ import {
   FaPalette,
   FaSave,
   FaEnvelope,
-  FaUser,
   FaFolder,
   FaCog,
   FaEye,
   FaEdit,
   FaCode,
   FaUsers,
-  FaBars,
   FaChevronDown,
 } from 'react-icons/fa';
 import DropdownWrapper from '../../common/DropdownWrapper';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import FolderSelectField from '../../composer/FolderSelectField';
 import { useFoldersDropdown } from '../../../hooks/useFolders';
 import type { FolderNode } from '../../../utils/folderUtils';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import SignatureModal from './SignatureModal';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { useSettingsBridge } from '../../../hooks/useSettingsBridge';
-import { COMPOSE_BUTTON_OPTIONS } from '../../mailbox/ComposeButton';
+import { COMPOSE_BUTTON_OPTIONS } from '../../mailbox/composeButtonOptions';
 
 type Signature = {
   name: string;
@@ -74,7 +69,6 @@ type Signature = {
 type GeneralProps = { data: UserSettings };
 
 const General = ({ data }: GeneralProps) => {
-  const [userSettings, setUserSettings] = useAtom(userSettingsAtom);
   const userDetails = useAtomValue(userDetailsAtom);
   const toast = useToast();
 
@@ -138,7 +132,7 @@ const General = ({ data }: GeneralProps) => {
       toast.success({
         description: 'Your preferences have been saved successfully.',
       });
-    } catch (error) {
+    } catch {
       toast.error({
         description: 'Failed to save settings. Please try again.',
         position: 'bottom-right',
@@ -159,7 +153,7 @@ const General = ({ data }: GeneralProps) => {
 
   const handleDeleteSignature = (signatureName: string) => {
     const currentSignatures = watchedValues.general.signature || [];
-    const updatedSignatures = currentSignatures.filter((s: any) => s.name !== signatureName);
+    const updatedSignatures = currentSignatures.filter((s) => s.name !== signatureName);
 
     setValue('general.signature', updatedSignatures);
 
@@ -178,7 +172,7 @@ const General = ({ data }: GeneralProps) => {
 
     if (editingSignature) {
       // Edit existing
-      updatedSignatures = currentSignatures.map((s: any) =>
+      updatedSignatures = currentSignatures.map((s) =>
         s.name === editingSignature.name ? signature : s
       );
 
@@ -222,7 +216,7 @@ const General = ({ data }: GeneralProps) => {
 
       // Since we saved 'watchedValues', the form is now clean
       setHasUnsavedChanges(false);
-    } catch (error) {
+    } catch {
       // Error (Bridge automatically handles the state rollback)
       toast.error({ description: 'Failed to save signature. Please try again.' });
     }
@@ -912,7 +906,7 @@ const General = ({ data }: GeneralProps) => {
                 .filter(([folderKey]) =>
                   ['inbox', 'sent', 'drafts', 'spam', 'trash'].includes(folderKey)
                 )
-                .map(([folderKey, folder]) => (
+                .map(([folderKey]) => (
                   <div
                     key={folderKey}
                     className="border-b border-gray-200 pb-4 mb-4 last:border-b-0"
@@ -1645,7 +1639,7 @@ const General = ({ data }: GeneralProps) => {
                       />
                       <div>
                         <div className="w-full  text-[var(--gray-11)] text-sm cursor-not-allowed opacity-75">
-                          {userDetails.email}
+                          {userDetails?.email}
                         </div>
                       </div>
                     </div>
@@ -1830,7 +1824,7 @@ const General = ({ data }: GeneralProps) => {
                       .filter(([folderKey]) =>
                         ['inbox', 'sent', 'drafts', 'spam', 'trash'].includes(folderKey)
                       )
-                      .map(([folderKey, folder]) => (
+                      .map(([folderKey]) => (
                         <div
                           key={folderKey}
                           className="border-b border-gray-200 pb-4 mb-4 last:border-b-0"

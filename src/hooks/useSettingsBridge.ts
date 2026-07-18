@@ -20,7 +20,6 @@ import { useAtom } from 'jotai';
 import { userSettingsAtom } from '../state/settings';
 import { useUpdateUserSettings } from './useUserSettings';
 import { type UserSettings } from '../api/user';
-import { useToast } from '../components/ui/ToastComponent';
 
 /**
  * Intelligent Merge Helper Prevents data loss by deeply merging specific
@@ -33,7 +32,6 @@ function deepMergeSettings(base: UserSettings, patch: Partial<UserSettings>): Us
   // 2. Iterate through the patch to merge safely
   (Object.keys(patch) as Array<keyof UserSettings>).forEach((key) => {
     const patchValue = patch[key];
-    const baseValue = base[key];
 
     // Case A: Folders (Dictionary Merge)
     // We must merge individual folder keys so we don't lose folders not in the patch
@@ -70,7 +68,7 @@ function deepMergeSettings(base: UserSettings, patch: Partial<UserSettings>): Us
 
     // Case D: Primitive values or Arrays (Direct Overwrite)
     // Arrays (like signatures list) are usually intended to be replaced entirely
-    // @ts-ignore - Dynamic assignment safety is handled by logic above
+    // @ts-expect-error - Dynamic assignment safety is handled by logic above
     newState[key] = patchValue;
   });
 
@@ -81,7 +79,6 @@ export function useSettingsBridge() {
   const queryClient = useQueryClient();
   const [atomSettings, setAtomSettings] = useAtom(userSettingsAtom);
   const { mutateAsync: performUpdate, isPending } = useUpdateUserSettings();
-  const toast = useToast();
 
   const safeUpdateSettings = async (
     changes: Partial<UserSettings> | ((prev: UserSettings) => Partial<UserSettings>)

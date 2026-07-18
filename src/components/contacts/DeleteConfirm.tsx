@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { Dialog, Button, Flex, Box } from '@radix-ui/themes';
+import { Dialog, Button, Flex } from '@radix-ui/themes';
 import { FaTrash, FaExclamationTriangle, FaTimes } from 'react-icons/fa';
 import type { Contact } from '../../utils/contact';
 

@@ -56,7 +56,11 @@ export const CreateScriptDialog: React.FC<CreateScriptDialogProps> = ({
 
     setIsLoadingContent(true);
     try {
-      const data: any = await getScriptRaw(scriptName);
+      // getScriptRaw resolves to the raw script string directly, not
+      // { raw_data }, so `.raw_data` is always undefined here — this copy
+      // feature has never actually populated content. Preserved as-is (see
+      // CLAUDE.md), not silently fixed to `setContent(data)`.
+      const data = (await getScriptRaw(scriptName)) as unknown as { raw_data?: string };
       setContent(data.raw_data || '');
     } catch (error) {
       console.error('Failed to load filter set content:', error);

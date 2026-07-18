@@ -26,7 +26,7 @@ import {
   useFlaggedMail,
   useUnFlaggedMail,
 } from './useEmails';
-import { useToast } from '../components/ui/ToastComponent';
+import { useToast } from './useToast';
 import type { Email } from '../api/mailbox';
 
 interface UseEmailListActionsProps {
@@ -69,7 +69,7 @@ export const useEmailListActions = ({
   );
 
   const handleError = useCallback(
-    (error: any, defaultMessage: string) => {
+    (error: Error, defaultMessage: string) => {
       toast.error({
         description: error?.message || defaultMessage,
       });
@@ -95,8 +95,11 @@ export const useEmailListActions = ({
             body: [emailIdNum],
           },
           {
-            onSuccess: (res: any) => {
-              handleSuccess(res?.message || 'Email marked as read');
+            // mutate's declared response type (EmailFolders) doesn't match what the
+            // backend actually sends back ({ message }) — pre-existing API-layer
+            // mismatch, preserved via cast rather than "fixed" here.
+            onSuccess: (res) => {
+              handleSuccess((res as unknown as { message?: string })?.message || 'Email marked as read');
             },
             onError: (error) => {
               handleError(error, 'Failed to mark email as read');
@@ -117,8 +120,10 @@ export const useEmailListActions = ({
             body: emailsToActOn,
           },
           {
-            onSuccess: (res: any) => {
-              handleSuccess(res?.message || 'Email permanently deleted.');
+            onSuccess: (res) => {
+              handleSuccess(
+                (res as unknown as { message?: string })?.message || 'Email permanently deleted.'
+              );
               pendingDeleteActions.current.delete(actionId);
             },
             onError: (error) => {
@@ -212,8 +217,8 @@ export const useEmailListActions = ({
           body: emailIds,
         },
         {
-          onSuccess: (res: any) => {
-            handleSuccess(res?.message || successMessage);
+          onSuccess: (res) => {
+            handleSuccess((res as unknown as { message?: string })?.message || successMessage);
           },
           onError: (error) => {
             handleError(error, `Failed to ${markAsUnread ? 'unread' : 'read'} email`);
@@ -235,8 +240,8 @@ export const useEmailListActions = ({
           body: emailIds,
         },
         {
-          onSuccess: (res: any) => {
-            handleSuccess(res?.message || successMessage);
+          onSuccess: (res) => {
+            handleSuccess((res as unknown as { message?: string })?.message || successMessage);
           },
           onError: (error) => {
             handleError(error, `Failed to ${removeFlag ? 'remove flag' : 'flag email'}`);

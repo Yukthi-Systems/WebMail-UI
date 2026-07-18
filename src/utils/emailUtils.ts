@@ -17,7 +17,6 @@
 
 // src/utils/emailUtils.ts
 
-import { decodeWords } from 'postal-mime';
 import { parseEmail } from './emailPerser';
 
 // Splits a comma-separated address list while respecting quoted strings.
@@ -68,28 +67,27 @@ export const parseMultipleEmails = (emailString: string) => {
     };
   });
 };
-export function normalizeFieldNames<T extends Record<string, any>>(obj: T) {
-  const normalized: Record<string, any> = {};
+// Accepts whatever shape the caller has on hand (raw headers, an Email
+// object, null) — same tolerance the previous `any`-typed version had.
+export function normalizeFieldNames(obj: unknown): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  const source = (obj || {}) as Record<string, unknown>;
 
-  Object.keys(obj || {}).forEach((key) => {
-    normalized[key.toLowerCase()] = obj[key];
+  Object.keys(source).forEach((key) => {
+    normalized[key.toLowerCase()] = source[key];
   });
 
-  return normalized as {
-    [K in keyof T as Lowercase<string & K>]: T[K];
-  };
+  return normalized;
 }
 
 export const normalizeId = (id = '') => id.replace(/[<>]/g, '').trim();
 
-export const getMessageId = (email: any) =>
-  normalizeId(
-    email?.['Message-Id'] ||
-      email?.['Message-ID'] ||
-      email?.['message-id'] ||
-      email?.['message-ID'] ||
-      ''
+export const getMessageId = (email: unknown) => {
+  const e = (email || {}) as Record<string, unknown>;
+  return normalizeId(
+    (e['Message-Id'] || e['Message-ID'] || e['message-id'] || e['message-ID'] || '') as string
   );
+};
 
 export const extractIds = (value = ''): string[] => {
   const matches = value.match(/<([^>]+)>/g);
@@ -121,18 +119,18 @@ export const extractHeaders = (rawEmailText: string): Record<string, string> => 
   return headerMap;
 };
 
-export const parseHeaders = (parsedHeaders: any): Record<string, string> => {
+export const parseHeaders = (parsedHeaders: unknown): Record<string, string> => {
   const result: Record<string, string> = {};
 
   if (Array.isArray(parsedHeaders)) {
-    parsedHeaders.forEach((header: any) => {
+    (parsedHeaders as Array<{ key?: string; name?: string; value?: unknown }>).forEach((header) => {
       const key = header.key ?? header.name;
       const value = header.value;
       if (key && value !== undefined) {
-        result[key] = value;
+        result[key] = value as string;
       }
     });
-  } else if (typeof parsedHeaders === 'object') {
+  } else if (typeof parsedHeaders === 'object' && parsedHeaders !== null) {
     Object.entries(parsedHeaders).forEach(([key, value]) => {
       result[key] = String(value);
     });

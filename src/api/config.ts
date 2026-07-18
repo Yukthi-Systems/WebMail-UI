@@ -18,7 +18,7 @@
 // TODO: Update the api url from the environment variable or configuration file
 
 import { API_CONFIG } from '../constants/config';
-import { resetLayoutCache } from '../routes/_baselayout';
+import { resetLayoutCache } from '../utils/resetLayoutCache';
 import { getCompanySlugFromPath } from '../utils/routeUtils';
 
 export const API_URL = API_CONFIG.baseURL;

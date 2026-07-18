@@ -27,11 +27,11 @@ import { TableCell } from '@tiptap/extension-table-cell';
 import TableContextMenu from './TableContextMenu';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
-import { Node, mergeAttributes, Mark } from '@tiptap/core';
+import { Node, mergeAttributes, Mark, type CommandProps } from '@tiptap/core';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import Blockquote from '@tiptap/extension-blockquote';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../state/settings';
 import { OrderedList } from '@tiptap/extension-ordered-list';
@@ -93,32 +93,32 @@ const CustomTextStyle = TextStyle.extend({
       ...this.parent?.(),
       setFontSize:
         (fontSize: string) =>
-        ({ chain }: any) =>
+        ({ chain }: CommandProps) =>
           chain().setMark('textStyle', { fontSize }).run(),
 
       unsetFontSize:
         () =>
-        ({ chain }: any) =>
+        ({ chain }: CommandProps) =>
           chain().setMark('textStyle', { fontSize: null }).run(),
 
       setBackgroundColor:
         (backgroundColor: string) =>
-        ({ chain }: any) =>
+        ({ chain }: CommandProps) =>
           chain().setMark('textStyle', { backgroundColor }).run(),
 
       unsetBackgroundColor:
         () =>
-        ({ chain }: any) =>
+        ({ chain }: CommandProps) =>
           chain().setMark('textStyle', { backgroundColor: null }).run(),
 
       setFontFamily:
         (fontFamily: string) =>
-        ({ chain }: any) =>
+        ({ chain }: CommandProps) =>
           chain().setMark('textStyle', { fontFamily }).run(),
 
       unsetFontFamily:
         () =>
-        ({ chain }: any) =>
+        ({ chain }: CommandProps) =>
           chain().setMark('textStyle', { fontFamily: null }).run(),
     };
   },

@@ -44,7 +44,7 @@ const DevReload = () => {
             window.devReloadEtag = etag;
             window.location.reload();
           }
-        } catch (error) {
+        } catch {
           // If source files not accessible, try checking built files
           try {
             const builtResponse = await fetch('/index.html?' + Date.now(), { method: 'HEAD' });

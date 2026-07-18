@@ -72,7 +72,9 @@ export const buildFolderTree = (
 };
 
 // src/utils/sortUtils.ts
-export const sortFoldersAscending = (folders: any[]) => {
+export const sortFoldersAscending = <T extends { name?: string; displayName?: string }>(
+  folders: T[]
+) => {
   return [...folders].sort((a, b) => {
     const nameA = (a.name || a.displayName || '').toLowerCase();
     const nameB = (b.name || b.displayName || '').toLowerCase();

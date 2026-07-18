@@ -27,7 +27,7 @@ export interface CompanyConfig {
     logoDark?: string;
     backgroundDark?: string;
   };
-  theme?: Record<string, any>;
+  theme?: Record<string, unknown>;
 }
 
 // Not persisted — URL is the source of truth for company context.

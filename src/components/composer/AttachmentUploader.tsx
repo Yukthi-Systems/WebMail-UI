@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection, type DropEvent } from 'react-dropzone';
 import { useCallback, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -33,9 +33,15 @@ import {
   FaEye,
   FaImage,
 } from 'react-icons/fa6';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { FaExclamationTriangle } from 'react-icons/fa';
 import type { EmailAttachment } from '../../state/composer';
+import {
+  toBase64,
+  MAX_INDIVIDUAL_FILE_SIZE,
+  MAX_TOTAL_SIZE,
+  formatFileSize,
+} from './attachmentUtils';
 
 interface AttachmentUploaderProps {
   attachments: EmailAttachment[];
@@ -44,30 +50,6 @@ interface AttachmentUploaderProps {
   maxHeight?: string;
   disableDrop?: boolean;
 }
-
-export const toBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
-
-export const MAX_INDIVIDUAL_FILE_SIZE = 20 * 1024 * 1024;
-export const MAX_TOTAL_SIZE = 20 * 1024 * 1024;
-
-export const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
 
 const getFileIcon = (mimeType: string) => {
   if (mimeType.startsWith('image/')) return <FaImage className="w-5 h-5 text-[var(--blue-9)]" />;
@@ -99,11 +81,10 @@ const isImageFile = (mimeType: string) => {
 const AttachmentUploader = ({
   attachments = [],
   onAttachmentsChange,
-  height,
   maxHeight,
   disableDrop = false,
 }: AttachmentUploaderProps) => {
-  const [rejectedFiles, setRejectedFiles] = useState<File[]>([]);
+  const [, setRejectedFiles] = useState<File[]>([]);
   const [sizeWarning, setSizeWarning] = useState<string | null>(null);
   const [totalSizeWarning, setTotalSizeWarning] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -138,11 +119,11 @@ const AttachmentUploader = ({
   }, [previewImage]);
 
   const onDrop = useCallback(
-    async (acceptedFiles: File[], rejectedFiles: any[], event?: any) => {
+    async (acceptedFiles: File[], rejectedFiles: FileRejection[], event?: DropEvent) => {
       // If we are in a parent dropzone (disableDrop === true) AND this was a drop event,
       // let the parent handle it to avoid duplicates.
       // Picked files (via file explorer) use a change event, not a drop event.
-      if (disableDrop && event?.type === 'drop') return;
+      if (disableDrop && (event as Event | undefined)?.type === 'drop') return;
       setRejectedFiles([]);
       setSizeWarning(null);
       setTotalSizeWarning(null);
@@ -242,16 +223,14 @@ const AttachmentUploader = ({
     onDrop,
     multiple: true,
     maxSize: MAX_INDIVIDUAL_FILE_SIZE,
-    onDropRejected: (fileRejections: any[]) => {
-      const oversizedRejects = fileRejections.filter((rejection: any) =>
-        rejection.errors.some((error: any) => error.code === 'file-too-large')
+    onDropRejected: (fileRejections: FileRejection[]) => {
+      const oversizedRejects = fileRejections.filter((rejection) =>
+        rejection.errors.some((error) => error.code === 'file-too-large')
       );
 
       if (oversizedRejects.length > 0) {
         const fileList = oversizedRejects
-          .map(
-            (rejection: any) => `${rejection.file.name} (${formatFileSize(rejection.file.size)})`
-          )
+          .map((rejection) => `${rejection.file.name} (${formatFileSize(rejection.file.size)})`)
           .join(', ');
         const warningMsg =
           oversizedRejects.length === 1

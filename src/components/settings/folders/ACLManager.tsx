@@ -19,10 +19,11 @@ import React, { useMemo, useState } from 'react';
 import { FaShield, FaTrash, FaUsers, FaLock, FaChevronDown, FaPlus, FaEye } from 'react-icons/fa6';
 import { Controller, useForm } from 'react-hook-form';
 import { useGetACL, useSetACL, useDeleteACL, useGetOwnACL } from '../../../hooks/useACL';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import DropdownWrapper, { type DropdownItem } from '../../common/DropdownWrapper';
 import DialogWrapper from '../../common/Dialoge';
 import { FaEdit, FaInfoCircle } from 'react-icons/fa';
+import type { IconType } from 'react-icons';
 import { useAtomValue } from 'jotai';
 import { userDetailsAtom } from '../../../state/userDetails';
 
@@ -49,7 +50,7 @@ interface PermissionOption {
   label: string;
   description: string;
   color: 'blue' | 'green' | 'orange' | 'red' | 'gray';
-  icon?: any;
+  icon?: IconType;
 }
 const Tooltip: React.FC<{
   children: React.ReactNode;
@@ -306,7 +307,7 @@ const ACLManager: React.FC<ACLManagerProps> = ({ folderPath, isOpen, onClose }) 
           aclForm.reset({ user_email: '', permissions: 'lrs' });
           refetchACL();
         },
-        onError: (error: any) => {
+        onError: (error) => {
           toast.error({ description: `Failed to add permissions: ${error.message}` });
         },
       }
@@ -324,7 +325,7 @@ const ACLManager: React.FC<ACLManagerProps> = ({ folderPath, isOpen, onClose }) 
           toast.success({ description: 'Permissions removed successfully' });
           refetchACL();
         },
-        onError: (error: any) => {
+        onError: (error) => {
           toast.error({ description: `Failed to remove permissions: ${error.message}` });
         },
       }
@@ -420,7 +421,7 @@ const ACLManager: React.FC<ACLManagerProps> = ({ folderPath, isOpen, onClose }) 
                   {filteredACL && filteredACL?.length > 0 ? (
                     <div className="space-y-2 max-h-[35vh] overflow-y-auto  custom-scrollbar">
                       {filteredACL
-                        ?.filter((acl) => acl.user !== userDetails.email)
+                        ?.filter((acl) => acl.user !== userDetails?.email)
                         .map((acl, index) => {
                           const option = getPermissionOption(acl.permissions);
                           const Icon = option.icon || FaLock;

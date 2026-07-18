@@ -241,9 +241,9 @@ const AdvancedMenu = ({ editor }: Props) => {
                 onMouseDown={(e) => {
                   e.preventDefault();
                   if (activeBgColor === color) {
-                    (editor.commands as any).unsetBackgroundColor?.();
+                    editor.commands.unsetBackgroundColor?.();
                   } else {
-                    (editor.commands as any).setBackgroundColor?.(color);
+                    editor.commands.setBackgroundColor?.(color);
                   }
                 }}
                 style={{ backgroundColor: color }}
@@ -265,7 +265,7 @@ const AdvancedMenu = ({ editor }: Props) => {
               <button
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  (editor.commands as any).unsetBackgroundColor?.();
+                  editor.commands.unsetBackgroundColor?.();
                 }}
                 className="w-full text-left text-xs text-[var(--red-11)] hover:text-[var(--red-12)] px-1 py-0.5 rounded hover:bg-[var(--red-2)] transition-colors"
               >

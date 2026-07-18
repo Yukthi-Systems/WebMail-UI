@@ -34,12 +34,7 @@ interface FolderSelectProps {
   className?: string;
 }
 
-const FolderSelect: React.FC<FolderSelectProps> = ({
-  value,
-  onChange,
-  placeholder,
-  className = '',
-}) => {
+const FolderSelect: React.FC<FolderSelectProps> = ({ value, onChange, className = '' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const selectRef = useRef<HTMLDivElement>(null);

@@ -17,10 +17,19 @@
 
 import { Button, Flex, Box } from '@radix-ui/themes';
 import { FaChevronDown, FaChevronRight } from 'react-icons/fa6';
-import FolderItem from './FolderItem';
-import DropdownWrapper, { type DropdownItem } from '../common/DropdownWrapper';
+import FolderItem from '../FolderItem';
+import DropdownWrapper, { type DropdownItem } from '../../../common/DropdownWrapper';
 import type { IconType } from 'react-icons/lib';
 import { FaEllipsisH } from 'react-icons/fa';
+
+// The only real caller (CustomFolder.tsx) passes a FolderNode here, which has
+// no show_unread_count/show_label fields — those checks below always fall
+// through to their `!== false` default. Kept as-is, just typed honestly.
+interface FolderPopsShape {
+  unread_count?: number;
+  show_unread_count?: boolean;
+  show_label?: boolean;
+}
 
 interface FolderRowProps {
   folderPath: string;
@@ -37,7 +46,7 @@ interface FolderRowProps {
   onDrop?: (folderPath: string) => void;
   // Hover/Interaction states managed by parent or internal if simple
   className?: string;
-  folderPops?: any; // For passing specific folder config like counts/labels
+  folderPops?: FolderPopsShape; // For passing specific folder config like counts/labels
   isSidebarCollapsed?: boolean;
 }
 
@@ -57,7 +66,6 @@ const FolderRow = ({
   isSidebarCollapsed = false,
 }: FolderRowProps) => {
   const isSystemFolder = folderPops?.unread_count === -1;
-  const isOver = false;
 
   // Drag handlers specifically for the row wrapper
   const handleDragOver = (e: React.DragEvent) => {

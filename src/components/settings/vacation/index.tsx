@@ -24,7 +24,7 @@ import {
   useCreateScript,
   useEnableScript,
 } from '../../../hooks/useSieve';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import {
   type VacationSettings,
   DEFAULT_VACATION_SETTINGS,
@@ -132,7 +132,12 @@ export const VacationTab: React.FC = () => {
       setSettings(DEFAULT_VACATION_SETTINGS);
       return;
     }
-    const raw: string = (rawScriptData as any)?.raw_data || '';
+    // useScriptRaw resolves to the raw script string directly, not { raw_data }
+    // (see the same finding in CreateScriptDialoge.tsx / CLAUDE.md) — `.raw_data`
+    // is always undefined here, so this has never actually loaded existing
+    // vacation-script content. Preserved as-is, not silently fixed.
+    const raw: string =
+      (rawScriptData as unknown as { raw_data?: string })?.raw_data || '';
     setRawScript(raw);
     setSettings(parseVacationFromScript(raw) ?? DEFAULT_VACATION_SETTINGS);
   }, [rawScriptData, activeScript]);
@@ -171,8 +176,9 @@ export const VacationTab: React.FC = () => {
       if (isCreatingNewScript) await enableScriptMutation.mutateAsync(targetScript);
       setRawScript(newContent);
       toast.success({ description: 'Vacation settings saved successfully' });
-    } catch (error: any) {
-      toast.error({ description: error?.message || 'Failed to save vacation settings' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save vacation settings';
+      toast.error({ description: message });
     } finally {
       setIsSaving(false);
     }

@@ -19,15 +19,16 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { emailFetchByIds } from '../api/mailbox';
 import { useMemo } from 'react';
+import type { EmailLike } from '../utils/emailThreading';
 
 // Normalize Message-IDs so "<msg@id>" and "msg@id" compare equal.
 const normalizeId = (id: string = '') => id.replace(/[<>]/g, '').trim();
 
 // Which of the requested IDs were not found in the fetched emails?
-const getMissingIds = (requestedIds: string[], foundEmails: any[]) => {
+const getMissingIds = (requestedIds: string[], foundEmails: EmailLike[]) => {
   const foundIds = new Set(
-    foundEmails.map((e: any) =>
-      normalizeId(e['Message-ID'] || e['Message-Id'] || e['message-id'] || '')
+    foundEmails.map((e) =>
+      normalizeId((e['Message-ID'] || e['Message-Id'] || e['message-id'] || '') as string)
     )
   );
   return requestedIds.filter((id) => !foundIds.has(normalizeId(id)));
@@ -82,7 +83,7 @@ export function useThreadEmails(
     queryFn: async () => {
       if (messageIds.length === 0) return [];
 
-      let allEmails: any[] = [];
+      let allEmails: EmailLike[] = [];
 
       // 1. Current folder — the primary source
       try {
@@ -90,7 +91,7 @@ export function useThreadEmails(
           emailFetchByIds({ folderPath: currentFolder, messageIds })
         );
         if (result?.emails) {
-          allEmails = result.emails.map((e: any) => ({ ...e, folderPath: currentFolder }));
+          allEmails = result.emails.map((e: EmailLike) => ({ ...e, folderPath: currentFolder }));
         }
       } catch (err) {
         console.warn(`[Thread] Failed to fetch from ${currentFolder}:`, err);
@@ -106,7 +107,7 @@ export function useThreadEmails(
           if (result?.emails) {
             allEmails = [
               ...allEmails,
-              ...result.emails.map((e: any) => ({ ...e, folderPath: inboxFolder })),
+              ...result.emails.map((e: EmailLike) => ({ ...e, folderPath: inboxFolder })),
             ];
           }
         } catch (err) {
@@ -128,7 +129,7 @@ export function useThreadEmails(
           if (result?.emails) {
             allEmails = [
               ...allEmails,
-              ...result.emails.map((e: any) => ({ ...e, folderPath: sentFolder })),
+              ...result.emails.map((e: EmailLike) => ({ ...e, folderPath: sentFolder })),
             ];
           }
         } catch (err) {
@@ -138,8 +139,10 @@ export function useThreadEmails(
 
       // Deduplicate by normalized Message-ID
       const seen = new Set<string>();
-      return allEmails.filter((e: any) => {
-        const id = normalizeId(e['Message-ID'] || e['Message-Id'] || e['message-id'] || '');
+      return allEmails.filter((e) => {
+        const id = normalizeId(
+          (e['Message-ID'] || e['Message-Id'] || e['message-id'] || '') as string
+        );
         if (!id || seen.has(id)) return false;
         seen.add(id);
         return true;
@@ -168,17 +171,17 @@ export function useThreadMutations(currentFolder: string, messageIds: string[]) 
 
   return {
     optimisticallyRemove: (emailId: number) => {
-      queryClient.setQueryData(queryKey, (old: any[] = []) =>
-        old.filter((email: any) => Number(email.id) !== emailId)
+      queryClient.setQueryData(queryKey, (old: EmailLike[] = []) =>
+        old.filter((email) => Number(email.id) !== emailId)
       );
     },
 
-    optimisticallyRestore: (email: any) => {
-      queryClient.setQueryData(queryKey, (old: any[] = []) => {
-        const exists = old.some((e: any) => e.id === email.id);
+    optimisticallyRestore: (email: EmailLike) => {
+      queryClient.setQueryData(queryKey, (old: EmailLike[] = []) => {
+        const exists = old.some((e) => e.id === email.id);
         if (exists) return old;
         return [...old, email].sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          (a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime()
         );
       });
     },

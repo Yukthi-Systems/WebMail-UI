@@ -119,6 +119,12 @@ export const deleteContact = async (contact_id: string | number) => {
   return await res.json();
 };
 
+export class BulkContactError extends Error {
+  status?: number;
+  data?: unknown;
+  details?: unknown;
+}
+
 export const createBulkContact = async (contactData: CreateContactData[]) => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
 
@@ -137,10 +143,10 @@ export const createBulkContact = async (contactData: CreateContactData[]) => {
     if (!res.ok) {
       // Changed from res.status !== 201
       const errorMessage = data.message || data.error || 'Unable to create contacts';
-      const error = new Error(errorMessage);
-      (error as any).status = res.status;
-      (error as any).data = data;
-      (error as any).details = data.details;
+      const error = new BulkContactError(errorMessage);
+      error.status = res.status;
+      error.data = data;
+      error.details = data.details;
 
       console.error('Throwing error:', error);
       throw error;

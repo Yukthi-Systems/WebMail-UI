@@ -17,10 +17,11 @@
 
 import { atom } from 'jotai';
 import type { EmailAddress } from './composer';
+import type { SimplifiedEmail } from '../utils/email';
 
 export const emailAddress = atom<EmailAddress>({
   name: '',
   address: '',
 });
 
-export const selectedEmailAtom = atom(null);
+export const selectedEmailAtom = atom<(SimplifiedEmail & { selectedAt: number }) | null>(null);

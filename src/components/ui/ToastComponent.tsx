@@ -25,45 +25,14 @@ import {
 } from 'react-icons/fa6';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../state/settings';
-
-type ToastStatus = 'default' | 'success' | 'error' | 'loading';
-type ToastPosition = 'bottom-right' | 'top-center';
-
-interface ToastUndo {
-  label?: string;
-  onClick: () => void;
-  duration?: number;
-}
-
-interface ToastConfig {
-  description: string;
-  status?: ToastStatus;
-  duration?: number;
-  position?: ToastPosition;
-  undo?: ToastUndo;
-  id?: string;
-}
-
-interface ToastItem extends ToastConfig {
-  id: string;
-  leaving: boolean;
-}
-
-interface ToastContextValue {
-  (payload: ToastConfig): void;
-  success: (payload: ToastConfig) => void;
-  error: (payload: ToastConfig) => void;
-  loading: (payload: ToastConfig) => string;
-  dismiss: (id: string) => void;
-}
-
-const ToastContext = React.createContext<ToastContextValue | null>(null);
-
-export const useToast = (): ToastContextValue => {
-  const ctx = React.useContext(ToastContext);
-  if (!ctx) throw new Error('useToast must be used within <Toasts>');
-  return ctx;
-};
+import {
+  ToastContext,
+  type ToastConfig,
+  type ToastContextValue,
+  type ToastItem,
+  type ToastPosition,
+  type ToastStatus,
+} from './toastContext';
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 

@@ -16,7 +16,7 @@
  */
 
 import { webmailStore } from '../store.ts';
-import { apiKeyAtom, csrfTokenAtom } from '../state/auth';
+import { apiKeyAtom } from '../state/auth';
 import { API_URL } from './config.ts';
 
 export type Domain = {
@@ -57,7 +57,21 @@ const getHeaders = () => {
   };
 };
 
-export const getDomainList = async (page = 1, size = 20, query?: string): Promise<any> => {
+export interface DomainListResponse {
+  data: Domain[];
+  total_count: number;
+  current_page?: number;
+  total_pages?: number;
+  has_next?: boolean;
+  has_previous?: boolean;
+  page_size?: number;
+}
+
+export const getDomainList = async (
+  page = 1,
+  size = 20,
+  query?: string
+): Promise<DomainListResponse> => {
   const url = new URL(`${API_URL}/user/admin/domains`);
   url.searchParams.set('page', page.toString());
   url.searchParams.set('size', size.toString());

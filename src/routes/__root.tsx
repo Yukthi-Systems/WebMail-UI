@@ -17,7 +17,6 @@
 
 // _root.tsx
 import { createRootRoute, Outlet, redirect, useRouter } from '@tanstack/react-router';
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import { webmailStore } from '../store';
 import { csrfTokenAtom } from '../state/auth';
 import { useEffect } from 'react';
@@ -57,9 +56,7 @@ function RootComponent() {
   useEffect(() => {
     const unsubscribeResolved = router.subscribe('onResolved', () => {
       // Hide HTML loader after first route loads
-      if ((window as any).hideGlobalLoader) {
-        (window as any).hideGlobalLoader();
-      }
+      window.hideGlobalLoader?.();
     });
 
     return () => unsubscribeResolved();

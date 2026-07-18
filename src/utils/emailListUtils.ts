@@ -17,11 +17,13 @@
 
 // src/utils/emailListUtils.ts
 
+import type { UserSettings } from '../api/user';
+
 export const createSafeStringSet = (
   ...inputs: (string | string[] | null | undefined)[]
 ): Set<string> => {
   return new Set(
-    inputs.filter(Boolean).flatMap((input: any) => {
+    inputs.filter((v): v is string | string[] => Boolean(v)).flatMap((input) => {
       if (Array.isArray(input)) {
         return input.filter((v) => v && v.trim() !== '');
       }
@@ -31,7 +33,7 @@ export const createSafeStringSet = (
 };
 
 export const isFolderThreadEnabled = (
-  folderThreadView: any,
+  folderThreadView: UserSettings['folders'] | undefined,
   folder?: string,
   folderPath?: string
 ): boolean => {

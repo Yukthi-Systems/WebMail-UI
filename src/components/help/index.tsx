@@ -16,11 +16,11 @@
  */
 
 import React from 'react';
-import { Heading, Text, Badge } from '@radix-ui/themes';
+import { Heading, Badge } from '@radix-ui/themes';
+import type { IconType } from 'react-icons';
 import {
   HiOutlineUsers,
   HiOutlineVideoCamera,
-  HiOutlineCog6Tooth,
   HiOutlineFolder,
   HiOutlinePencilSquare,
   HiOutlineLightBulb,
@@ -105,7 +105,7 @@ const FeatureCard = ({
   title,
   description,
 }: {
-  icon: any;
+  icon: IconType;
   title: string;
   description: string;
 }) => (

@@ -22,7 +22,7 @@ import { buildFolderTree } from '../utils/folderUtils';
 import { type EmailFolders, defaultFolders } from '../api/mailbox';
 import { useEffect, useMemo, useCallback } from 'react';
 import { useSetAtom } from 'jotai';
-import { folderDetailsAtom } from '../state/folders';
+import { folderDetailsAtom, type FolderDetail, type FolderQuota } from '../state/folders';
 
 const FOLDER_RETRY_DELAY = () => 500;
 
@@ -40,12 +40,20 @@ export function useFolders() {
   });
 }
 
+export interface FoldersFullPathResponse {
+  folders: FolderDetail[];
+  message?: string;
+}
+
 export function useFoldersFullPath() {
   const setFolderDetails = useSetAtom(folderDetailsAtom);
 
-  const query: any = useQuery<EmailFolders, Error>({
+  // foldersFullPath()'s declared return type (EmailFolders) doesn't match its
+  // actual response shape (FoldersFullPathResponse) — pre-existing API-layer
+  // mismatch, preserved via cast rather than "fixed" here.
+  const query = useQuery<FoldersFullPathResponse, Error>({
     queryKey: ['foldersFullPath'],
-    queryFn: foldersFullPath,
+    queryFn: foldersFullPath as unknown as () => Promise<FoldersFullPathResponse>,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 30,
     retry: 5,
@@ -55,9 +63,10 @@ export function useFoldersFullPath() {
   });
 
   useEffect(() => {
-    if (query.isSuccess && query.data) {
-      setFolderDetails(query.data.folders);
-    } else if (query.isError || (query.isSuccess && !query.data)) {
+    const data = query.data;
+    if (query.isSuccess && data) {
+      setFolderDetails(data.folders || []);
+    } else if (query.isError || (query.isSuccess && !data)) {
       setFolderDetails([]);
     }
   }, [query.isSuccess, query.isError, query.data, setFolderDetails]);
@@ -74,9 +83,12 @@ interface FolderItem {
 
 // Update the hook to handle the correct data structure
 export const useFoldersDropdown = () => {
-  const { data, ...queryResult } = useQuery<EmailFolders>({
+  // Typed as a union (rather than the more specific FoldersFullPathResponse) to keep
+  // both branches below meaningful — this hook defends against the response arriving
+  // as either a bare array or the wrapped { folders } shape.
+  const { data, ...queryResult } = useQuery<FolderItem[] | FoldersFullPathResponse>({
     queryKey: ['foldersFullPath'],
-    queryFn: foldersFullPath,
+    queryFn: foldersFullPath as unknown as () => Promise<FolderItem[] | FoldersFullPathResponse>,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -89,7 +101,8 @@ export const useFoldersDropdown = () => {
       return buildFolderTree(data as unknown as FolderItem[]);
     } else if (typeof data === 'object' && data !== null) {
       // If data is an object, check for common properties that might contain the folders array
-      const foldersArray = (data as any).folders || (data as any).items || (data as any).data || [];
+      const record = data as unknown as Record<string, unknown>;
+      const foldersArray = record.folders || record.items || record.data || [];
 
       return buildFolderTree(foldersArray as FolderItem[]);
     }
@@ -105,9 +118,9 @@ export function useUpdateFolderUnreadCount(folderName: string) {
 
   return useCallback(
     (delta: number) => {
-      setFolderDetails((prev: any[]) =>
+      setFolderDetails((prev: FolderDetail[]) =>
         Array.isArray(prev)
-          ? prev.map((f: any) =>
+          ? prev.map((f) =>
               f.folder_name === folderName
                 ? { ...f, unread_count: Math.max(0, (f.unread_count || 0) + delta) }
                 : f
@@ -126,9 +139,9 @@ export function useUpdateAnyFolderUnreadCount() {
 
   return useCallback(
     (folderName: string, delta: number) => {
-      setFolderDetails((prev: any[]) =>
+      setFolderDetails((prev: FolderDetail[]) =>
         Array.isArray(prev)
-          ? prev.map((f: any) =>
+          ? prev.map((f) =>
               f.folder_name === folderName
                 ? { ...f, unread_count: Math.max(0, (f.unread_count || 0) + delta) }
                 : f
@@ -154,9 +167,9 @@ export function useFolderUidValidity(folderPath?: string) {
 }
 
 export function useFolderQuota(folderPath: string = 'User quota') {
-  return useQuery<any, Error>({
+  return useQuery<{ quota: FolderQuota }, Error>({
     queryKey: ['folderQuota', folderPath],
-    queryFn: () => foldersQuota(folderPath),
+    queryFn: () => foldersQuota(),
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     retry: 5,

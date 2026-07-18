@@ -16,12 +16,13 @@
  */
 
 import type { UserSettings } from '../api/user';
+import type { FolderDetail } from '../state/folders';
 
-export const getDefaultUserSettings = (folderData?: any[]): UserSettings => {
+export const getDefaultUserSettings = (folderData?: FolderDetail[]): UserSettings => {
   // Helper to find folder by flag
   const findFolder = (flag: string, fallback: string) => {
     if (!folderData) return fallback;
-    const folder = folderData.find((f) => f.flags.includes(flag));
+    const folder = folderData.find((f) => f.flags?.includes(flag));
     return folder?.folder_name || fallback;
   };
 
@@ -171,7 +172,7 @@ export const getDefaultUserSettings = (folderData?: any[]): UserSettings => {
 
 export const mergeWithDefaults = (
   userSettings: Partial<UserSettings> | null,
-  folderData?: any[]
+  folderData?: FolderDetail[]
 ): UserSettings => {
   const defaults = getDefaultUserSettings(folderData);
 

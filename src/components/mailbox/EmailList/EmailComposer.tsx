@@ -17,36 +17,38 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { FaPaperPlane, FaDeleteLeft, FaFloppyDisk } from 'react-icons/fa6';
-import type { Email } from '../../api/mailbox';
+import type { Email } from '../../../api/mailbox';
+import type { Email as ParsedPostalEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { useParams } from '@tanstack/react-router';
-import { useEmailRaw } from '../../hooks/useEmailRaw';
+import { useEmailRaw } from '../../../hooks/useEmailRaw';
 import PostalMime, { decodeWords } from 'postal-mime';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useSendMail, useDraftMail } from '../../hooks/useComposer';
+import { useSendMail, useDraftMail } from '../../../hooks/useComposer';
 import {
   emailComposerDataAtom,
   resetEmailComposerDataAtom,
   emailComposerOpenAtom,
   emailComposerKeepMountedAtom,
-} from '../../state/emailComposer';
-import { emailAddress } from '../../state/emailAddress';
-import RecipientField, { type RecipientFieldHandle } from '../composer/RecipientField';
-import SubjectField from '../composer/SubjectField';
-import ContentEditor from '../composer/contentEditor';
-import AttachmentUploader, {
+} from '../../../state/emailComposer';
+import { emailAddress } from '../../../state/emailAddress';
+import RecipientField, { type RecipientFieldHandle } from '../../composer/RecipientField';
+import SubjectField from '../../composer/SubjectField';
+import ContentEditor from '../../composer/contentEditor';
+import AttachmentUploader from '../../composer/AttachmentUploader';
+import {
   toBase64,
   MAX_TOTAL_SIZE,
   MAX_INDIVIDUAL_FILE_SIZE,
   formatFileSize,
-} from '../composer/AttachmentUploader';
+} from '../../composer/attachmentUtils';
 import { useDropzone } from 'react-dropzone';
 import { FaPaperclip } from 'react-icons/fa6';
-import EmailPriorityField from '../composer/EmailPriorityField';
-import { generateMessageId, sendMailV2 } from '../../api/composer';
-import { useDeleteMail } from '../../hooks/useEmails';
-import { useToast } from '../ui/ToastComponent';
-import { userSettingsAtom } from '../../state/settings';
-import { folderQuotaAtom } from '../../state/folders';
+import EmailPriorityField from '../../composer/EmailPriorityField';
+import { generateMessageId, sendMailV2, type ComposerRequest } from '../../../api/composer';
+import { useDeleteMail } from '../../../hooks/useEmails';
+import { useToast } from '../../../hooks/useToast';
+import { userSettingsAtom } from '../../../state/settings';
+import { folderQuotaAtom } from '../../../state/folders';
 
 // Import Utilities
 import {
@@ -58,16 +60,33 @@ import {
   processIncomingHtml,
   type EmailPriority,
   type EmailHeaders,
-} from '../../utils/replyForwardHelper';
-import { FaTimes } from 'react-icons/fa';
-import CustomModal from '../composer/CustomModal';
-import { parseEmail } from '../../utils/emailPerser';
-import { escapeHtml } from '../../utils/emailPrint';
-import { userDetailsAtom } from '../../state/userDetails';
-import { SEND_DEFAULT } from '../../constants/constant';
-import { getMessageId, normalizeFieldNames } from '../../utils/emailUtils';
-import { getEditorDimensions } from '../../utils/dimensions';
-import { useIsMobile } from '../../hooks/use-mobile';
+  type Address,
+  type EmailAttachmentPayload,
+} from '../../../utils/replyForwardHelper';
+import CustomModal from '../../composer/CustomModal';
+import { parseEmail } from '../../../utils/emailPerser';
+import { userDetailsAtom } from '../../../state/userDetails';
+import { SEND_DEFAULT } from '../../../constants/constant';
+import { getMessageId, normalizeFieldNames } from '../../../utils/emailUtils';
+import { getEditorDimensions } from '../../../utils/dimensions';
+import { useIsMobile } from '../../../hooks/use-mobile';
+import type { ComposerEmail } from '../../../state/emailComposer';
+import type { EmailAddress as RecipientEmailAddress } from '../../../state/composer';
+
+// Recipients built here (from parseEmailAddresses / RecipientField) use the
+// {address, name} shape, not the {email, name} shape ComposerEmail declares for
+// to/cc/bcc — a pre-existing mismatch, preserved as-is (see CLAUDE.md).
+interface ComposerBasicData {
+  to: Address[];
+  cc: Address[];
+  bcc: Address[];
+  subject: string;
+  html: string;
+  text: string;
+  attachments: EmailAttachmentPayload[];
+  headers: EmailHeaders;
+  from_id: { email: string; name: string };
+}
 
 interface EmailComposerProps {
   email: Email | null;
@@ -78,11 +97,14 @@ interface EmailComposerProps {
 }
 
 // Updated useDebounce hook with cancel function
-const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
+const useDebounce = <TArgs extends unknown[]>(
+  callback: (...args: TArgs) => void,
+  delay: number
+) => {
   const timeoutRef = useRef<number | null>(null);
 
   const debouncedFunction = useCallback(
-    (...args: any[]) => {
+    (...args: TArgs) => {
       if (timeoutRef.current) {
         window.clearTimeout(timeoutRef.current);
       }
@@ -101,7 +123,7 @@ const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
   return [debouncedFunction, cancel] as const;
 };
 
-const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailComposerProps) => {
+const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => {
   const toast = useToast();
   const { folder } = useParams({ strict: false });
   const [composerData, setComposerData] = useAtom(emailComposerDataAtom);
@@ -139,7 +161,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
 
   // ── Undo-send state & refs ──────────────────────────────────────────────────
   const [undoTime, setUndoTime] = useState<number>(5000);
-  const pendingEmailRef = useRef<any>(null);
+  const pendingEmailRef = useRef<Record<string, unknown> | null>(null);
   const isUndoPeriodRef = useRef(false);
   const isSendInFlightRef = useRef(false);
   // ───────────────────────────────────────────────────────────────────────────
@@ -237,7 +259,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
       try {
         resetComposerData();
 
-        const basicData: any = {
+        const basicData: ComposerBasicData = {
           to: [],
           cc: [],
           bcc: [],
@@ -270,7 +292,10 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
               subject: decodeWords(email.Subject) || '',
               html: html,
               text: parsed.text || '',
-              attachments: regularAttachments,
+              // regularAttachments is backend/snake_case-shaped (mime_type, data, content_id),
+              // not the composer's own EmailAttachment shape — pre-existing mismatch, unrelated
+              // to this pass, preserved as-is.
+              attachments: regularAttachments as unknown as typeof prev.attachments,
               from_id: {
                 email: currentEmail.address || '',
                 name: currentEmail.name || '',
@@ -282,8 +307,8 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
           return;
         }
 
-        let parsed: any = null;
-        let allAttachments: any[] = [];
+        let parsed: ParsedPostalEmail | null = null;
+        let allAttachments: EmailAttachmentPayload[] = [];
 
         if (rawEmail) {
           try {
@@ -311,15 +336,22 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
 
         if (mode === 'draft') {
           if (parsed) {
-            const toAddressArray = (address: any): { name: string; address: string }[] => {
+            const toAddressArray = (
+              address: PostalMimeAddress[] | PostalMimeAddress | undefined
+            ): Address[] => {
               if (!address) return [];
               if (Array.isArray(address)) {
                 return address.map((addr) => ({
                   name: addr.name || '',
-                  address: addr.address || '',
+                  address: (addr as { address?: string }).address || '',
                 }));
               }
-              return [{ name: address.name || '', address: address.address || '' }];
+              return [
+                {
+                  name: address.name || '',
+                  address: (address as { address?: string }).address || '',
+                },
+              ];
             };
 
             basicData.to = toAddressArray(parsed.to);
@@ -355,8 +387,8 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
             primaryRecipients = [parseEmailAddresses(email.From || '')[0]].filter(Boolean);
           }
 
-          const toAddresses = parseEmailAddresses(normalizedEmails?.to || '');
-          const ccAddresses = parseEmailAddresses(normalizedEmails?.cc || '');
+          const toAddresses = parseEmailAddresses((normalizedEmails?.to as string) || '');
+          const ccAddresses = parseEmailAddresses((normalizedEmails?.cc as string) || '');
 
           const currentAddress =
             typeof currentEmail === 'string' ? currentEmail : currentEmail?.address;
@@ -383,7 +415,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
           basicData.to = [];
 
           if (parsed && parsed.html) {
-            const { html, regularAttachments } = processIncomingHtml(parsed.html, allAttachments);
+            const { regularAttachments } = processIncomingHtml(parsed.html, allAttachments);
             basicData.attachments = regularAttachments;
           } else if (allAttachments.length > 0) {
             basicData.attachments = allAttachments;
@@ -395,16 +427,19 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
           name: currentEmail.name || '',
         };
 
-        setComposerData((prev) => ({
-          ...prev,
-          ...basicData,
-        }));
+        setComposerData(
+          (prev) =>
+            ({
+              ...prev,
+              ...basicData,
+            }) as unknown as ComposerEmail
+        );
 
         if (mode !== 'draft' && mode !== 'new') {
           const originalDate = formatEmailDate(email.Date || '');
 
           const originalFrom = parseEmail(email.From) || '';
-          const originalTo = parseEmail(normalizedEmails.to) || '';
+          const originalTo = parseEmail(normalizedEmails.to as string) || '';
           const originalSubject = decodeWords(email.Subject) || '';
 
           const borderColors = {
@@ -517,6 +552,8 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
     userSettings,
     rawEmail,
     isLoadingRaw,
+    setComposerData,
+    resetComposerData,
   ]);
 
   const saveToDraft = useCallback(() => {
@@ -534,17 +571,20 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
       folder_path: saveDraft || 'Drafts',
       priority,
       isDraft: true,
-    }) as any;
+    });
 
-    draftMutate(mailData, {
+    // formatComposedEmailData returns html/text fields; ComposerRequest expects
+    // body_html/body_text. This autosave path (unlike handleMailAction) never
+    // renames them — a pre-existing mismatch, preserved as-is (see CLAUDE.md).
+    draftMutate(mailData as unknown as ComposerRequest, {
       onSuccess: () => {
         hasAutoSavedRef.current = true;
       },
-      onError: (err: any) => {
+      onError: (err) => {
         console.error('error', err);
       },
     });
-  }, [composerData, quotedHtml, priority, draftMutate, isQuotaExceeded, saveDraft]);
+  }, [quotedHtml, priority, draftMutate, isQuotaExceeded, saveDraft]);
 
   const [debouncedSaveToDraft, cancelDebouncedSaveToDraft] = useDebounce(saveToDraft, 15000);
 
@@ -563,7 +603,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
     errorTitle: string;
     setSending?: (value: boolean) => void;
     allowUndo?: boolean;
-    dataOverrides?: any;
+    dataOverrides?: Record<string, unknown>;
   }) => {
     if (isDraft && isQuotaExceeded) {
       toast.error({
@@ -625,11 +665,11 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
       },
     };
 
-    const mailData = formatComposedEmailData(finalValue, {
+    const mailData: Record<string, unknown> = formatComposedEmailData(finalValue, {
       folder_path: isDraft ? saveDraft || 'Drafts' : sendPath || folder_path,
       priority: priority,
       isDraft,
-    }) as any;
+    });
 
     const mutateFn = isDraft ? draftMutate : sendMutate;
 
@@ -659,7 +699,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
           : originalMessageId;
         if (draftMsgId) {
           mailData.draft_saved = true;
-          mailData.draft_folder_name = (email as any).folderPath || saveDraft || 'Drafts';
+          mailData.draft_folder_name = email.folderPath || saveDraft || 'Drafts';
           mailData.draft_message_id = draftMsgId;
         }
       } else if (hasAutoSavedRef.current) {
@@ -730,7 +770,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
         isSendInFlightRef.current = true;
         const loadingId = toast.loading({ description: 'Sending…' });
         try {
-          await sendMailV2(mailToSend);
+          await sendMailV2(mailToSend as unknown as ComposerRequest);
           isSendInFlightRef.current = false;
           toast.dismiss(loadingId);
           window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -744,12 +784,14 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
           hasAutoSavedRef.current = false;
           emailIdRef.current = null;
           setIsInitialized(false);
-        } catch (err: any) {
+        } catch (err) {
           isSendInFlightRef.current = false;
           toast.dismiss(loadingId);
           window.removeEventListener('beforeunload', handleBeforeUnload);
           toast.error({
-            description: err?.message || 'An error occurred while sending mail. Please try again.',
+            description:
+              (err instanceof Error && err.message) ||
+              'An error occurred while sending mail. Please try again.',
           });
           // Reopen the composer — data is still intact since the component stayed mounted
           setKeepMounted(false);
@@ -761,7 +803,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
     }
     // ───────────────────────────────────────────────────────────────────────
 
-    mutateFn(mailData, {
+    mutateFn(mailData as unknown as ComposerRequest, {
       onSuccess: () => {
         if (isDraft) {
           isManualSaveRef.current = false;
@@ -779,7 +821,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
         emailIdRef.current = null;
         setIsInitialized(false);
       },
-      onError: (err: any) => {
+      onError: (err) => {
         if (isDraft) {
           isManualSaveRef.current = false;
         }
@@ -799,9 +841,21 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
     const pendingCc = ccRef.current?.flush();
     const pendingBcc = bccRef.current?.flush();
 
-    const effectiveTo: any = [...(composerData.to || []), ...(pendingTo ? [pendingTo] : [])];
-    const effectiveCc: any = [...(composerData.cc || []), ...(pendingCc ? [pendingCc] : [])];
-    const effectiveBcc: any = [...(composerData.bcc || []), ...(pendingBcc ? [pendingBcc] : [])];
+    // composerData.to/cc/bcc are declared as {email, name} (ComposerEmail) but
+    // RecipientField actually stores/emits {address, name} at runtime — see the
+    // ComposerBasicData note above. Cast once here to the shape actually used below.
+    const effectiveTo: RecipientEmailAddress[] = [
+      ...((composerData.to || []) as unknown as RecipientEmailAddress[]),
+      ...(pendingTo ? [pendingTo] : []),
+    ];
+    const effectiveCc: RecipientEmailAddress[] = [
+      ...((composerData.cc || []) as unknown as RecipientEmailAddress[]),
+      ...(pendingCc ? [pendingCc] : []),
+    ];
+    const effectiveBcc: RecipientEmailAddress[] = [
+      ...((composerData.bcc || []) as unknown as RecipientEmailAddress[]),
+      ...(pendingBcc ? [pendingBcc] : []),
+    ];
 
     if (effectiveTo.length === 0) {
       toast.error({ description: 'Please add at least one recipient.' });
@@ -810,9 +864,9 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
 
     // ── Validate all recipient addresses ─────────────────────────────────────
     const allRecipients = [
-      ...effectiveTo.map((r: any) => ({ ...r, field: 'To' })),
-      ...effectiveCc.map((r: any) => ({ ...r, field: 'Cc' })),
-      ...effectiveBcc.map((r: any) => ({ ...r, field: 'Bcc' })),
+      ...effectiveTo.map((r) => ({ ...r, field: 'To' })),
+      ...effectiveCc.map((r) => ({ ...r, field: 'Cc' })),
+      ...effectiveBcc.map((r) => ({ ...r, field: 'Bcc' })),
     ];
 
     for (const recipient of allRecipients) {
@@ -829,7 +883,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const overrides: any = {};
+    const overrides: Record<string, unknown> = {};
     if (pendingTo) overrides.to = effectiveTo;
     if (pendingCc) overrides.cc = effectiveCc;
     if (pendingBcc) overrides.bcc = effectiveBcc;
@@ -853,7 +907,9 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
     const pendingBcc = bccRef.current?.flush();
 
     // Calculate effective recipients for validation
-    const effectiveTo: any = [...(composerData.to || [])];
+    const effectiveTo: RecipientEmailAddress[] = [
+      ...((composerData.to || []) as unknown as RecipientEmailAddress[]),
+    ];
     if (pendingTo) effectiveTo.push(pendingTo);
 
     if (isQuotaExceeded) {
@@ -877,7 +933,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
 
     hasAutoSavedRef.current = true;
 
-    const overrides: any = {};
+    const overrides: Record<string, unknown> = {};
     if (pendingTo) overrides.to = effectiveTo;
     if (pendingCc) overrides.cc = [...(composerData.cc || []), pendingCc];
     if (pendingBcc) overrides.bcc = [...(composerData.bcc || []), pendingBcc];
@@ -908,10 +964,11 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
     setIsInitialized(false);
   };
 
-  const updateComposerData = (fields: any) => {
-    setComposerData((prev) => ({ ...prev, ...fields }));
+  const updateComposerData = (fields: Record<string, unknown>) => {
+    setComposerData((prev) => ({ ...prev, ...fields }) as unknown as ComposerEmail);
 
-    if (!isManualSaveRef.current && !isQuotaExceeded && fields?.text && fields.text.length > 5) {
+    const text = (fields as { text?: string }).text;
+    if (!isManualSaveRef.current && !isQuotaExceeded && text && text.length > 5) {
       debouncedSaveToDraft();
     }
   };
@@ -919,14 +976,17 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
   useEffect(() => {
     if (mode === 'new' && !isInitialized) {
       setComposerData((prev) => {
-        const from: any = prev.from_id || {};
+        const from = (prev.from_id || {}) as { address?: string; name?: string };
         return {
           ...prev,
+          // ComposerEmail has no `from` field (only `from_id`) — this is a
+          // pre-existing dead assignment, nothing reads `composerData.from`.
+          // Preserved as-is (see CLAUDE.md).
           from: {
             address: from?.address?.trim() ? from.address : '',
             name: from.name?.trim() ? from.name : 'Unknown Sender',
           },
-        };
+        } as unknown as ComposerEmail;
       });
       setIsInitialized(true);
     }
@@ -951,7 +1011,10 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
       const currentTotalSize = (composerData.attachments || []).reduce(
-        (sum: number, file: any) => sum + (file.size || 0),
+        // ComposerEmail declares attachments as {filename, mimeType, content}, but
+        // entries actually pushed below are {filename, mime_type, data, size} —
+        // a pre-existing shape mismatch, preserved as-is (see CLAUDE.md).
+        (sum: number, file) => sum + ((file as unknown as { size?: number }).size || 0),
         0
       );
       const newFilesTotalSize = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -986,16 +1049,19 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
           }))
         );
 
-        setComposerData((prev: any) => ({
-          ...prev,
-          attachments: [...(prev.attachments || []), ...base64Attachments],
-        }));
+        setComposerData(
+          (prev) =>
+            ({
+              ...prev,
+              attachments: [...(prev.attachments || []), ...base64Attachments],
+            }) as unknown as ComposerEmail
+        );
 
         toast.success({
           description: `Added ${validFiles.length} file(s)`,
           duration: 3000,
         });
-      } catch (error) {
+      } catch {
         toast.error({
           description: 'Failed to process files.',
         });
@@ -1051,7 +1117,8 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
               onClick={handleSaveDraft}
               className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
                 isQuotaExceeded ||
-                (!composerData.to?.length && !(toRef.current as any)?.inputValue) ||
+                (!composerData.to?.length &&
+                  !(toRef.current as unknown as { inputValue?: string })?.inputValue) ||
                 isDrafting
                   ? 'opacity-50 cursor-not-allowed text-[var(--gray-9)]'
                   : 'text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)]'
@@ -1156,7 +1223,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
                 ref={toRef}
                 label="To"
                 placeholder="Recipients email address"
-                value={(composerData as any).to || []}
+                value={(composerData.to as unknown as RecipientEmailAddress[]) || []}
                 onChange={(emailAddresses) => updateComposerData({ to: emailAddresses })}
               />
 
@@ -1180,7 +1247,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
                   ref={ccRef}
                   label="Cc"
                   placeholder="Enter cc email address"
-                  value={(composerData as any).cc || []}
+                  value={(composerData.cc as unknown as RecipientEmailAddress[]) || []}
                   onChange={(emailAddresses) => updateComposerData({ cc: emailAddresses })}
                 />
               )}
@@ -1190,7 +1257,7 @@ const EmailComposer = ({ email, mode, onClose, onSend, onSendDraft }: EmailCompo
                   ref={bccRef}
                   label="Bcc"
                   placeholder="Enter bcc email address"
-                  value={(composerData as any).bcc || []}
+                  value={(composerData.bcc as unknown as RecipientEmailAddress[]) || []}
                   onChange={(emailAddresses) => updateComposerData({ bcc: emailAddresses })}
                 />
               )}

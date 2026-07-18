@@ -15,7 +15,6 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 
 export const csrfTokenAtom = atomWithStorage<string | null>('auth', null, undefined, {

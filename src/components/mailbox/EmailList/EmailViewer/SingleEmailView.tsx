@@ -16,25 +16,26 @@
  */
 
 // src/components/email/SingleEmailView.tsx
-import { Separator, Popover, Button } from '@radix-ui/themes';
-import { FaCalendarAlt, FaEnvelope, FaInfoCircle, FaTimes, FaFlag } from 'react-icons/fa';
-import BIMIAvatar from '../common/BimiAvatar';
+import { Popover, Button } from '@radix-ui/themes';
+import { FaCalendarAlt, FaInfoCircle, FaTimes, FaFlag } from 'react-icons/fa';
+import BIMIAvatar from '../../../common/BimiAvatar';
 import EmailLoadingState from './EmailLoadingState';
 import EmailParsingState from './EmailParsingState';
 import EmailErrorState from './EmailErrorState';
 import EmailNoDataState from './EmailNoDataState';
-import EmailTabs from './EmailTabs';
+import EmailTabs, { type ParsedEmailForTabs } from './EmailTabs';
 import { RecipientSection } from './RecipientSection';
-import { parseEmail } from '../../utils/emailPerser';
-import { decodeWords } from 'postal-mime';
-import { parseMultipleEmails, getInitialName, normalizeFieldNames } from '../../utils/emailUtils';
+import { parseEmail } from '../../../../utils/emailPerser';
+import { decodeWords, type Email as ParsedPostalEmail, type Attachment } from 'postal-mime';
+import { parseMultipleEmails, normalizeFieldNames } from '../../../../utils/emailUtils';
+import type { EmailLike } from '../../../../utils/emailThreading';
 
 interface SingleEmailViewProps {
   rawEmail: string | undefined;
   isLoading: boolean;
   isParsing: boolean;
   parseError: string | null;
-  parsedEmail: any;
+  parsedEmail: ParsedPostalEmail | null;
   headers: Record<string, string>;
   subject: string;
   senderEmail: string;
@@ -44,9 +45,9 @@ interface SingleEmailViewProps {
   folder?: string;
   splitView?: boolean;
   onBack?: () => void;
-  onDraftSend?: (email: any) => void;
+  onDraftSend?: (email: EmailLike) => void;
   onContentLoaded?: (content: string) => void;
-  onAttachmentsLoaded?: (attachments: any[]) => void;
+  onAttachmentsLoaded?: (attachments: Attachment[]) => void;
   messageId: string;
   folderPath?: string;
   formatUserDateNice: (date: string) => string;
@@ -70,8 +71,6 @@ export const SingleEmailView = ({
   splitView,
   onBack,
   onDraftSend,
-  onContentLoaded,
-  onAttachmentsLoaded,
   messageId,
   folderPath,
   formatUserDateNice,
@@ -80,9 +79,9 @@ export const SingleEmailView = ({
 }: SingleEmailViewProps) => {
   const normalizedHeaders = normalizeFieldNames(headers);
 
-  const toRecipients = parseMultipleEmails(normalizedHeaders.to || '');
-  const ccRecipients = parseMultipleEmails(normalizedHeaders.cc || '');
-  const bccRecipients = parseMultipleEmails(normalizedHeaders.bcc || '');
+  const toRecipients = parseMultipleEmails((normalizedHeaders.to as string) || '');
+  const ccRecipients = parseMultipleEmails((normalizedHeaders.cc as string) || '');
+  const bccRecipients = parseMultipleEmails((normalizedHeaders.bcc as string) || '');
   const { name: senderName, email: senderEmailParsed } = parseEmail(senderEmail);
 
   const handleEditDraft = () => {
@@ -200,7 +199,7 @@ export const SingleEmailView = ({
           {!isLoading && !isParsing && !parseError && parsedEmail && (
             <EmailTabs
               key={`${messageId}-${folderPath}`}
-              parsedEmail={parsedEmail}
+              parsedEmail={parsedEmail as unknown as ParsedEmailForTabs}
               rawEmail={rawEmail || ''}
             />
           )}

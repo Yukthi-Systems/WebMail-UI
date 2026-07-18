@@ -17,6 +17,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import type { EmailLike } from '../utils/emailThreading';
 
 /**
  * Provides two cache-patching utilities that update the React Query email list
@@ -41,7 +42,7 @@ export function useEmailCacheUpdater(folder: string) {
       if (emailIds.length === 0) return;
       const idSet = new Set(emailIds.map(String));
 
-      const applyFlagPatch = (email: any) => {
+      const applyFlagPatch = (email: EmailLike) => {
         if (!idSet.has(String(email.id))) return email;
         let flags: string[] = [...(email.FLAGS || [])];
         if (flagToRemove) flags = flags.filter((f) => f !== flagToRemove);
@@ -50,25 +51,31 @@ export function useEmailCacheUpdater(folder: string) {
       };
 
       // Patch folder email list cache (uses `emails` key)
-      queryClient.setQueriesData({ queryKey: ['folder', folder], exact: false }, (old: any) => {
-        if (!old?.emails) return old;
-        return { ...old, emails: old.emails.map(applyFlagPatch) };
-      });
+      queryClient.setQueriesData(
+        { queryKey: ['folder', folder], exact: false },
+        (old: { emails?: EmailLike[] } | undefined) => {
+          if (!old?.emails) return old;
+          return { ...old, emails: old.emails.map(applyFlagPatch) };
+        }
+      );
 
       // Patch search results cache — shape: { data: { data: Email[], total_count } }
-      queryClient.setQueriesData({ queryKey: ['search-emails'], exact: false }, (old: any) => {
-        if (!Array.isArray(old?.data?.data)) return old;
-        return {
-          ...old,
-          data: { ...old.data, data: old.data.data.map(applyFlagPatch) },
-        };
-      });
+      queryClient.setQueriesData(
+        { queryKey: ['search-emails'], exact: false },
+        (old: { data?: { data?: EmailLike[] } } | undefined) => {
+          if (!Array.isArray(old?.data?.data)) return old;
+          return {
+            ...old,
+            data: { ...old.data, data: old.data.data.map(applyFlagPatch) },
+          };
+        }
+      );
 
       // Patch thread structure cache — shape: Email[] (flat array from useThreadEmails)
       // This covers emails from any folder (INBOX, Sent, etc.) in a thread without refetching.
       queryClient.setQueriesData(
         { queryKey: ['thread', 'structure'], exact: false },
-        (old: any) => {
+        (old: EmailLike[] | undefined) => {
           if (!Array.isArray(old)) return old;
           return old.map(applyFlagPatch);
         }

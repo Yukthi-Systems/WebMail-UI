@@ -16,22 +16,23 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { FaPaperclip, FaTrash, FaFlag, FaEnvelope } from 'react-icons/fa';
+import { FaPaperclip, FaTrash, FaFlag } from 'react-icons/fa';
 import { MdDriveFileMoveOutline, MdMarkEmailRead, MdMarkEmailUnread } from 'react-icons/md';
 import { decodeWords } from 'postal-mime';
-import BIMIAvatar from '../common/BimiAvatar';
+import BIMIAvatar from '../../../common/BimiAvatar';
 import { Checkbox, ContextMenu } from '@radix-ui/themes';
-import { parseEmail } from '../../utils/emailPerser';
-import { useUserTimezone } from '../../hooks/useTimezone';
+import { parseEmail } from '../../../../utils/emailPerser';
+import { useUserTimezone } from '../../../../hooks/useTimezone';
 import { useAtomValue } from 'jotai';
-import { userSettingsAtom } from '../../state/settings';
+import { userSettingsAtom } from '../../../../state/settings';
 import EmailHoverCard from './EmailHoverCard';
-import { useEmailPrefetch } from '../../hooks/useEmailRaw';
-import { getMessageId, splitAddressList } from '../../utils/emailUtils';
+import { useEmailPrefetch } from '../../../../hooks/useEmailRaw';
+import { getMessageId, splitAddressList } from '../../../../utils/emailUtils';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEmailParser } from '../../hooks/useEmailParser';
-import { isFolderThreadEnabled, shouldApplyThreading } from '../../utils/emailListUtils';
-import type { SimplifiedEmail } from '../../utils/email';
+import { useEmailParser } from '../../../../hooks/useEmailParser';
+import { isFolderThreadEnabled, shouldApplyThreading } from '../../../../utils/emailListUtils';
+import type { SimplifiedEmail } from '../../../../utils/email';
+import type { EmailLike } from '../../../../utils/emailThreading';
 
 interface EmailCardProps {
   email: SimplifiedEmail;
@@ -96,7 +97,7 @@ const EmailCard = ({
   const [showEmailTooltip, setShowEmailTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<'bottom' | 'top'>('bottom');
   const tooltipTriggerRef = useRef<HTMLDivElement | null>(null);
-  const longPressTimerRef = useRef<any>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartTimeRef = useRef<number>(0);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number>(0);
@@ -146,7 +147,7 @@ const EmailCard = ({
 
   const toRecipients = parseRecipients(email.To);
   const ccRecipients = email.Cc ? parseRecipients(email.Cc) : [];
-  const bccRecipients: any[] = [];
+  const bccRecipients: ReturnType<typeof parseRecipients> = [];
 
   // Status Checks
   const emailSeen = email?.FLAGS?.includes('\\Seen') || false;
@@ -161,9 +162,10 @@ const EmailCard = ({
   const isFolderThread = isFolderThreadEnabled(folderThreadView, folder, folder);
   const threadingActive = shouldApplyThreading(threadedView, isFolderThread, folder);
 
-  const isThread = !!(email as any)['Thread-View'];
-  const threadCount = ((email as any)['Thread-Emails-Count'] as number) || 1;
-  const threadUnreadCount = ((email as any)['Thread-Unread-Count'] as number) || 0;
+  const emailWithThreadFields = email as unknown as EmailLike;
+  const isThread = !!emailWithThreadFields['Thread-View'];
+  const threadCount = (emailWithThreadFields['Thread-Emails-Count'] as number) || 1;
+  const threadUnreadCount = (emailWithThreadFields['Thread-Unread-Count'] as number) || 0;
   const threadHasUnread = isThread && threadUnreadCount > 0;
   const showThreadPill = threadingActive && isThread && threadCount > 1;
 
@@ -194,7 +196,7 @@ const EmailCard = ({
     }, 300);
 
     return () => clearInterval(pollInterval);
-  }, [showEmailTooltip, prefetchedRawEmail]);
+  }, [showEmailTooltip, prefetchedRawEmail, email.id, folder, messageId, queryClient]);
 
   // Cleanup all timers on unmount
   useEffect(() => {
@@ -397,7 +399,7 @@ const EmailCard = ({
     if (!email.attachments || email.attachments.length === 0) return '';
     const names = email.attachments
       .slice(0, 3)
-      .map((att:any) => att.filename)
+      .map((att) => att.filename)
       .join(', ');
     if (email.attachments.length > 3) return `${names} + ${email.attachments.length - 3} more`;
     return names;
@@ -406,7 +408,7 @@ const EmailCard = ({
   const getHoverAttachmentNames = () => {
     if (hoverParsedEmail?.attachments?.length) {
       return hoverParsedEmail.attachments
-        .map((a: any) => a.filename || a.name || 'Unnamed')
+        .map((a) => a.filename || (a as unknown as { name?: string }).name || 'Unnamed')
         .join(', ');
     }
     return getAttachmentNames();
@@ -561,7 +563,7 @@ const EmailCard = ({
       longPressTimerRef.current = null;
     }
     if (touchDuration < 500 && !touchMovedRef.current && !isSelectionMode)
-      handleCardClick(e as any);
+      handleCardClick(e as unknown as React.MouseEvent);
     touchMovedRef.current = false;
   };
 
@@ -793,7 +795,7 @@ const EmailCard = ({
                             onSelectionChange?.(email.id, checked as boolean, index, false);
                           }}
                           onClick={(e) => {
-                            if ((e as any).shiftKey && onSelectionChange) {
+                            if (e.shiftKey && onSelectionChange) {
                               e.stopPropagation();
                               onSelectionChange(email.id, !isSelected, index, true);
                             }

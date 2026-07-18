@@ -17,7 +17,7 @@
 
 import { useAtomValue } from 'jotai';
 import { useState, useRef, useEffect } from 'react';
-import { FaAngleLeft, FaAngleRight, FaChevronDown } from 'react-icons/fa6';
+import { FaAngleLeft, FaAngleRight } from 'react-icons/fa6';
 import { userSettingsAtom } from '../../state/settings';
 
 interface PaginationProps {

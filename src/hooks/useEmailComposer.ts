@@ -58,7 +58,7 @@ export const useEmailComposer = () => {
       }
       setComposerOpen(true);
     },
-    []
+    [setComposerOpen]
   );
 
   const closeComposer = useCallback(() => {
@@ -67,7 +67,7 @@ export const useEmailComposer = () => {
     setReplyingAllEmail(null);
     setForwardingEmail(null);
     setSendDraftEmail(null);
-  }, []);
+  }, [setComposerOpen]);
 
   const getComposerMode = useCallback(() => {
     if (replyingEmail) return 'reply';

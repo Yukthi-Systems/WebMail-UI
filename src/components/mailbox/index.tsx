@@ -25,22 +25,21 @@ import { viewContactModel } from '../../state/contact';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { composerOpenAtom } from '../../state/composer';
 import { userSettingsAtom } from '../../state/settings';
-import { sidebarCollapsedAtom, sidebarHoveredAtom } from '../../state/sidebar';
+import { sidebarCollapsedAtom } from '../../state/sidebar';
 import { useMoveMail } from '../../hooks/useEmails';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUpdateAnyFolderUnreadCount } from '../../hooks/useFolders';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { useParams } from '@tanstack/react-router';
 import { useWindowSize } from '../../hooks/useWindowSize';
 import MobileBottomNav from './MobileBottomNav';
-import { panelSizesAtom } from '../../state/resizable';
 import ResizablePanel from '../common/ResizeblePanel';
 import { useKeyboardNavigation } from '../../hooks/useKeyboardShortcuts';
 import { usePanelSizes } from '../../hooks/usePanelSizes';
+import type { EmailLike } from '../../utils/emailThreading';
 
 const Mailbox = () => {
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
-  const sidebarHovered = useAtomValue(sidebarHoveredAtom);
   const [clearSelectedEmail, setClearSelectedEmail] = useState<(() => void) | null>(null);
   // useRef instead of useState — storing a function in useState triggers React's
   // functional-update trap (it calls fn(prevState) instead of storing fn).
@@ -54,7 +53,7 @@ const Mailbox = () => {
   const queryClient = useQueryClient();
   const toast = useToast();
   const updateAnyFolderUnreadCount = useUpdateAnyFolderUnreadCount();
-  const { isMobile, isDesktop } = useWindowSize();
+  const { isDesktop } = useWindowSize();
   const foldersRef = useRef<{ focusFirstFolder: () => void }>(null);
   const [draggedEmails, setDraggedEmails] = useState<number[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -105,14 +104,16 @@ const Mailbox = () => {
         {
           onSuccess: () => {
             // Compute unread delta from cached email pages before invalidating
-            const cachedPages = queryClient.getQueriesData<any>({ queryKey: ['folder', folder] });
+            const cachedPages = queryClient.getQueriesData<{ emails?: EmailLike[] }>({
+              queryKey: ['folder', folder],
+            });
             let unreadMoved = 0;
             for (const [, data] of cachedPages) {
               const raw = data?.emails;
               if (!raw) continue;
-              const emails: any[] = Array.isArray(raw) ? raw : Object.values(raw);
+              const emails: EmailLike[] = Array.isArray(raw) ? raw : Object.values(raw);
               unreadMoved += emails.filter(
-                (e: any) => draggedEmails.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
+                (e) => draggedEmails.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
               ).length;
             }
 
@@ -133,7 +134,7 @@ const Mailbox = () => {
 
             queryClient.invalidateQueries({ queryKey: ['folder', folder] });
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({
               description: error.message || 'Failed to move emails',
@@ -171,8 +172,6 @@ const Mailbox = () => {
   // We only use the Resizable Layout if the sidebar is pinned open (User specifically wanted it open)
   // If it's collapsed, we use a static layout where hover actions float over content.
   const useResizableLayout = show_sidebar && isDesktop && !sidebarCollapsed;
-
-  const isExpanded = !sidebarCollapsed || sidebarHovered;
 
   return (
     <>

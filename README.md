@@ -6,6 +6,15 @@ A modern, high-performance webmail application built with the latest React ecosy
 
 > 💬 **Join our community on Discord:** [discord.gg/29zTxvque](https://discord.gg/29zTxvque) — ask questions, report bugs, share ideas, and get involved.
 
+## 🔗 Related Projects
+
+| Project | Description |
+| --- | --- |
+| [Docs](https://webmail.yukthi.com/) | Documentation site |
+| [WebMail-API](https://github.com/Yukthi-Systems/WebMail-API) | Backend API |
+| [WebMail-BIMI-API](https://github.com/Yukthi-Systems/WebMail-BIMI-API) | BIMI API |
+| [WebMail-RMQ-Worker](https://github.com/Yukthi-Systems/WebMail-RMQ-Worker) | RabbitMQ worker |
+
 ## 📸 Screenshots
 
 <p align="center">

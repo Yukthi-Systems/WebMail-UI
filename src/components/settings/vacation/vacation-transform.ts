@@ -18,6 +18,8 @@
 // ============================================================
 // vacationTransform.ts
 // ============================================================
+
+import type { SieveApiResponse } from '../../../api/sieve';
 // Strategy: use "# rule:[vacation] <ruleName>" as the sole
 // identifier for the vacation block — no start/end markers.
 // The backend preserves # rule: lines so the block survives
@@ -312,7 +314,7 @@ export const parseVacationFromScript = (raw: string): VacationSettings | null =>
 export const updateScriptContent = async (
   scriptName: string,
   newContent: string,
-  createScript: (args: { scriptName: string; scriptContent: string }) => Promise<any>
+  createScript: (args: { scriptName: string; scriptContent: string }) => Promise<SieveApiResponse>
 ): Promise<void> => {
   await createScript({ scriptName, scriptContent: newContent });
 };

@@ -38,7 +38,7 @@ import DropdownWrapper from '../common/DropdownWrapper';
 import type { Contact, ContactsResponse, CreateContactData } from '../../utils/contact';
 import CSVImportModal from './CSVImport';
 import { deleteContact, getContacts } from '../../api/contacts';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import {
   exportToCSV,
   exportToVCard,
@@ -74,15 +74,11 @@ function ContactPage() {
     { name: '', email: '', phone: '', notes: '' },
   ]);
 
-  const { data, isPending, refetch, error, isError } = useContacts(page, perPage);
+  const { data, isPending, refetch, isError } = useContacts(page, perPage);
   const { mutate: createSingleContact, isPending: isLoadingCreateSingleContact } =
     useCreateContact();
   const { mutate: editSingleContact, isPending: isLoadingEditSingleContact } = useEditContact();
-  const {
-    mutate: createBulkContact,
-    isPending: isLoadingBulkCreate,
-    error: bulkCreateError,
-  } = useCreateBulkContact();
+  const { mutate: createBulkContact, isPending: isLoadingBulkCreate } = useCreateBulkContact();
   const { mutate: deleteSingleContact, isPending: isLoadingDelete } = useDeleteContact();
 
   const contactsData = data as ContactsResponse;
@@ -122,7 +118,11 @@ function ContactPage() {
         async (pageNum: number) => {
           const response = await getContacts(pageNum, 100);
           return {
-            data: response.data as any,
+            // api/contacts.ts's Contact (nullable phone/notes/contact_id) differs
+            // slightly from utils/contact.ts's Contact (non-nullable) — pre-existing
+            // mismatch between the two Contact shapes, bridged via cast rather than
+            // reconciled here.
+            data: response.data as unknown as Contact[],
             total_pages: response.total_pages,
           };
         },
@@ -275,10 +275,14 @@ function ContactPage() {
           description: `Successfully created ${validContacts.length} contact${validContacts.length > 1 ? 's' : ''}`,
         });
       },
-      onError: (error: any) => {
+      onError: (error) => {
+        // error is a plain Error here, so .response is never actually present —
+        // pre-existing defensive fallback for a shape this API doesn't produce.
+        const response = (error as unknown as { response?: { data?: { message?: string; error?: string } } })
+          .response;
         const errorMessage =
-          error?.response?.data?.message ||
-          error?.response?.data?.error ||
+          response?.data?.message ||
+          response?.data?.error ||
           error?.message ||
           'Failed to create contacts. Please try again.';
 
@@ -306,12 +310,14 @@ function ContactPage() {
           description: `Successfully imported contact${contacts.length > 1 ? 's' : ''}.`,
         });
       },
-      onError: (error: any) => {
+      onError: (error) => {
         console.error('CSV import failed:', error);
         toast.dismiss(loadingId);
+        const response = (error as unknown as { response?: { data?: { message?: string; error?: string } } })
+          .response;
         const errorMessage =
-          error?.response?.data?.message ||
-          error?.response?.data?.error ||
+          response?.data?.message ||
+          response?.data?.error ||
           error?.message ||
           'Failed to import contacts from CSV. Please try again.';
 

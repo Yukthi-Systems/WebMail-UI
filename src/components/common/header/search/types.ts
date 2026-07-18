@@ -16,6 +16,8 @@
  */
 
 // components/email/search/types.ts
+import type { SimplifiedEmail } from '../../../../utils/email';
+
 export interface FilterState {
   from: string;
   to: string;
@@ -31,7 +33,7 @@ export interface SearchDropdownProps {
   className?: string;
   placeholder?: string;
   onSearch?: (query: string, filters: FilterState) => void;
-  onEmailSelect?: (email: any) => void;
+  onEmailSelect?: (email: SimplifiedEmail) => void;
 }
 
 export interface FilterBadge {

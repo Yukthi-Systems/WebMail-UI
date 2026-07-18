@@ -25,10 +25,10 @@ import {
   FaCheck,
   FaTimes,
 } from 'react-icons/fa';
-import { buildFolderTree, type FolderNode } from '../../utils/folderTree';
+import { buildFolderTree, type FolderNode } from '../../../utils/folderTree';
 import { useParams } from '@tanstack/react-router';
 import { useAtomValue } from 'jotai';
-import { folderDetailsAtom } from '../../state/folders';
+import { folderDetailsAtom } from '../../../state/folders';
 
 interface Folder {
   id: string;
@@ -46,14 +46,12 @@ interface FolderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onFolderSelect: (folder: Folder) => void;
-  currentFolder?: Folder | any | null;
+  // Callers each have their own locally-typed "folder" shape (this file's Folder
+  // is one of at least three slightly different versions across the app) — only
+  // `.path` is ever read from it here, so accept anything with that shape.
+  currentFolder?: { path?: string } | string | null;
   title?: string;
   isQuotaExceeded?: boolean;
-}
-
-interface FoldersResponse {
-  message: string;
-  folders: Array<any>;
 }
 
 const FolderDialog: React.FC<FolderDialogProps> = ({
@@ -110,8 +108,12 @@ const FolderDialog: React.FC<FolderDialogProps> = ({
   }, [open]);
 
   const isSourceFolder = (folder: Folder) => {
+    // currentFolder is sometimes passed as a plain path string (not a Folder) —
+    // .path on a string is always undefined, same as before this was typed.
+    const currentFolderObjPath =
+      currentFolder && typeof currentFolder === 'object' ? currentFolder.path : undefined;
     return (
-      (currentFolder && folder.path === currentFolder.path) ||
+      (currentFolder && folder.path === currentFolderObjPath) ||
       (currentFolderPath && folder.path === currentFolderPath)
     );
   };

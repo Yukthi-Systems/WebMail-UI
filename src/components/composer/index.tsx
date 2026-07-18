@@ -15,36 +15,31 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { Box, Button, Flex, Grid, Separator, Dialog, Text, AlertDialog } from '@radix-ui/themes';
-import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { Box, Button, Flex, Dialog, Text, AlertDialog } from '@radix-ui/themes';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   composerDataAtom,
   composerOpenAtom,
   resetComposerDataAtom,
+  draftMessageIdAtom,
   type EmailAddress,
+  type ComposedEmailData,
 } from '../../state/composer';
 import { FaDeleteLeft, FaFloppyDisk, FaPaperPlane } from 'react-icons/fa6';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import RecipientField, { type RecipientFieldHandle } from './RecipientField';
 import SubjectField from './SubjectField';
 import ContentEditor from './contentEditor';
-import AttachmentUploader, {
-  toBase64,
-  MAX_TOTAL_SIZE,
-  MAX_INDIVIDUAL_FILE_SIZE,
-  formatFileSize,
-} from './AttachmentUploader';
+import AttachmentUploader from './AttachmentUploader';
+import { toBase64, MAX_TOTAL_SIZE, MAX_INDIVIDUAL_FILE_SIZE, formatFileSize } from './attachmentUtils';
 import { useDropzone } from 'react-dropzone';
 import { FaPaperclip } from 'react-icons/fa6';
 import { formatComposedEmailData } from '../../utils/composedDataFormat';
 import EmailPriorityField from './EmailPriorityField';
 import { useDraftMail, useSendMail } from '../../hooks/useComposer';
-import FolderSelectField from './FolderSelectField';
-import DialogWrapper from '../common/Dialoge';
 import { emailAddress } from '../../state/emailAddress';
 import { userSettingsAtom } from '../../state/settings';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import TemplateSelector from './TempelateSelector';
 import { generateMessageId, sendMailV2 } from '../../api/composer';
 import { userDetailsAtom } from '../../state/userDetails';
@@ -55,14 +50,12 @@ import { SEND_DEFAULT } from '../../constants/constant';
 import { useIsMobile } from '../../hooks/use-mobile';
 import { getEditorDimensions } from '../../utils/dimensions';
 
-export const draftMessageIdAtom = atom<string | null>(null);
-
 export type EmailPriority = 'normal' | 'high' | 'low';
 
 // Types for localStorage data
 interface LocalStorageDraft {
   messageId: string;
-  composerData: any;
+  composerData: ComposedEmailData;
   priority: EmailPriority;
   folder: string;
   timestamp: number;
@@ -72,12 +65,12 @@ interface LocalStorageDraft {
 const DRAFT_STORAGE_KEY = 'email-composer-draft';
 
 // Debounce hook with proper typing
-const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
+const useDebounce = <Args extends unknown[]>(callback: (...args: Args) => void, delay: number) => {
   const timeoutRef = useRef<number | null>(null);
   const cancelRef = useRef<() => void>(() => {});
 
   const debouncedFunction = useCallback(
-    (...args: any[]) => {
+    (...args: Args) => {
       if (timeoutRef.current) {
         window.clearTimeout(timeoutRef.current);
       }
@@ -122,7 +115,7 @@ const Composer = () => {
   const [fullViewEnabled, setFullViewEnabled] = useState(false);
   const [draftMessageId, setDraftMessageId] = useAtom(draftMessageIdAtom);
   const [messageId, setMessageId] = useState<string>('');
-  const [sentMessageId, setSentMessageId] = useState<string>('');
+  const [, setSentMessageId] = useState<string>('');
   const [undoTime, setUndoTime] = useState<number>(5000);
   const [saveDraft, setSaveDraft] = useState<string>('Drafts');
   const [folder, setFolder] = useState<string>('Sent');
@@ -147,7 +140,7 @@ const Composer = () => {
 
   // Add state for close confirmation dialog
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [pendingCloseAction, setPendingCloseAction] = useState<(() => void) | null>(null);
+  const [, setPendingCloseAction] = useState<(() => void) | null>(null);
 
   // Add state to track if there are unsaved changes
   // const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -171,7 +164,10 @@ const Composer = () => {
   // Track if we've already auto-saved to prevent duplicate saves
   const hasAutoSavedRef = useRef(false);
   // Track pending email to be sent
-  const pendingEmailRef = useRef<any>(null);
+  const pendingEmailRef = useRef<{
+    mailData: ReturnType<typeof formatComposedEmailData>;
+    currentMsgId: string;
+  } | null>(null);
   // Track if we're in the undo period
   const isUndoPeriodRef = useRef(false);
   // Track auto-save attempts to prevent too many API calls
@@ -278,11 +274,18 @@ const Composer = () => {
       isSendingRef.current = false;
       isManualDraftSaveRef.current = false;
     }
-  }, [openComposer, userDetails?.domain, isQuotaExceeded, toast]);
+  }, [
+    openComposer,
+    userDetails?.domain,
+    isQuotaExceeded,
+    toast,
+    setComposerData,
+    setDraftMessageId,
+  ]);
 
   // Save to localStorage - UPDATED to use current messageId
   const saveToLocalStorage = useCallback(
-    (data: any, currentPriority: EmailPriority, currentFolder: string) => {
+    (data: ComposedEmailData, currentPriority: EmailPriority, currentFolder: string) => {
       // Don't save if quota is exceeded
       if (isQuotaExceeded) {
         return;
@@ -309,7 +312,7 @@ const Composer = () => {
         console.error('Error saving to localStorage:', error);
       }
     },
-    [userDetails?.domain, isQuotaExceeded]
+    [userDetails?.domain, isQuotaExceeded, setDraftMessageId]
   );
 
   // Remove from localStorage
@@ -452,7 +455,7 @@ const Composer = () => {
           onSuccess: () => {
             autoSaveCountRef.current++;
           },
-          onError: (err: any) => {
+          onError: (err) => {
             console.error('Failed to auto-save draft:', err);
           },
         });
@@ -475,9 +478,7 @@ const Composer = () => {
     ({
       isDraft,
       folderPath,
-      successTitle,
       successDescription,
-      errorTitle,
       allowUndo = false,
       dataOverrides = {},
     }: {
@@ -487,7 +488,7 @@ const Composer = () => {
       successDescription: string;
       errorTitle: string;
       allowUndo?: boolean;
-      dataOverrides?: any;
+      dataOverrides?: Partial<ComposedEmailData>;
     }) => {
       // Check if trying to save draft when quota is exceeded
       if (isDraft && isQuotaExceeded) {
@@ -610,13 +611,14 @@ const Composer = () => {
             setDraftMessageId(null);
             setSentMessageId('');
             isSendingRef.current = false;
-          } catch (err: any) {
+          } catch (err) {
             isSendInFlightRef.current = false;
             toast.dismiss(loadingId);
             window.removeEventListener('beforeunload', handleBeforeUnload);
             toast.error({
               description:
-                err?.message || 'An error occurred while sending mail. Please try again.',
+                (err instanceof Error && err.message) ||
+                'An error occurred while sending mail. Please try again.',
             });
             setSentMessageId('');
             setOpenComposer(true);
@@ -651,11 +653,10 @@ const Composer = () => {
             hasAutoSavedRef.current = false;
             autoSaveCountRef.current = 0;
           },
-          onError: (err: any) => {
+          onError: (err) => {
             if (loadingId) toast.dismiss(loadingId);
             toast.error({
-              description:
-                err?.message || 'An error occurred while sending mail. Please try again.',
+              description: err?.message || 'An error occurred while sending mail. Please try again.',
             });
             // On error, clear the sent message ID
             if (!isDraft) {
@@ -693,7 +694,7 @@ const Composer = () => {
 
   // Function to actually send the email (after confirmation)
   const sendEmailConfirmed = useCallback(
-    (overrides: any = {}) => {
+    (overrides: Partial<ComposedEmailData> = {}) => {
       // Always generate a NEW Message-ID for sending, regardless of draft status
       const sendMessageId = generateMessageId(userDetails?.domain || '');
       setSentMessageId(sendMessageId);
@@ -742,7 +743,7 @@ const Composer = () => {
     }
 
     // 4. Prepare data overrides
-    const overrides: any = {};
+    const overrides: Partial<ComposedEmailData> = {};
     if (pendingTo) overrides.to = effectiveTo;
     if (pendingCc) overrides.cc = [...(composerData.cc || []), pendingCc];
     if (pendingBcc) overrides.bcc = [...(composerData.bcc || []), pendingBcc];
@@ -757,7 +758,14 @@ const Composer = () => {
       // Send immediately if message has content
       sendEmailConfirmed(overrides);
     }
-  }, [isMessageEmpty, sendEmailConfirmed, composerData.to, composerData.cc, composerData.bcc]);
+  }, [
+    isMessageEmpty,
+    sendEmailConfirmed,
+    composerData.to,
+    composerData.cc,
+    composerData.bcc,
+    toast,
+  ]);
 
   const handleDraftButtonClick = useCallback(() => {
     // Don't save draft if quota is exceeded
@@ -800,7 +808,7 @@ const Composer = () => {
     removeFromLocalStorage();
 
     // 4. Prepare data overrides
-    const overrides: any = {};
+    const overrides: Partial<ComposedEmailData> = {};
     if (pendingTo) overrides.to = effectiveTo;
     if (pendingCc) overrides.cc = [...(composerData.cc || []), pendingCc];
     if (pendingBcc) overrides.bcc = [...(composerData.bcc || []), pendingBcc];
@@ -933,15 +941,19 @@ const Composer = () => {
   // Initialize composer data with signature
   useEffect(() => {
     if (openComposer && signatureHtml && !composerData.html) {
-      setComposerData((prev: any) => {
-        const from = prev.from || {};
-        const sanitizeString = (value: any): string => {
+      setComposerData((prev) => {
+        const from = prev.from || ({} as Partial<EmailAddress>);
+        const sanitizeString = (value: unknown): string => {
           return typeof value === 'string' ? value.trim() : '';
         };
         return {
           ...prev,
           from: {
-            address: sanitizeString(from?.address) || currentEmail || '',
+            // currentEmail is an EmailAddress object, not a string — if
+            // sanitizeString(from?.address) is empty this assigns the whole
+            // object here (objects are always truthy), not a string. Pre-existing,
+            // preserved as-is; see CLAUDE.md.
+            address: (sanitizeString(from?.address) || currentEmail || '') as string,
             name: sanitizeString(from?.name) || 'Unknown Sender',
           },
           html: prev.html || signatureHtml,
@@ -949,7 +961,7 @@ const Composer = () => {
         };
       });
     }
-  }, [openComposer, signatureHtml, currentEmail, composerData.html]);
+  }, [openComposer, signatureHtml, currentEmail, composerData.html, setComposerData]);
 
   const handleTemplateSelect = useCallback(
     (templateData: { subject: string; html: string }) => {
@@ -965,7 +977,7 @@ const Composer = () => {
     [signatureHtml, updateComposerData]
   );
 
-  const handleToemailChange = (emailAddresses: any) => {
+  const handleToemailChange = (emailAddresses: EmailAddress[]) => {
     updateComposerData({ to: emailAddresses });
   };
 
@@ -982,7 +994,7 @@ const Composer = () => {
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
       const currentTotalSize = (composerData.attachments || []).reduce(
-        (sum: number, file: any) => sum + (file.size || 0),
+        (sum, file) => sum + (file.size || 0),
         0
       );
       const newFilesTotalSize = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -1017,7 +1029,7 @@ const Composer = () => {
           }))
         );
 
-        setComposerData((prev: any) => ({
+        setComposerData((prev) => ({
           ...prev,
           attachments: [...(prev.attachments || []), ...base64Attachments],
         }));
@@ -1026,7 +1038,7 @@ const Composer = () => {
           description: `Added ${validFiles.length} file(s)`,
           duration: 3000,
         });
-      } catch (error) {
+      } catch {
         toast.error({ description: 'Failed to process files.' });
       }
     },
@@ -1073,7 +1085,10 @@ const Composer = () => {
                   onClick={handleDraftButtonClick}
                   className={`text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] ${
                     isQuotaExceeded ||
-                    (!composerData.to?.length && !(toRef.current as any)?.inputValue)
+                    // RecipientFieldHandle doesn't actually expose `inputValue` (only `flush`),
+                    // so this always evaluates truthy — pre-existing no-op, not fixed here.
+                    (!composerData.to?.length &&
+                      !(toRef.current as unknown as { inputValue?: string })?.inputValue)
                       ? 'opacity-50 cursor-not-allowed'
                       : ''
                   }`}

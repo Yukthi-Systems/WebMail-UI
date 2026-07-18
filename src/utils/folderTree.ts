@@ -27,7 +27,15 @@ export interface FolderNode {
   count?: number;
 }
 
-export const buildFolderTree = (folders: any[]): FolderNode[] => {
+interface RawFolder {
+  folder_name: string;
+  flags?: string[];
+  delimiter?: string;
+  unread_count?: number;
+  count?: number;
+}
+
+export const buildFolderTree = (folders: RawFolder[]): FolderNode[] => {
   const root: FolderNode[] = [];
   const map = new Map<string, FolderNode>();
 
@@ -35,10 +43,10 @@ export const buildFolderTree = (folders: any[]): FolderNode[] => {
     const node: FolderNode = {
       name: folder.folder_name,
       path: folder.folder_name,
-      flags: folder.flags,
-      delimiter: folder.delimiter,
+      flags: folder.flags || [],
+      delimiter: folder.delimiter || '.',
       children: [],
-      hasChildren: folder.flags.includes('HasChildren'),
+      hasChildren: folder.flags?.includes('HasChildren') || false,
       unread_count: folder.unread_count || 0,
       count: folder.count || 0,
     };
@@ -47,7 +55,7 @@ export const buildFolderTree = (folders: any[]): FolderNode[] => {
 
   folders.forEach((folder) => {
     const node = map.get(folder.folder_name)!;
-    const lastDelimiterIndex = folder.folder_name.lastIndexOf(folder.delimiter);
+    const lastDelimiterIndex = folder.folder_name.lastIndexOf(folder.delimiter || '.');
 
     if (lastDelimiterIndex > -1) {
       const parentPath = folder.folder_name.substring(0, lastDelimiterIndex);

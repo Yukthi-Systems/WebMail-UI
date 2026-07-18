@@ -22,7 +22,7 @@ import type { Domain } from '../../../api/admin-domain';
 interface DomainDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  data: any;
+  data: Domain | null;
 }
 
 const DomainDetailsModal = ({ isOpen, onClose, data }: DomainDetailsModalProps) => {

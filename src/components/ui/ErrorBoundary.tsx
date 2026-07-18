@@ -27,7 +27,7 @@ import {
   FiHome,
 } from 'react-icons/fi';
 import './css/ErrorBoundary.css';
-import { resetLayoutCache } from '../../routes/_baselayout';
+import { resetLayoutCache } from '../../utils/resetLayoutCache';
 
 export function ErrorBoundary({ error }: ErrorComponentProps) {
   const router = useRouter();

@@ -33,7 +33,7 @@ interface TemplateSelectorProps {
 
 const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect }) => {
   const navigate = useNavigate();
-  const [openComposer, setOpenComposer] = useAtom(composerOpenAtom);
+  const [, setOpenComposer] = useAtom(composerOpenAtom);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');

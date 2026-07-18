@@ -37,6 +37,15 @@ const isDefaultFolder = (node: FolderNode): boolean => {
   return defaultFolderNames.includes(node.name.toLowerCase());
 };
 
+const findFolderByPath = (node: FolderNode, path: string): FolderNode | null => {
+  if (node.path === path) return node;
+  for (const child of node.children) {
+    const found = findFolderByPath(child, path);
+    if (found) return found;
+  }
+  return null;
+};
+
 const FolderSelectField = ({
   folder,
   onChange,
@@ -45,15 +54,6 @@ const FolderSelectField = ({
   showText = true,
 }: FolderSelectFieldProps) => {
   const { data: folderTree, isFetching } = useFoldersDropdown();
-
-  const findFolderByPath = (node: FolderNode, path: string): FolderNode | null => {
-    if (node.path === path) return node;
-    for (const child of node.children) {
-      const found = findFolderByPath(child, path);
-      if (found) return found;
-    }
-    return null;
-  };
 
   const selectedFolderName = useMemo(() => {
     if (!folder) return 'Select folder';

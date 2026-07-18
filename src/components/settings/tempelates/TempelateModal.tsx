@@ -69,7 +69,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({
   const isOwner = editingTemplate
     ? !editingTemplate.createdBy || editingTemplate.createdBy === userDetails?.email
     : true;
-  const isReadOnly: any = editingTemplate && !isOwner;
+  const isReadOnly = Boolean(editingTemplate && !isOwner);
 
   useEffect(() => {
     if (editingTemplate) {

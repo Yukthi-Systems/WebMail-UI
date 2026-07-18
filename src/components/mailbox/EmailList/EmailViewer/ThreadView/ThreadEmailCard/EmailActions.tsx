@@ -37,16 +37,17 @@ import {
   MdPersonAdd,
   MdSaveAs,
 } from 'react-icons/md';
-import DropdownWrapper from '../common/DropdownWrapper';
+import DropdownWrapper from '../../../../../common/DropdownWrapper';
 import { FaEllipsisVertical, FaRotateRight } from 'react-icons/fa6';
+import type { EmailLike } from '../../../../../../utils/emailThreading';
 
 interface EmailActionsProps {
-  email: any;
-  onReply: (email: any) => void;
-  onEditAsNew: (email: any) => void;
-  onSaveAsTemplate: (email: any) => void;
-  onReplyAll: (email: any) => void;
-  onForward: (email: any) => void;
+  email: EmailLike;
+  onReply: (email: EmailLike) => void;
+  onEditAsNew: (email: EmailLike) => void;
+  onSaveAsTemplate: (email: EmailLike) => void;
+  onReplyAll: (email: EmailLike) => void;
+  onForward: (email: EmailLike) => void;
   onForwardAsAttachment?: () => void;
   onDelete: (emailId: string) => void;
   onMove?: () => void;
@@ -56,10 +57,10 @@ interface EmailActionsProps {
   handleSingleEmailMarkAsRead?: (emailId: string, action: boolean) => void;
   reFetchMails?: () => void;
 
-  onPrint?: (email: any) => void;
-  onDownload?: (email: any) => void;
-  onViewInWindow?: (email: any) => void;
-  onViewInRaw?: (email: any) => void;
+  onPrint?: (email: EmailLike) => void;
+  onDownload?: (email: EmailLike) => void;
+  onViewInWindow?: (email: EmailLike) => void;
+  onViewInRaw?: (email: EmailLike) => void;
   onSaveAsContact?: () => void;
 }
 
@@ -77,47 +78,14 @@ export const EmailActions = ({
   showDelete = true,
   handleSingleEmailMarkAsFlagged,
   handleSingleEmailMarkAsRead,
-  reFetchMails,
   onPrint,
   onDownload,
   onViewInWindow,
   onViewInRaw,
   onSaveAsContact,
 }: EmailActionsProps) => {
-  const isFlagged = email?.FLAGS.includes('\\Flagged');
-  const isRead = email?.FLAGS.includes('\\Seen');
-
-  const ActionButton = ({
-    icon: Icon,
-    label,
-    onClick,
-    variant = 'default',
-  }: {
-    icon: React.ElementType;
-    label: string;
-    onClick: (e: React.MouseEvent) => void;
-    variant?: 'default' | 'danger';
-  }) => (
-    <Tooltip content={label}>
-      <button
-        onClick={onClick}
-        className={`
-          p-2 rounded-md transition-all duration-150
-          ${
-            variant === 'danger'
-              ? 'text-[var(--gray-11)] hover:text-[var(--red-11)] hover:bg-[var(--red-3)]'
-              : 'text-[var(--gray-11)] hover:text-[var(--accent-11)] hover:bg-[var(--accent-3)]'
-          }
-          active:scale-95
-        `}
-        aria-label={label}
-      >
-        <Icon size={14} />
-      </button>
-    </Tooltip>
-  );
-
-  const Divider = () => <div className="h-6 w-px bg-[var(--gray-6)]" />;
+  const isFlagged = !!email?.FLAGS?.includes('\\Flagged');
+  const isRead = !!email?.FLAGS?.includes('\\Seen');
 
   const moreItems = [
     {
@@ -185,13 +153,13 @@ export const EmailActions = ({
       key: 'mark-read',
       label: isRead ? 'Mark as Unread' : 'Mark as Read',
       icon: isRead ? MdMarkEmailUnread : MdMarkEmailRead,
-      onSelect: () => handleSingleEmailMarkAsRead?.(email?.id, !isRead),
+      onSelect: () => handleSingleEmailMarkAsRead?.(String(email?.id ?? ''), !isRead),
     },
     {
       key: 'flag',
       label: isFlagged ? 'Remove Flag' : 'Add Flag',
       icon: isFlagged ? LuFlagOff : FaRegFlag,
-      onSelect: () => handleSingleEmailMarkAsFlagged?.(email?.id, isFlagged),
+      onSelect: () => handleSingleEmailMarkAsFlagged?.(String(email?.id ?? ''), isFlagged),
     },
     // View / export group
     { key: 'sep-more', label: '', separator: true },
@@ -205,7 +173,7 @@ export const EmailActions = ({
             label: 'Delete',
             icon: FaTrash,
             color: 'red',
-            onSelect: () => onDelete(email.id),
+            onSelect: () => onDelete(String(email.id)),
           },
         ]
       : []),

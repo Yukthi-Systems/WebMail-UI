@@ -17,7 +17,6 @@
 
 import React from 'react';
 import { BsPlus, BsPencil, BsTrash, BsSlashCircle, BsExclamationTriangle } from 'react-icons/bs';
-import type { SieveFilter } from '../../../api/sieve';
 import * as Switch from '@radix-ui/react-switch';
 
 interface FiltersListProps {
@@ -69,7 +68,7 @@ export const FiltersList: React.FC<FiltersListProps> = ({
 
   const formatFilterName = (name: string): string => {
     if (!name) return '';
-    return name.replace(/[\[\]"]/g, '');
+    return name.replace(/[[\]"]/g, '');
   };
 
   const isVacationFilter = (name: string) => name.includes('[vacation]');

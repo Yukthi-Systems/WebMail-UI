@@ -21,6 +21,7 @@ import { webmailStore } from '../store';
 import { API_URL, authCheck } from './config';
 import { fetchWithAuth } from './fetchWrapper';
 import { sanitizeFolderPath } from './mailbox';
+import type { SimplifiedEmail } from '../utils/email';
 
 // export interface SearchRequest {
 //   folder?: string;
@@ -75,7 +76,17 @@ export interface SearchResponse {
   has_more: boolean;
 }
 
-export const searchEmails = async (searchData: SearchRequest): Promise<any> => {
+// The real response shape (confirmed by every current consumer's `.data.data` /
+// `.data.total_count` access) — SearchResponse above doesn't match what the
+// endpoint actually returns and appears to be stale/aspirational.
+export interface SearchApiResponse {
+  data: {
+    data: SimplifiedEmail[];
+    total_count: number;
+  };
+}
+
+export const searchEmails = async (searchData: SearchRequest): Promise<SearchApiResponse> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
 
   const res = await fetchWithAuth(`${API_URL}/email/search/all`, {

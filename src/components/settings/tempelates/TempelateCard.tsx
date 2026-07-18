@@ -43,8 +43,6 @@ interface TemplateCardProps {
 
 const TemplateCard: React.FC<TemplateCardProps> = ({
   template,
-  copiedId,
-  onCopy,
   onEdit,
   onDelete,
   isDeleting = false,

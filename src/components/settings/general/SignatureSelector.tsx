@@ -15,7 +15,6 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { SingleSelect } from './SingleSelect';
 import type { GeneralSettings } from '../../../api/user';
 import { FaPenToSquare, FaPlus, FaRegTrashCan } from 'react-icons/fa6';
 import DropdownWrapper from '../../common/DropdownWrapper';

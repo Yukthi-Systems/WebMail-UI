@@ -17,12 +17,12 @@
 
 import { Separator, Popover, Button } from '@radix-ui/themes';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useEmailRaw } from '../../hooks/useEmailRaw';
-import EmailLoadingState from './EmailLoadingState';
-import EmailParsingState from './EmailParsingState';
-import EmailErrorState from './EmailErrorState';
-import EmailNoDataState from './EmailNoDataState';
-import EmailTabs from './EmailTabs';
+import { useEmailRaw } from '../../../../../../hooks/useEmailRaw';
+import EmailLoadingState from '../../EmailLoadingState';
+import EmailParsingState from '../../EmailParsingState';
+import EmailErrorState from '../../EmailErrorState';
+import EmailNoDataState from '../../EmailNoDataState';
+import EmailTabs, { type ParsedEmailForTabs } from '../../EmailTabs';
 import PostalMime, { decodeWords } from 'postal-mime';
 import {
   FaCalendarAlt,
@@ -33,19 +33,19 @@ import {
   FaRegFolder,
   FaFlag,
 } from 'react-icons/fa';
-import BIMIAvatar from '../common/BimiAvatar';
+import BIMIAvatar from '../../../../../common/BimiAvatar';
 import { Link, useParams } from '@tanstack/react-router';
-import { parseEmail } from '../../utils/emailPerser';
-import { useUserTimezone } from '../../hooks/useTimezone';
+import { parseEmail } from '../../../../../../utils/emailPerser';
+import { useUserTimezone } from '../../../../../../hooks/useTimezone';
 import { EmailActions } from './EmailActions';
-import { RecipientSection } from './RecipientSection';
+import { RecipientSection } from '../../RecipientSection';
 import {
   extractHeaders,
   getMessageId,
   normalizeFieldNames,
   parseMultipleEmails,
-} from '../../utils/emailUtils';
-import { useToast } from '../ui/ToastComponent';
+} from '../../../../../../utils/emailUtils';
+import { useToast } from '../../../../../../hooks/useToast';
 import {
   useCopyMail,
   useMoveMail,
@@ -53,16 +53,17 @@ import {
   useUnseenMail,
   useFlaggedMail,
   useUnFlaggedMail,
-} from '../../hooks/useEmails';
+} from '../../../../../../hooks/useEmails';
 import { useAtomValue } from 'jotai';
-import { folderQuotaAtom } from '../../state/folders';
-import { useEmailCacheUpdater } from '../../hooks/useEmailCacheUpdater';
-import { useUpdateFolderUnreadCount } from '../../hooks/useFolders';
-import FolderDialog from './MoveEmail';
-import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../utils/emailPrint';
-import type { Email } from '../../api/mailbox';
-import { userDetailsAtom } from '../../state/userDetails';
-import { useCreateEmailTemplate, useTemplateActions } from '../../hooks/useTempelate';
+import { folderQuotaAtom } from '../../../../../../state/folders';
+import { useEmailCacheUpdater } from '../../../../../../hooks/useEmailCacheUpdater';
+import { useUpdateFolderUnreadCount } from '../../../../../../hooks/useFolders';
+import FolderDialog from '../../../MoveEmail';
+import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../../../../utils/emailPrint';
+import { userDetailsAtom } from '../../../../../../state/userDetails';
+import { useCreateEmailTemplate, useTemplateActions } from '../../../../../../hooks/useTempelate';
+import type { EmailLike } from '../../../../../../utils/emailThreading';
+import type { Email as ParsedEmail } from 'postal-mime';
 
 interface Folder {
   id: string;
@@ -74,15 +75,15 @@ interface Folder {
 }
 
 interface ThreadEmailCardProps {
-  threadEmail: any;
+  threadEmail: EmailLike;
   folderPath: string;
   isCurrentEmail: boolean;
   onContentLoaded?: (content: string) => void;
   foundedIn: string;
-  onReply?: (email: any) => void;
-  onForward?: (email: any) => void;
-  onForwardAsAttachment?: (email: any, rawContent: string) => void;
-  onReplyAll?: (email: any) => void;
+  onReply?: (email: EmailLike) => void;
+  onForward?: (email: EmailLike) => void;
+  onForwardAsAttachment?: (email: EmailLike, rawContent: string) => void;
+  onReplyAll?: (email: EmailLike) => void;
   handleSingleEmailDelete?: (emailId: string) => void;
   onBack?: () => void;
   FilteredListLength?: (emailId: string) => void;
@@ -90,7 +91,7 @@ interface ThreadEmailCardProps {
   handleSingleEmailMarkAsRead?: (emailId: string, action: boolean) => void;
   reFetchMails?: () => void;
   onSaveAsContact?: () => void;
-  onEditAsNew?: (email: any) => void;
+  onEditAsNew?: (email: EmailLike) => void;
 }
 
 const ThreadEmailCard = ({
@@ -104,10 +105,7 @@ const ThreadEmailCard = ({
   onForwardAsAttachment,
   onReplyAll = () => {},
   handleSingleEmailDelete = () => {},
-  onBack = () => {},
   FilteredListLength = () => {},
-  handleSingleEmailMarkAsFlagged = () => {},
-  handleSingleEmailMarkAsRead = () => {},
   reFetchMails = () => {},
   onEditAsNew = () => {},
   onSaveAsContact,
@@ -144,31 +142,31 @@ const ThreadEmailCard = ({
     data: rawEmail,
     isLoading,
     refetch,
-  } = useEmailRaw(threadEmail.id.toString(), folderPath, getMessageId(threadEmail) || '', false);
+  } = useEmailRaw(String(threadEmail.id), folderPath, getMessageId(threadEmail) || '', false);
 
   const { patchEmailFlags } = useEmailCacheUpdater(folderPath);
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folderPath);
 
-  const [parsedEmail, setParsedEmail] = useState<any>(null);
+  const [parsedEmail, setParsedEmail] = useState<ParsedEmail | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
-  const [headers, setHeaders] = useState<Record<string, string>>({});
+  const [, setHeaders] = useState<Record<string, string>>({});
   const lastParsedEmailId = useRef<string>('');
   const [isHeaderPopoverOpen, setIsHeaderPopoverOpen] = useState<boolean>(false);
 
-  const userDetails = useAtomValue(userDetailsAtom) || '';
-  const { name: senderName, email: senderEmailParsed } = parseEmail(threadEmail.From);
+  const userDetails = useAtomValue(userDetailsAtom);
+  const { name: senderName, email: senderEmailParsed } = parseEmail(threadEmail.From as string);
 
   const normalizedHeaders = normalizeFieldNames(threadEmail);
 
-  const toRecipients = parseMultipleEmails(normalizedHeaders.to || '');
-  const ccRecipients = parseMultipleEmails(normalizedHeaders.cc || '');
-  const bccRecipients = parseMultipleEmails(normalizedHeaders.bcc || '');
+  const toRecipients = parseMultipleEmails((normalizedHeaders.to as string) || '');
+  const ccRecipients = parseMultipleEmails((normalizedHeaders.cc as string) || '');
+  const bccRecipients = parseMultipleEmails((normalizedHeaders.bcc as string) || '');
 
   const { formatUserDateNice } = useUserTimezone();
   const createTemplateMutation = useCreateEmailTemplate();
 
-  const handleDelete = async (id: any) => {
+  const handleDelete = async (id: string) => {
     handleSingleEmailDelete(id);
   };
 
@@ -196,11 +194,11 @@ const ThreadEmailCard = ({
     [onContentLoaded]
   );
 
-  const handleSaveAsTemplate = async (email: Email) => {
+  const handleSaveAsTemplate = async (email: EmailLike) => {
     try {
       // 1. Fetch full details via the raw API (as required by your backend)
       const { subject, body } = await prepareTemplateFromCache(
-        email.id.toString(),
+        String(email.id),
         email.folderPath || 'INBOX'
       );
 
@@ -219,7 +217,7 @@ const ThreadEmailCard = ({
       toast.success({
         description: 'Saved! View it in Settings > Templates',
       });
-    } catch (err) {
+    } catch {
       toast.error({
         description: 'Failed to process email for template',
       });
@@ -311,16 +309,16 @@ const ThreadEmailCard = ({
         path: actualFolderPath,
         sourceFolder: actualFolderPath,
         destFolder: folder?.path || folderName || '',
-        body: [threadEmail?.id],
+        body: [Number(threadEmail?.id)],
       },
       {
         onSuccess: () => {
           setDialogOpen(false);
           setCopyDialogOpen(false);
           setSelectedFolder('');
-          FilteredListLength(threadEmail?.id);
+          FilteredListLength(String(threadEmail?.id));
         },
-        onError: (error: any) => {
+        onError: () => {
           if (action === 'copy' && isQuotaExceeded) {
             toast.error({
               description: 'Failed to copy: Storage quota exceeded.',
@@ -351,14 +349,14 @@ const ThreadEmailCard = ({
     setCopyDialogOpen(true);
   };
 
-  const handleThreadPrint = (email: any) => {
+  const handleThreadPrint = (email: EmailLike) => {
     // Use parsedEmail state we already have in this component
     const content = parsedEmail?.html || parsedEmail?.text || '';
     const attachments = parsedEmail?.attachments || [];
     printEmail(email, content, attachments);
   };
 
-  const handleThreadDownload = async (email: any) => {
+  const handleThreadDownload = async (email: EmailLike) => {
     try {
       // If we don't have rawEmail in state yet, we refetch it
       const content = rawEmail || (await refetch()).data;
@@ -368,11 +366,11 @@ const ThreadEmailCard = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${email.Subject.replace(/[^a-z0-9]/gi, '_')}.eml`;
+      a.download = `${(email.Subject || 'email').replace(/[^a-z0-9]/gi, '_')}.eml`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-    } catch (err) {
+    } catch {
       toast.error({ description: 'Failed to download email' });
     }
   };
@@ -390,8 +388,8 @@ const ThreadEmailCard = ({
     }
   };
 
-  const isFlagged = threadEmail?.FLAGS.includes('\\Flagged');
-  const readStatus = threadEmail?.FLAGS.includes('\\Seen');
+  const isFlagged = threadEmail?.FLAGS?.includes('\\Flagged');
+  const readStatus = threadEmail?.FLAGS?.includes('\\Seen');
 
   const isSent = folderPath.toLowerCase() === 'sent' || foundedIn?.toLowerCase() === 'sent';
   const isTrash = folderPath.toLowerCase() === 'trash' || foundedIn?.toLowerCase() === 'trash';
@@ -410,13 +408,18 @@ const ThreadEmailCard = ({
       seenMutate(
         { path: actualFolderPath, body: [emailIdNum] },
         {
-          onSuccess: (res: any) => {
+          // mutate's declared response type (EmailFolders) doesn't match what the
+          // backend actually sends back ({ message }) — pre-existing API-layer
+          // mismatch, preserved via cast rather than "fixed" here.
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
-            toast.success({ description: res?.message || 'Marked as read.' });
+            toast.success({
+              description: (res as unknown as { message?: string })?.message || 'Marked as read.',
+            });
             patchEmailFlags([emailIdNum], '\\Seen');
             if (wasUnread) updateFolderUnreadCount(-1);
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({ description: error?.message || 'Failed to mark as read.' });
           },
@@ -426,13 +429,16 @@ const ThreadEmailCard = ({
       unseenMutate(
         { path: actualFolderPath, body: [emailIdNum] },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
-            toast.success({ description: res?.message || 'Marked as unread.' });
+            toast.success({
+              description:
+                (res as unknown as { message?: string })?.message || 'Marked as unread.',
+            });
             patchEmailFlags([emailIdNum], undefined, '\\Seen');
             if (!wasUnread) updateFolderUnreadCount(1);
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({ description: error?.message || 'Failed to mark as unread.' });
           },
@@ -449,12 +455,14 @@ const ThreadEmailCard = ({
       unflagMutate(
         { path: actualFolderPath, body: [emailIdNum] },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
-            toast.success({ description: res?.message || 'Email unflagged.' });
+            toast.success({
+              description: (res as unknown as { message?: string })?.message || 'Email unflagged.',
+            });
             patchEmailFlags([emailIdNum], undefined, '\\Flagged');
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({ description: error?.message || 'Failed to unflag email.' });
           },
@@ -464,12 +472,14 @@ const ThreadEmailCard = ({
       flagMutate(
         { path: actualFolderPath, body: [emailIdNum] },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
-            toast.success({ description: res?.message || 'Email flagged.' });
+            toast.success({
+              description: (res as unknown as { message?: string })?.message || 'Email flagged.',
+            });
             patchEmailFlags([emailIdNum], '\\Flagged');
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({ description: error?.message || 'Failed to flag email.' });
           },
@@ -613,7 +623,7 @@ const ThreadEmailCard = ({
                 className={`text-sm ${readStatus ? 'font-medium' : ''} text-[var(--gray-11)] mb-2 line-clamp-2 md:line-clamp-1 cursor-pointer`}
                 onClick={toggleExpanded}
               >
-                {decodeWords(threadEmail.Subject) || '(No Subject)'}
+                {decodeWords(threadEmail.Subject || '') || '(No Subject)'}
               </div>
 
               {/* Row 3: Date + Email Headers popover */}
@@ -671,7 +681,7 @@ const ThreadEmailCard = ({
                 {!isLoading && !isParsing && !parseError && parsedEmail && (
                   <EmailTabs
                     key={`${threadEmail.id}-${folderPath}`}
-                    parsedEmail={parsedEmail}
+                    parsedEmail={parsedEmail as unknown as ParsedEmailForTabs}
                     rawEmail={rawEmail || ''}
                   />
                 )}

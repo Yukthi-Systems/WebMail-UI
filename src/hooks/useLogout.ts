@@ -19,7 +19,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSetAtom } from 'jotai';
 import { csrfTokenAtom } from '../state/auth';
 import { logout } from '../api/auth.ts';
-import { resetLayoutCache } from '../routes/_baselayout.tsx';
+import { resetLayoutCache } from '../utils/resetLayoutCache.ts';
 
 export function useLogout() {
   const setCsrfToken = useSetAtom(csrfTokenAtom);

@@ -15,7 +15,6 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { atom } from 'jotai';
 import { type UserSettings } from '../api/user';
 import { atomWithStorage } from 'jotai/utils';
 

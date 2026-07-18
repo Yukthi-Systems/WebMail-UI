@@ -206,7 +206,7 @@ const FolderTable: React.FC<FolderTableProps> = ({
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {flattenedFolders.map((folder, index) => {
+          {flattenedFolders.map((folder) => {
             // Determine if the folder is logically deleted/ghost
             const isDeleted = (folder.unread_count ?? 0) < 0;
 

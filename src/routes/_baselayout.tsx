@@ -18,16 +18,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import Layout from '../components/common/Layout';
 import { webmailStore } from '../store';
-import { userSettingsAtom } from '../state/settings';
-import { folderQuotaAtom } from '../state/folders';
 import { csrfTokenAtom } from '../state/auth';
-import { userDetailsAtom } from '../state/userDetails';
-
-export const resetLayoutCache = () => {
-  webmailStore.set(userSettingsAtom, null as any);
-  webmailStore.set(folderQuotaAtom, '');
-  webmailStore.set(userDetailsAtom, null);
-};
 
 export const Route = createFileRoute('/_baselayout')({
   beforeLoad: () => {

@@ -19,6 +19,8 @@ import { csrfTokenAtom } from '../state/auth';
 import { webmailStore } from '../store.ts';
 import { API_URL } from './config.ts';
 import { fetchListWithAuth, fetchWithAuth } from './fetchWrapper.ts';
+import type { FolderQuota } from '../state/folders.ts';
+import type { EmailLike } from '../utils/emailThreading.ts';
 
 export type CustomFolders = string[];
 
@@ -176,7 +178,7 @@ export const foldersFullPath = async (): Promise<EmailFolders> => {
   return body;
 };
 
-export const foldersQuota = async (path: string): Promise<EmailFolders> => {
+export const foldersQuota = async (): Promise<{ quota: FolderQuota }> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/folder/quota?folder_path=INBOX`, {
     method: 'GET',
@@ -202,7 +204,7 @@ export const emails = async (
   full_headers: boolean = true
 ): Promise<EmailResponse> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedFolder = sanitizeFolderPath(folder);
+  const sanitizedFolder = sanitizeFolderPath(folder);
   const params = new URLSearchParams();
   params.append('folder_path', sanitizedFolder);
   params.append('full_headers', full_headers.toString());
@@ -229,7 +231,7 @@ export const emailRaw = async (
 ): Promise<string> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
   const params = new URLSearchParams();
-  let sanitizedFolder = sanitizeFolderPath(folderPath);
+  const sanitizedFolder = sanitizeFolderPath(folderPath);
   params.append('folder_path', sanitizedFolder);
   params.append('mark_as_read', String(markAsRead));
 
@@ -257,7 +259,7 @@ export const emailFetchByIds = async ({
 }: {
   folderPath: string;
   messageIds: string[];
-}): Promise<any> => {
+}): Promise<{ emails: EmailLike[] }> => {
   if (!folderPath || messageIds.length === 0) {
     throw new Error('folderPath and messageIds are required');
   }
@@ -295,8 +297,8 @@ export const moveEmail = async (
   body: number[]
 ): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedSource = sanitizeFolderPath(sourceFolder);
-  let sanitizedDest = sanitizeFolderPath(destFolder);
+  const sanitizedSource = sanitizeFolderPath(sourceFolder);
+  const sanitizedDest = sanitizeFolderPath(destFolder);
   const res = await fetchWithAuth(
     `${API_URL}/email/move?folder_path=${path}&source_folder=${sanitizedSource}&dest_folder=${sanitizedDest}`,
     {
@@ -368,7 +370,7 @@ export const deleteEmail = async (path: string, body: number[]): Promise<EmailFo
 
 export const markReadEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedFolder = sanitizeFolderPath(path);
+  const sanitizedFolder = sanitizeFolderPath(path);
   const res = await fetchWithAuth(`${API_URL}/email/mark/read?folder_path=${sanitizedFolder}`, {
     method: 'PUT',
     credentials: 'include',
@@ -389,7 +391,7 @@ export const markReadEmail = async (path: string, body: number[]): Promise<Email
 
 export const unmarkReadEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedFolder = sanitizeFolderPath(path);
+  const sanitizedFolder = sanitizeFolderPath(path);
   const res = await fetchWithAuth(`${API_URL}/email/mark/unseen?folder_path=${sanitizedFolder}`, {
     method: 'PATCH',
     credentials: 'include',
@@ -410,7 +412,7 @@ export const unmarkReadEmail = async (path: string, body: number[]): Promise<Ema
 
 export const markFlaggedEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedFolder = sanitizeFolderPath(path);
+  const sanitizedFolder = sanitizeFolderPath(path);
   const res = await fetchWithAuth(`${API_URL}/email/mark/flagged?folder_path=${sanitizedFolder}`, {
     method: 'PUT',
     credentials: 'include',
@@ -431,7 +433,7 @@ export const markFlaggedEmail = async (path: string, body: number[]): Promise<Em
 
 export const markUnFlaggedEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedFolder = sanitizeFolderPath(path);
+  const sanitizedFolder = sanitizeFolderPath(path);
   const res = await fetchWithAuth(
     `${API_URL}/email/mark/unflagged?folder_path=${sanitizedFolder}`,
     {
@@ -477,7 +479,7 @@ export const createEmailFolder = async (path: string): Promise<EmailFolders> => 
 
 export const deleteEmailFolder = async (path: string): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedFolder = sanitizeFolderPath(path);
+  const sanitizedFolder = sanitizeFolderPath(path);
   const res = await fetchWithAuth(`${API_URL}/folder/path?folder_path=${sanitizedFolder}`, {
     method: 'DELETE',
     credentials: 'include',
@@ -497,8 +499,8 @@ export const deleteEmailFolder = async (path: string): Promise<EmailFolders> => 
 
 export const editEmailFolder = async (oldpath: string, newpath: string): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedOldFolder = sanitizeFolderPath(oldpath);
-  let sanitizedNewFolder = sanitizeFolderPath(newpath);
+  const sanitizedOldFolder = sanitizeFolderPath(oldpath);
+  const sanitizedNewFolder = sanitizeFolderPath(newpath);
   const res = await fetchWithAuth(
     `${API_URL}/folder/path?old_folder_path=${sanitizedOldFolder}&new_folder_path=${sanitizedNewFolder}`,
     {
@@ -527,7 +529,6 @@ export const folderUidValidity = async (
   message: string;
 }> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
-  let sanitizedFolder = sanitizeFolderPath(folderPath);
   const res = await fetchWithAuth(`${API_URL}/folder/uid-validity?folder_path=${folderPath}`, {
     method: 'GET',
     credentials: 'include',
