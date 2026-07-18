@@ -38,8 +38,6 @@ import {
   MdDriveFileMoveOutline,
   MdMarkEmailRead,
   MdMarkEmailUnread,
-  MdOutlineViewSidebar,
-  MdOutlineViewStream,
   MdPersonAdd,
   MdSaveAs,
 } from 'react-icons/md';
@@ -51,19 +49,14 @@ import { useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUpdateAnyFolderUnreadCount } from '../../hooks/useFolders';
 import type { Email } from '../../api/mailbox';
-import {
-  FaCompressArrowsAlt,
-  FaEllipsisH,
-  FaExpandArrowsAlt,
-  FaExternalLinkAlt,
-} from 'react-icons/fa';
+import { FaEllipsisH, FaExternalLinkAlt } from 'react-icons/fa';
 import DropdownWrapper, { type DropdownItem } from '../common/DropdownWrapper';
 import Pagination from '../common/Pagination';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../state/settings';
 import type { LayoutType } from '../common/header/LayoutSetting';
 import { folderQuotaAtom } from '../../state/folders'; // Import folderQuotaAtom
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 
 interface Folder {
   id: string;
@@ -141,10 +134,6 @@ const EmailToolbar = ({
   onForward,
   onForwardAsAttachment,
   splitView = false,
-  onToggleSplitView,
-  viewMode = 'left',
-  onToggleView,
-  layout,
   onNextEmail,
   onPrevEmail,
   hasNextEmail,
@@ -173,7 +162,6 @@ const EmailToolbar = ({
   const [disableButton, setDisableButton] = useState(false);
   const userSettings = useAtomValue(userSettingsAtom);
   const folderQuota = useAtomValue(folderQuotaAtom); // Get folder quota data
-  const [isThreadView, setIsThreadView] = useState(false);
 
   // Check if quota is exceeded (greater than 98%)
   const isQuotaExceeded = folderQuota?.used_percent !== undefined && folderQuota.used_percent > 98;
@@ -230,7 +218,7 @@ const EmailToolbar = ({
           // Count unread emails being moved (checkedEmails/emailList are closure values)
           if (action === 'move') {
             const unreadMoved = emailList.filter(
-              (e: any) => checkedEmails.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
+              (e) => checkedEmails.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
             ).length;
             if (unreadMoved > 0) {
               updateAnyFolderUnreadCount(folderName, -unreadMoved);
@@ -259,7 +247,7 @@ const EmailToolbar = ({
             onBack();
           }
         },
-        onError: (error: any) => {
+        onError: (error) => {
           toast.dismiss(loadingId);
           const quota =
             isQuotaExceeded && action === 'copy'
@@ -283,7 +271,7 @@ const EmailToolbar = ({
     } else {
       setIsSeen(false);
     }
-  }, [checkedEmails]);
+  }, [checkedEmails, emailList]);
 
   useEffect(() => {
     if (checkedEmails.length > 0) {
@@ -295,7 +283,7 @@ const EmailToolbar = ({
     } else {
       setIsFlagged(false);
     }
-  }, [checkedEmails]);
+  }, [checkedEmails, emailList]);
 
   const handleSelectAllToggle = () => {
     if (isAllSelected) {

@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   FaPaperclip,
   FaDownload,
@@ -40,22 +40,29 @@ import {
   FaExclamationTriangle,
   FaEnvelope,
 } from 'react-icons/fa';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { sanitizeHTMLContent } from '../../utils/sanitizeHTMLContent';
-import JSZip from 'jszip';
+
+/** Loose shape covering both postal-mime attachments and the composer's own attachment payloads. */
+export interface EmailAttachment {
+  filename?: string;
+  mimeType: string;
+  content: string;
+  contentId?: string;
+}
 
 interface EmailAttachmentsProps {
-  attachments: any[];
+  attachments: EmailAttachment[];
   emailHtml?: string;
 }
 
-const getSafeExtension = (filename: string): string => {
+const getSafeExtension = (filename?: string): string => {
   if (!filename) return '';
   const parts = filename?.split('.');
   return parts.length > 1 ? parts.pop()?.toLowerCase() || '' : '';
 };
 
-const normalizeMimeType = (mimeType: string, filename: string): string => {
+const normalizeMimeType = (mimeType: string, filename?: string): string => {
   if (mimeType && mimeType !== 'application/octet-stream') return mimeType;
 
   const ext = getSafeExtension(filename);
@@ -141,7 +148,7 @@ const decodeRfc2047 = (str: string): string => {
       } else {
         const decoded = text
           .replace(/_/g, ' ')
-          .replace(/=([0-9A-Fa-f]{2})/g, (__: any, hex: any) =>
+          .replace(/=([0-9A-Fa-f]{2})/g, (_match: string, hex: string) =>
             String.fromCharCode(parseInt(hex, 16))
           );
         return decoded;
@@ -544,193 +551,6 @@ ${result.value}
 </html>`;
 };
 
-const renderPptxToHtml = async (base64Content: string): Promise<string> => {
-  const base64Data = base64Content.replace(/^data:[^;]+;base64,/, '');
-  const binaryStr = atob(base64Data);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-
-  const zip = await JSZip.loadAsync(bytes.buffer);
-
-  const slideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => {
-      const na = parseInt(a.match(/slide(\d+)/)?.[1] ?? '0');
-      const nb = parseInt(b.match(/slide(\d+)/)?.[1] ?? '0');
-      return na - nb;
-    });
-
-  if (!slideFiles.length) throw new Error('No slides found in presentation.');
-
-  let accentColor = '#4f46e5';
-  try {
-    const themeXml = await zip.files['ppt/theme/theme1.xml']?.async('string');
-    if (themeXml) {
-      const accent = themeXml.match(/<a:accent1[^>]*>.*?<a:srgbClr val="([0-9a-fA-F]{6})"/s);
-      if (accent) accentColor = `#${accent[1]}`;
-    }
-  } catch {
-    /* ignore */
-  }
-
-  const parseXmlText = (xml: string): { titles: string[]; bullets: string[]; notes: string } => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xml, 'text/xml');
-
-    const getTitleText = (el: Element): string =>
-      Array.from(el.querySelectorAll('r t'))
-        .map((t) => t.textContent)
-        .join('')
-        .trim();
-
-    const titles: string[] = [];
-    const bullets: string[] = [];
-
-    const titlePlaceholders = doc.querySelectorAll('sp');
-    titlePlaceholders.forEach((sp) => {
-      const phType = sp.querySelector('ph')?.getAttribute('type') ?? '';
-      const text = getTitleText(sp);
-      if (!text) return;
-      if (phType === 'ctrTitle' || phType === 'title' || phType === 'subTitle') {
-        titles.push(text);
-      } else {
-        const paras = sp.querySelectorAll('p');
-        paras.forEach((p) => {
-          const paraText = Array.from(p.querySelectorAll('r t'))
-            .map((t) => t.textContent)
-            .join('')
-            .trim();
-          const level = parseInt(p.querySelector('pPr')?.getAttribute('lvl') ?? '0');
-          if (paraText) bullets.push(`${level}:::${paraText}`);
-        });
-      }
-    });
-
-    return { titles, bullets, notes: '' };
-  };
-
-  const slideHtmlParts: string[] = [];
-
-  for (let i = 0; i < slideFiles.length; i++) {
-    const xml = await zip.files[slideFiles[i]].async('string');
-    const { titles, bullets } = parseXmlText(xml);
-
-    const titleHtml = titles
-      .map((t, idx) =>
-        idx === 0
-          ? `<h2 class="slide-title">${escHtml(t)}</h2>`
-          : `<h3 class="slide-subtitle">${escHtml(t)}</h3>`
-      )
-      .join('');
-
-    const bulletHtml = bullets
-      .map((b) => {
-        const [lvlStr, ...rest] = b.split(':::');
-        const lvl = parseInt(lvlStr);
-        const text = rest.join(':::');
-        return `<li class="bullet-lvl-${Math.min(lvl, 4)}">${escHtml(text)}</li>`;
-      })
-      .join('');
-
-    const isEmpty = !titles.length && !bullets.length;
-
-    slideHtmlParts.push(`
-      <div class="slide" id="slide-${i}">
-        <div class="slide-number">${i + 1} / ${slideFiles.length}</div>
-        ${
-          isEmpty
-            ? '<div class="empty-slide">[ No text content on this slide ]</div>'
-            : `${titleHtml}${bulletHtml ? `<ul class="bullet-list">${bulletHtml}</ul>` : ''}`
-        }
-      </div>
-    `);
-  }
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1e1e2e; padding: 20px; color: #cdd6f4; }
-  .controls { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 0 14px; background: #1e1e2e; }
-  .controls button { padding: 6px 16px; background: ${accentColor}; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
-  .controls button:disabled { opacity: 0.35; cursor: default; }
-  .controls .counter { font-size: 13px; color: #a6adc8; min-width: 80px; text-align: center; }
-  .slide { display: none; background: #313244; border-radius: 12px; padding: 40px 48px; min-height: 360px; box-shadow: 0 4px 24px rgba(0,0,0,0.4); position: relative; animation: fadeIn 0.2s ease; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-  .slide.active { display: flex; flex-direction: column; gap: 16px; }
-  .slide-number { position: absolute; top: 14px; right: 18px; font-size: 11px; color: #6c7086; font-variant-numeric: tabular-nums; }
-  .slide-title { font-size: 26px; font-weight: 700; color: #cdd6f4; line-height: 1.3; border-bottom: 2px solid ${accentColor}; padding-bottom: 12px; }
-  .slide-subtitle { font-size: 17px; font-weight: 500; color: #a6adc8; }
-  .bullet-list { list-style: none; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
-  .bullet-list li { padding-left: 20px; position: relative; color: #cdd6f4; font-size: 15px; line-height: 1.5; }
-  .bullet-list li::before { content: '▸'; position: absolute; left: 0; color: ${accentColor}; }
-  .bullet-lvl-1 { padding-left: 36px !important; font-size: 14px !important; color: #a6adc8 !important; }
-  .bullet-lvl-2 { padding-left: 52px !important; font-size: 13px !important; color: #9399b2 !important; }
-  .bullet-lvl-3, .bullet-lvl-4 { padding-left: 68px !important; font-size: 12px !important; color: #7f849c !important; }
-  .bullet-lvl-1::before { content: '–' !important; }
-  .bullet-lvl-2::before, .bullet-lvl-3::before, .bullet-lvl-4::before { content: '·' !important; }
-  .empty-slide { color: #6c7086; font-style: italic; margin: auto; font-size: 14px; }
-  .thumbnail-bar { display: flex; gap: 8px; margin-top: 16px; overflow-x: auto; padding-bottom: 4px; }
-  .thumb { flex-shrink: 0; width: 100px; min-height: 64px; background: #313244; border: 2px solid transparent; border-radius: 6px; cursor: pointer; padding: 8px; font-size: 10px; color: #a6adc8; overflow: hidden; line-height: 1.3; }
-  .thumb:hover { border-color: ${accentColor}88; }
-  .thumb.active { border-color: ${accentColor}; }
-  .thumb-num { font-size: 9px; color: #6c7086; margin-bottom: 3px; }
-</style>
-</head>
-<body>
-<div class="controls">
-  <button id="btn-prev" onclick="go(-1)" disabled>← Prev</button>
-  <span class="counter" id="counter">1 / ${slideFiles.length}</span>
-  <button id="btn-next" onclick="go(1)" ${slideFiles.length <= 1 ? 'disabled' : ''}>Next →</button>
-</div>
-<div id="slides-container">
-  ${slideHtmlParts.join('')}
-</div>
-<div class="thumbnail-bar" id="thumb-bar">
-  ${slideHtmlParts
-    .map(
-      (
-        _,
-        i
-      ) => `<div class="thumb ${i === 0 ? 'active' : ''}" id="thumb-${i}" onclick="jumpTo(${i})">
-      <div class="thumb-num">Slide ${i + 1}</div>
-    </div>`
-    )
-    .join('')}
-</div>
-<script>
-  var cur = 0;
-  var total = ${slideFiles.length};
-  var slides = document.querySelectorAll('.slide');
-  slides.forEach(function(s, i) {
-    var th = document.getElementById('thumb-' + i);
-    var title = s.querySelector('.slide-title');
-    if (title) th.appendChild(document.createTextNode(title.textContent.substring(0, 40)));
-  });
-  function show(idx) {
-    slides.forEach(function(s) { s.classList.remove('active'); });
-    document.querySelectorAll('.thumb').forEach(function(t) { t.classList.remove('active'); });
-    slides[idx].classList.add('active');
-    document.getElementById('thumb-' + idx).classList.add('active');
-    document.getElementById('thumb-' + idx).scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    document.getElementById('counter').textContent = (idx + 1) + ' / ' + total;
-    document.getElementById('btn-prev').disabled = idx === 0;
-    document.getElementById('btn-next').disabled = idx === total - 1;
-    cur = idx;
-  }
-  function go(dir) { show(Math.max(0, Math.min(total - 1, cur + dir))); }
-  function jumpTo(idx) { show(idx); }
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(1);
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') go(-1);
-  });
-  show(0);
-</script>
-</body>
-</html>`;
-};
 
 const escHtml = (str: string): string =>
   str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -837,7 +657,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   }, []);
 
   const base64ToFile = useCallback(
-    (attachment: any): File | null => {
+    (attachment: EmailAttachment): File | null => {
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
       const blob = base64ToBlob(attachment.content, mime);
       if (!blob) return null;
@@ -849,7 +669,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   // ─── Download / Copy / Share ───────────────────────────────────────────────
 
   const handleDownload = useCallback(
-    (attachment: any) => {
+    (attachment: EmailAttachment) => {
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
       const blob = base64ToBlob(attachment.content, mime);
       if (!blob) return;
@@ -866,7 +686,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   );
 
   const handleCopyToClipboard = useCallback(
-    async (attachment: any) => {
+    async (attachment: EmailAttachment) => {
       const file = base64ToFile(attachment);
       if (!file) {
         toast.error({ description: 'Failed to prepare file' });
@@ -879,11 +699,11 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
         toast.error({ description: 'Failed to copy file' });
       }
     },
-    [base64ToFile]
+    [base64ToFile, toast]
   );
 
   const handleShare = useCallback(
-    async (attachment: any) => {
+    async (attachment: EmailAttachment) => {
       const file = base64ToFile(attachment);
       if (!file) {
         toast.error({ description: 'Failed to prepare file' });
@@ -903,7 +723,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
       handleDownload(attachment);
       toast.success({ description: `📁 Downloaded "${attachment.filename}"` });
     },
-    [base64ToFile, canShare, handleDownload]
+    [base64ToFile, canShare, handleDownload, toast]
   );
 
   // ─── Preview capability ────────────────────────────────────────────────────
@@ -921,7 +741,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   // ─── Blob URL creation ─────────────────────────────────────────────────────
 
   const createBlobUrl = useCallback(
-    (attachment: any, index: number): string | null => {
+    (attachment: EmailAttachment, index: number): string | null => {
       if (blobUrls.has(index)) return blobUrls.get(index)!;
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
       const blob = base64ToBlob(attachment.content, mime);
@@ -936,7 +756,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   // ─── Office + EML HTML rendering ──────────────────────────────────────────
 
   const processOfficePreview = useCallback(
-    async (attachment: any, index: number) => {
+    async (attachment: EmailAttachment, index: number) => {
       if (officeHtml.has(index)) return;
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
 
@@ -956,8 +776,9 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
           next.delete(index);
           return next;
         });
-      } catch (e: any) {
-        setOfficeError((prev) => new Map(prev).set(index, e?.message || 'Preview failed'));
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Preview failed';
+        setOfficeError((prev) => new Map(prev).set(index, message));
       } finally {
         setLoadingIndex(null);
       }
@@ -1004,7 +825,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
 
   // ─── Render preview content ────────────────────────────────────────────────
 
-  const renderPreviewContent = (attachment: any, index: number) => {
+  const renderPreviewContent = (attachment: EmailAttachment, index: number) => {
     const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
 
     // EML / Office files rendered as HTML

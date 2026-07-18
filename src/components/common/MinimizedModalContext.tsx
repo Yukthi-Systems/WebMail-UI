@@ -15,23 +15,9 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { createContext, useContext, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { FaXmark } from 'react-icons/fa6';
-
-interface MinimizedModal {
-  id: string;
-  title: string;
-  onRestore: () => void;
-  onClose: () => void;
-}
-
-interface MinimizedModalsContextType {
-  minimizedModals: MinimizedModal[];
-  register: (modal: MinimizedModal) => void;
-  unregister: (id: string) => void;
-}
-
-const MinimizedModalsContext = createContext<MinimizedModalsContextType | null>(null);
+import { MinimizedModalsContext, type MinimizedModal } from './minimizedModalsContext';
 
 export const MinimizedModalsProvider = ({ children }: { children: React.ReactNode }) => {
   const [minimizedModals, setMinimizedModals] = useState<MinimizedModal[]>([]);
@@ -77,10 +63,4 @@ export const MinimizedModalsProvider = ({ children }: { children: React.ReactNod
       )}
     </MinimizedModalsContext.Provider>
   );
-};
-
-export const useMinimizedModals = () => {
-  const ctx = useContext(MinimizedModalsContext);
-  if (!ctx) throw new Error('useMinimizedModals must be used within MinimizedModalsProvider');
-  return ctx;
 };

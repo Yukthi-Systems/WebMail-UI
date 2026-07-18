@@ -70,3 +70,7 @@ export const composerDataAtom = atom<ComposedEmailData>({
 export const resetComposerDataAtom = atom(null, (_, set) => {
   set(composerDataAtom, { ...defaultComposerData });
 });
+
+// Tracks the message-id of the draft currently being auto-saved, so a later
+// manual save/send can update the same draft instead of creating a new one.
+export const draftMessageIdAtom = atom<string | null>(null);

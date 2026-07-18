@@ -25,18 +25,12 @@ import {
 } from '../../../hooks/useEmails';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../state/settings';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import { useQueryClient } from '@tanstack/react-query';
 import FolderTable from './FolderTable';
 import FolderDialogs from './FolderDialoge';
 import ACLManager from './ACLManager';
 import { useSettingsBridge } from '../../../hooks/useSettingsBridge';
-
-interface FolderFromAPI {
-  flags: string[];
-  delimiter: string;
-  folder_name: string;
-}
 
 interface FolderSettings {
   [folder_name: string]: {
@@ -83,13 +77,21 @@ const Folders = () => {
     }
   }, [userSettings]);
 
-  const folders = (folderData as any)?.folders || [];
+  // FolderDetail's flags/delimiter are optional (server-side type), but every
+  // real IMAP folder listing includes them — normalize once here so the child
+  // components below (which all declare their own required-field FolderFromAPI)
+  // don't each need their own fallback.
+  const folders = (folderData?.folders || []).map((f) => ({
+    ...f,
+    flags: f.flags ?? [],
+    delimiter: f.delimiter ?? '.',
+  }));
 
   // --- 1. Event Handlers ---
 
   const handleSidebarToggle = async (folderName: string, showInSidebar: boolean) => {
     try {
-      await updateSettings((prev: any) => {
+      await updateSettings((prev) => {
         const currentFolders = prev.folders || {};
 
         return {
@@ -106,15 +108,16 @@ const Folders = () => {
       toast.success({
         description: `Folder ${showInSidebar ? 'added to' : 'removed from'} sidebar`,
       });
-    } catch (error: any) {
-      toast.error({ description: `Failed to update folder visibility: ${error.message}` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error({ description: `Failed to update folder visibility: ${message}` });
     }
   };
 
   const handleCreateFolder = (data: CreateFolderForm) => {
     let delimiter = '.';
     if (data.parent_folder) {
-      const parent = folders.find((f: FolderFromAPI) => f.folder_name === data.parent_folder);
+      const parent = folders.find((f) => f.folder_name === data.parent_folder);
       if (parent?.delimiter) delimiter = parent.delimiter;
     }
 
@@ -141,7 +144,7 @@ const Folders = () => {
   const handleEditFolder = (data: EditFolderForm) => {
     if (!selectedFolder) return;
 
-    const folder = folders.find((f: FolderFromAPI) => f.folder_name === selectedFolder);
+    const folder = folders.find((f) => f.folder_name === selectedFolder);
     const delimiter = folder?.delimiter || '.';
 
     const pathParts = selectedFolder.split(delimiter);
@@ -286,7 +289,7 @@ const Folders = () => {
               </h2>
             </div>
             <div className="divide-y divide-[var(--gray-5)]">
-              {folders.map((folder: FolderFromAPI) => {
+              {folders.map((folder) => {
                 const showInSidebar = folderSettings[folder.folder_name]?.show_in_sidebar !== false;
 
                 const isRootSystemFolder =

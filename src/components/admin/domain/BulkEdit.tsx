@@ -25,7 +25,6 @@ import {
   FiAlertCircle,
   FiCheckCircle,
   FiDownload,
-  FiLoader,
   FiInfo,
   FiChevronDown,
   FiChevronUp,
@@ -166,8 +165,9 @@ function parseFile(file: File): Promise<{ rows: ParsedRow[]; missingHeaders: str
 
         const rows = normalised.map((row, i) => validateRow(row, i + 2));
         resolve({ rows, missingHeaders: [] });
-      } catch (err: any) {
-        reject(new Error(`Failed to parse file: ${err.message}`));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        reject(new Error(`Failed to parse file: ${message}`));
       }
     };
 
@@ -280,8 +280,8 @@ export default function DomainBulkEditModal({ isOpen, onClose }: Props) {
       }
       setRows(parsed);
       setPhase('parsed');
-    } catch (err: any) {
-      setParseError(err.message);
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : String(err));
     }
   }, []);
 
@@ -333,7 +333,7 @@ export default function DomainBulkEditModal({ isOpen, onClose }: Props) {
                 successes++;
                 resolve();
               },
-              onError: (err: any) => {
+              onError: (err) => {
                 errors.push({
                   domain: row.domain,
                   rowIndex: row._rowIndex,

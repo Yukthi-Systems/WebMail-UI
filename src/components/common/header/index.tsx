@@ -23,7 +23,6 @@ import { HiChevronLeft, HiChevronRight } from 'react-icons/hi2';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, useRef } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import CustomIconButton from '../../ui/IconButton';
 import { sidebarCollapsedAtom, sidebarPinnedAtom } from '../../../state/sidebar';
 import { FaTimes } from 'react-icons/fa';
 import BIMIAvatar from '../BimiAvatar';
@@ -35,24 +34,24 @@ import { userSettingsAtom } from '../../../state/settings';
 import { useMatches } from '@tanstack/react-router';
 import LayoutSelector from './LayoutSetting';
 import { useSettingsBridge } from '../../../hooks/useSettingsBridge';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import { TourTip } from '../TourTips';
 import { useIsMobile } from '../../../hooks/use-mobile';
 import { getCompanySlugFromPath } from '../../../utils/routeUtils';
 import SearchDropdown from './search';
+import type { SimplifiedEmail } from '../../../utils/email';
 
 
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState('');
   const isMobile = useIsMobile();
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
   const [sidebarPinned, setSidebarPinned] = useAtom(sidebarPinnedAtom);
   const userDetails = useAtomValue(userDetailsAtom);
-  const [email, setEmail] = useAtom(emailAddress);
+  const [, setEmail] = useAtom(emailAddress);
   const setSelectedEmail = useSetAtom(selectedEmailAtom);
   const userSettings = useAtomValue(userSettingsAtom);
   const setUserSettings = useSetAtom(userSettingsAtom);
@@ -80,20 +79,13 @@ const Header = () => {
     }
   }, [companySlug, userSettings?.ui?.theme]);
 
-  const handleSearchResults = (query: string, filters: any) => {};
+  const handleSearchResults = () => {};
 
-  const handleEmailSelect = (email: any) => {
+  const handleEmailSelect = (email: SimplifiedEmail) => {
     setSelectedEmail({
       ...email,
       selectedAt: Date.now(),
     });
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (window.innerWidth < 768) {
-      setIsSearchExpanded(false);
-    }
   };
 
   // ✅ FIXED: Now saves to API
@@ -113,7 +105,7 @@ const Header = () => {
 
         await updateSettings(updatedSettings);
         setUserSettings(updatedSettings);
-      } catch (error) {
+      } catch {
         toast.error({
           description: 'Failed to save sidebar preference',
         });
@@ -140,7 +132,7 @@ const Header = () => {
 
         await updateSettings(updatedSettings);
         setUserSettings(updatedSettings);
-      } catch (error) {
+      } catch {
         toast.error({
           description: 'Failed to save preference',
         });
@@ -186,11 +178,11 @@ const Header = () => {
     if (userDetails) {
       const name =
         userSettings?.general?.from_address?.name ||
-        userDetails?.email.split('@')[0] ||
+        userDetails?.email?.split('@')[0] ||
         ' Unknown Sender';
       const value = {
         name: name,
-        address: userDetails?.email,
+        address: userDetails?.email || '',
       };
       setEmail(value);
     } else if (userSettings) {
@@ -201,7 +193,7 @@ const Header = () => {
 
       setEmail(value);
     }
-  }, [userSettings, userDetails]);
+  }, [userSettings, userDetails, setEmail]);
 
   // ✅ NEW: Sync sidebar states from API settings on mount
   useEffect(() => {
@@ -214,7 +206,12 @@ const Header = () => {
         setSidebarPinned(userSettings.ui.sidebar_pinned);
       }
     }
-  }, [userSettings?.ui?.sidebar_collapsed, userSettings?.ui?.sidebar_pinned]);
+  }, [
+    userSettings?.ui?.sidebar_collapsed,
+    userSettings?.ui?.sidebar_pinned,
+    setSidebarCollapsed,
+    setSidebarPinned,
+  ]);
 
   // Mobile search overlay
   if (isSearchExpanded) {
@@ -437,7 +434,7 @@ const Header = () => {
               onClick={() => setIsProfileOpen(!isProfileOpen)}
             >
               <BIMIAvatar
-                email={userDetails?.email}
+                email={userDetails?.email || ''}
                 size={32}
                 className="border border-[var(--accent-8)] group-hover:ring-2 group-hover:ring-[var(--accent-8)] 
                  transition-all duration-200"

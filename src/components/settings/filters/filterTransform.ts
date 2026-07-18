@@ -15,19 +15,35 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import type { SieveFilters } from '../../../api/sieve';
+import type { SieveFilters, SieveFilterCondition, SieveFilterAction } from '../../../api/sieve';
 
 // UI Format
+// Values shape varies per rule `field`/action `type` discriminator with no
+// fixed schema (field0, field0.0, size, comparison, etc. depending on which
+// rule/action kind it is) — kept as a free-form string bag rather than a
+// discriminated union.
 export interface UIRule {
   id: string;
   field: string;
-  values: { [key: string]: any };
+  values: { [key: string]: string | undefined };
 }
 
 export interface UIAction {
   id: string;
   type: string;
-  values: { [key: string]: any };
+  values: { [key: string]: unknown };
+}
+
+// The real API filter payload uses `disabled`, not `SieveFilter.enabled` —
+// see the finding in CLAUDE.md. Local shape reflecting what's actually read
+// here rather than the (not-quite-matching) shared `SieveFilter` type.
+interface ApiFilterInput {
+  name: string;
+  content?: string;
+  conditions?: unknown[][];
+  actions?: unknown[][];
+  match_type?: 'allof' | 'anyof' | '';
+  disabled?: boolean;
 }
 
 export interface UIFilter {
@@ -47,7 +63,7 @@ const normalizeUnit = (u: string) => {
 };
 
 export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
-  const conditions: any[] = uiFilter.rules
+  const conditions: SieveFilterCondition[] = uiFilter.rules
     .filter((rule) => rule.field && Object.keys(rule.values).length > 0)
     .map((rule) => {
       const values = rule.values;
@@ -91,7 +107,7 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
       if (operator.startsWith('count_')) {
         const countValue = values['field0.0'] || '0';
 
-        const countOpMap: any = {
+        const countOpMap: Record<string, string> = {
           count_greater: 'gt',
           count_greater_equal: 'ge',
           count_less: 'lt',
@@ -186,7 +202,7 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
       return [rule.field, sieveOp, value];
     });
 
-  const actions: any[] = uiFilter.actions
+  const actions: SieveFilterAction[] = uiFilter.actions
     .filter((action) => action.type)
     .map((action) => {
       const vals = action.values;
@@ -200,8 +216,8 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
 
         case 'redirect_to':
           return ['redirect', vals.redirect_address || ''];
-        case 'send_notification':
-          const notifyArgs: any[] = ['notify'];
+        case 'send_notification': {
+          const notifyArgs: unknown[] = ['notify'];
 
           // Add importance
           if (vals.importance) {
@@ -232,14 +248,15 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
           notifyArgs.push(notificationMethod);
 
           return notifyArgs;
-        case 'reply_with_message':
-          const vacationArgs: (string | number)[] = ['vacation'];
+        }
+        case 'reply_with_message': {
+          const vacationArgs: unknown[] = ['vacation'];
 
           if (vals.message_subject) {
             vacationArgs.push(':subject', vals.message_subject);
           }
           if (vals.how_often_send_message) {
-            vacationArgs.push(':days', parseInt(vals.how_often_send_message, 10) || 7);
+            vacationArgs.push(':days', parseInt(vals.how_often_send_message as string, 10) || 7);
           }
 
           if (vals.reply_sender_address) {
@@ -252,9 +269,10 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
           vacationArgs.push(':mime', vals.message_body || '');
 
           return vacationArgs;
+        }
 
-        case 'set_variable':
-          const setArgs: string[] = ['set'];
+        case 'set_variable': {
+          const setArgs: unknown[] = ['set'];
 
           // Map UI flags to Sieve modifiers
           if (vals.lower_case) setArgs.push(':lower');
@@ -270,6 +288,7 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
           setArgs.push(vals.variable_value || '');
 
           return setArgs;
+        }
 
         case 'send_copy_to':
           return ['redirect', ':copy', vals.copy_to_address || ''];
@@ -287,8 +306,8 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
 
         case 'set_flags':
         case 'add_flags':
-        case 'remove_flags':
-          const flags: string[] = [];
+        case 'remove_flags': {
+          const flags: unknown[] = [];
           if (vals.read) flags.push('\\\\\\\\Seen');
           if (vals.answered) flags.push('\\\\\\\\Answered');
           if (vals.flagged) flags.push('\\\\\\\\Flagged');
@@ -303,6 +322,7 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
                 ? 'addflag'
                 : 'removeflag';
           return flags.length > 0 ? [flagAction, ...flags] : [flagAction];
+        }
 
         default:
           return [action.type];
@@ -330,10 +350,14 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
 
 // Transform API format to UI format
 
-export const transformFromApiFormat = (apiFilter: any): UIFilter => {
+export const transformFromApiFormat = (apiFilter: ApiFilterInput): UIFilter => {
   const scriptContent = apiFilter.content || '';
 
-  const rules: UIRule[] = (apiFilter.conditions || []).map((condition: any[], index: number) => {
+  const rules: UIRule[] = (apiFilter.conditions || []).map((rawCondition: unknown[], index: number) => {
+    // Sieve condition tuples are ["field", ":operator", "value", ...] — always
+    // strings in practice (the one numeric-looking case, size, is still read
+    // via string methods below), so cast once here rather than per access.
+    const condition = rawCondition as string[];
     // Handle exists
     if (condition[0] === 'exists') {
       return {
@@ -538,7 +562,7 @@ export const transformFromApiFormat = (apiFilter: any): UIFilter => {
     };
   });
 
-  const actions: UIAction[] = (apiFilter.actions || []).map((action: any[], index: number) => {
+  const actions: UIAction[] = (apiFilter.actions || []).map((action: unknown[], index: number) => {
     if (action[0] === 'fileinto') {
       if (action[1] === ':copy') {
         return {
@@ -570,7 +594,7 @@ export const transformFromApiFormat = (apiFilter: any): UIFilter => {
     }
 
     if (action[0] === 'vacation') {
-      const values: any = {};
+      const values: Record<string, unknown> = {};
 
       if (scriptContent) {
         const filterName = apiFilter.name;
@@ -606,7 +630,7 @@ export const transformFromApiFormat = (apiFilter: any): UIFilter => {
     }
 
     if (action[0] === 'set') {
-      const values: any = {
+      const values: Record<string, unknown> = {
         lower_case: false,
         upper_case: false,
         first_character_lower_case: false,
@@ -645,7 +669,7 @@ export const transformFromApiFormat = (apiFilter: any): UIFilter => {
     }
 
     if (action[0] === 'notify') {
-      const values: any = {};
+      const values: Record<string, unknown> = {};
 
       // Parse the notify command arguments
       for (let i = 1; i < action.length; i++) {
@@ -661,8 +685,8 @@ export const transformFromApiFormat = (apiFilter: any): UIFilter => {
         } else if (action[i] === ':options' && action[i + 1]) {
           values.notification_options = action[i + 1];
           i++;
-        } else if (typeof action[i] === 'string' && action[i].startsWith('mailto:')) {
-          values.email = action[i].replace('mailto:', '');
+        } else if (typeof action[i] === 'string' && (action[i] as string).startsWith('mailto:')) {
+          values.email = (action[i] as string).replace('mailto:', '');
           values.notification_target = 'mailto';
         }
       }
@@ -693,9 +717,9 @@ export const transformFromApiFormat = (apiFilter: any): UIFilter => {
           : action[0] === 'addflag'
             ? 'add_flags'
             : 'remove_flags';
-      const flags = action.slice(1);
-      const flagValues: any = {};
-      flags.forEach((flag: string) => {
+      const flags = action.slice(1) as string[];
+      const flagValues: Record<string, unknown> = {};
+      flags.forEach((flag) => {
         if (flag === '\\\\Seen') flagValues.read = true;
         else if (flag === '\\Answered') flagValues.answered = true;
         else if (flag === '\\Flagged') flagValues.flagged = true;
@@ -706,7 +730,7 @@ export const transformFromApiFormat = (apiFilter: any): UIFilter => {
       return { id: `action-${index}`, type: actionType, values: flagValues };
     }
 
-    return { id: `action-${index}`, type: action[0], values: {} };
+    return { id: `action-${index}`, type: action[0] as string, values: {} };
   });
 
   let scope: 'all' | 'any' | 'all_messages' = 'all';

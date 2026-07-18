@@ -50,7 +50,7 @@ const FolderStats: React.FC<FolderStatsProps> = ({ folders, folderSettings }) =>
   const totalFolders = folders.length;
   const customFolders = folders.filter((f) => !isSystemFolder(f.flags, f.folder_name)).length;
   const visibleFolders = Object.entries(folderSettings).filter(
-    ([_, settings]) => settings.visible !== false
+    ([, settings]) => settings.visible !== false
   ).length;
   const parentFolders = folders.filter((f) => f.flags.includes('HasChildren')).length;
 

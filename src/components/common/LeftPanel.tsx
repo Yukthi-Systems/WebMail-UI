@@ -30,11 +30,11 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { sidebarCollapsedAtom } from '../../state/sidebar';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { folderDetailsAtom } from '../../state/folders';
-import type { EmailFolder } from '../../api/mailbox';
+import type { FolderDetail } from '../../state/folders';
 import { userSettingsAtom } from '../../state/settings';
 import { useSettingsBridge } from '../../hooks/useSettingsBridge';
 import { leftNavHoverAtom, leftNavTourSeenAtom, leftNavVisibleAtom } from '../../state/leftNav';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { TourTip } from './TourTips';
 import { getCompanySlugFromPath } from '../../utils/routeUtils';
 
@@ -69,7 +69,7 @@ const LeftNavigation = () => {
   const dragStartPos = useRef(50);
 
   const unreadCountEmails = folderDetails?.reduce(
-    (current: number, item: EmailFolder) => current + (item.unread_count ?? 0),
+    (current: number, item: FolderDetail) => current + (item.unread_count ?? 0),
     0
   );
 
@@ -82,7 +82,11 @@ const LeftNavigation = () => {
     if (userSettings?.ui?.left_nav_button_position !== undefined) {
       setButtonPosition(userSettings.ui.left_nav_button_position);
     }
-  }, [userSettings?.ui?.show_left_navigation, userSettings?.ui?.left_nav_button_position]);
+  }, [
+    userSettings?.ui?.show_left_navigation,
+    userSettings?.ui?.left_nav_button_position,
+    setIsVisible,
+  ]);
 
   // Mobile check
   useEffect(() => {
@@ -130,7 +134,7 @@ const LeftNavigation = () => {
         await updateSettings(updatedSettings);
         setUserSettings(updatedSettings);
         toast.success({ description: `Navigation panel ${newVisibility ? 'shown' : 'hidden'}` });
-      } catch (error) {
+      } catch {
         toast.error({ description: 'Failed to save preference' });
         setIsVisible(!newVisibility);
       }
@@ -257,7 +261,7 @@ const LeftNavigation = () => {
             <button
               onMouseDown={handleMouseDown}
               onTouchStart={handleTouchStart}
-              onClick={(e) => {
+              onClick={() => {
                 // Only toggle if not dragging AND didn't move (was a click, not drag)
                 if (!isDragging && !hasMoved) {
                   toggleNavigation();

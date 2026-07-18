@@ -18,8 +18,10 @@
 import type { EmailFolder } from '../../api/mailbox';
 import type { IconType } from 'react-icons/lib';
 import type { FolderNode } from '../../utils/folderTree';
+import type { UserSettings } from '../../api/user';
 import FolderItem from './FolderItem';
-import CustomFolder, { folderSchema } from './CustomFolder';
+import CustomFolder from './CustomFolder';
+import { folderSchema } from './folderSchema';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button, Flex, TextField } from '@radix-ui/themes';
@@ -39,7 +41,7 @@ interface FolderProps {
   isCollapsed?: boolean;
   onDrop?: (folderPath: string) => void;
   isDragging?: boolean;
-  folderPops?: any;
+  folderPops?: Partial<UserSettings['folders'][string]>;
   folderNode?: FolderNode;
   onAddFolder?: (parentFolder: string, newFolderName: string) => void;
   onEdit?: (oldName: string, newName: string) => void;

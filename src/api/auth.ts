@@ -29,6 +29,10 @@ export type LoginResponse = {
   isVersionTwoUser: boolean;
 };
 
+export class LoginError extends Error {
+  status?: number;
+}
+
 export const login = async (credentials: {
   email: string;
   domain: string;
@@ -45,7 +49,7 @@ export const login = async (credentials: {
 
   if (!res.ok) {
     const error = await res.json();
-    const err = new Error(error.message || 'Login failed') as any;
+    const err = new LoginError(error.message || 'Login failed');
     err.status = res.status;
     throw err;
   }

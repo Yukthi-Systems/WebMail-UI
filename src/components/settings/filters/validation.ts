@@ -36,9 +36,18 @@ const FILTER_NAME_REGEX = /^[a-zA-Z0-9 _-]+$/;
 // Helper Functions
 // ----------------------------------------------------------------------
 
+// Called with both rule fields (DynamicField, no label/required) and action
+// fields (ActionField, which has both) — this minimal shape is all either
+// caller needs to structurally satisfy.
+interface ValidatableField {
+  type?: string;
+  required?: boolean;
+  label?: string;
+}
+
 const validateSingleField = (
-  value: any,
-  fieldConfig: any,
+  value: unknown,
+  fieldConfig: ValidatableField,
   errorKey: string,
   errors: ValidationError
 ) => {
@@ -58,7 +67,7 @@ const validateSingleField = (
 
   // 2. Check Email Format
   if (fieldConfig.type === 'email' && value) {
-    if (!EMAIL_REGEX.test(value)) {
+    if (!EMAIL_REGEX.test(String(value))) {
       errors[errorKey] = 'Invalid email address format';
     }
   }
@@ -67,7 +76,7 @@ const validateSingleField = (
 // --- Recursive Validator for Rules ---
 const validateRuleFieldsRecursively = (
   fields: DynamicField[],
-  values: { [key: string]: any },
+  values: { [key: string]: string | undefined },
   pathPrefix: string,
   ruleId: string,
   errors: ValidationError

@@ -75,7 +75,11 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     <Box className={className}>
       <DropdownMenu.Root>
         {trigger ? (
-          <DropdownMenu.Trigger {...({ asChild: true } as any)}>{trigger}</DropdownMenu.Trigger>
+          // DropdownMenu.Trigger's declared props don't include Radix's own
+          // `asChild`, even though the underlying primitive supports it.
+          <DropdownMenu.Trigger {...({ asChild: true } as { asChild: boolean })}>
+            {trigger}
+          </DropdownMenu.Trigger>
         ) : (
           <DropdownMenu.Trigger>
             <Button variant="soft" disabled={disabled}>

@@ -302,7 +302,7 @@ export interface CompanyApiConfig {
     logoDark?: string;
     backgroundDark?: string;
   };
-  theme?: Record<string, any>;
+  theme?: Record<string, unknown>;
 }
 
 export class CompanyService {

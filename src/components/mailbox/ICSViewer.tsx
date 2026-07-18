@@ -41,6 +41,23 @@ interface ICSViewerProps {
   }) => void;
 }
 
+interface EventAttendee {
+  name: string;
+  email: string;
+  status: string;
+}
+
+interface EventInfo {
+  summary: string;
+  description: string;
+  location: string;
+  start?: Date;
+  end?: Date;
+  organizerEmail: string;
+  existingStatus: string | null;
+  attendees: EventAttendee[];
+}
+
 function buildReplyICS(
   originalIcs: string,
   attendeeEmail: string,
@@ -83,7 +100,7 @@ export const ICSViewer = ({ icsData, currentUserEmail, onSendReply }: ICSViewerP
   const [rsvpStatus, setRsvpStatus] = useState<'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | null>(null);
   const [sending, setSending] = useState(false);
 
-  let event: any = null;
+  let event: EventInfo | null = null;
   let method = 'REQUEST';
   let organizerEmail = '';
 
@@ -99,12 +116,12 @@ export const ICSViewer = ({ icsData, currentUserEmail, onSendReply }: ICSViewerP
     organizerEmail = organizerRaw.replace(/^mailto:/i, '');
 
     // Find current user's existing RSVP status
-    let existingStatus: any = null;
+    let existingStatus: string | null = null;
     if (currentUserEmail) {
-      vevent.getAllProperties('attendee').forEach((a: any) => {
-        const email = (a.getFirstValue() || '').replace(/^mailto:/i, '');
+      vevent.getAllProperties('attendee').forEach((a: ICAL.Property) => {
+        const email = String(a.getFirstValue() || '').replace(/^mailto:/i, '');
         if (email.toLowerCase() === currentUserEmail.toLowerCase()) {
-          existingStatus = a.getParameter('partstat') || null;
+          existingStatus = (a.getParameter('partstat') as string) || null;
         }
       });
     }
@@ -120,10 +137,10 @@ export const ICSViewer = ({ icsData, currentUserEmail, onSendReply }: ICSViewerP
       end: icalEvent.endDate?.toJSDate(),
       organizerEmail,
       existingStatus,
-      attendees: vevent.getAllProperties('attendee').map((a: any) => ({
-        name: a.getParameter('cn') || '',
-        email: (a.getFirstValue() || '').replace(/^mailto:/i, ''),
-        status: a.getParameter('partstat') || 'NEEDS-ACTION',
+      attendees: vevent.getAllProperties('attendee').map((a: ICAL.Property) => ({
+        name: (a.getParameter('cn') as string) || '',
+        email: String(a.getFirstValue() || '').replace(/^mailto:/i, ''),
+        status: (a.getParameter('partstat') as string) || 'NEEDS-ACTION',
       })),
     };
   } catch {
@@ -295,7 +312,7 @@ export const ICSViewer = ({ icsData, currentUserEmail, onSendReply }: ICSViewerP
               Attendees ({event.attendees.length})
             </p>
             <div className="flex flex-wrap gap-2">
-              {event.attendees.map((a: any, i: number) => (
+              {event.attendees.map((a, i: number) => (
                 <span
                   key={i}
                   className={`text-xs px-2 py-0.5 rounded-full border ${statusBadge[a.status] || statusBadge['NEEDS-ACTION']}`}

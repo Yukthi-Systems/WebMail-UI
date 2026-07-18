@@ -17,14 +17,14 @@
 
 // src/hooks/useEmailParser.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
-import PostalMime from 'postal-mime';
+import PostalMime, { type Email as ParsedEmail, type Attachment } from 'postal-mime';
 import { extractHeaders, parseHeaders } from '../utils/emailUtils';
 
 interface UseEmailParserProps {
   rawEmail?: string;
   key: string;
   onContentLoaded?: (content: string) => void;
-  onAttachmentsLoaded?: (attachments: any[]) => void;
+  onAttachmentsLoaded?: (attachments: Attachment[]) => void;
 }
 
 export const useEmailParser = ({
@@ -33,7 +33,7 @@ export const useEmailParser = ({
   onContentLoaded,
   onAttachmentsLoaded,
 }: UseEmailParserProps) => {
-  const [parsedEmail, setParsedEmail] = useState<any>(null);
+  const [parsedEmail, setParsedEmail] = useState<ParsedEmail | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [headers, setHeaders] = useState<Record<string, string>>({});

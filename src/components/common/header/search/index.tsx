@@ -18,11 +18,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaMagnifyingGlass, FaFilter, FaXmark, FaSpinner } from 'react-icons/fa6';
 import { useAtom, useAtomValue } from 'jotai';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import { searchStateAtom } from '../../../../state/search';
 import { useSearchEmails } from '../../../../hooks/useSearch';
 import { userSettingsAtom } from '../../../../state/settings';
-import { useToast } from '../../../ui/ToastComponent';
 import type { SearchRequest } from '../../../../api/search';
 import FilterBadgeComponent from './FilterBadge';
 import AdvancedFilters from './AdvancedFilters';
@@ -34,12 +33,19 @@ import { API_URL } from '../../../../api/config';
 
 const MAX_VISIBLE_BADGES = 2;
 
+// Contact search suggestion — a different, narrower shape than utils/contact.ts's
+// Contact (that one's for the bulk contact CRUD endpoints; this is /contacts/search).
+interface ContactSuggestion {
+  contact_id: string | number;
+  name?: string;
+  email: string;
+}
+
 const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
   const { folder: currentFolder } = useParams({ strict: false });
   const [searchState, setSearchState] = useAtom(searchStateAtom);
   const userSettings = useAtomValue(userSettingsAtom);
   const PER_PAGE = userSettings?.email?.mails_per_page || 50;
-  const toast = useToast();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +84,7 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
   // Suggestions state
   const emailValue = isSentOrDrafts ? filters.to || '' : filters.from || '';
   const [debouncedEmailValue] = useDebounce(emailValue, 300);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<ContactSuggestion[]>([]);
   const csrfToken = useAtomValue(csrfTokenAtom);
   const isVersionTwoUser = useAtomValue(isVersionTwoUserAtom);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -120,9 +126,9 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
           }
 
           const seenEmails = new Set<string>();
-          const mergedContacts: any[] = [];
+          const mergedContacts: ContactSuggestion[] = [];
 
-          contacts1.forEach((c: any) => {
+          contacts1.forEach((c: ContactSuggestion) => {
             if (c.email) {
               const emailLower = c.email.toLowerCase();
               if (!seenEmails.has(emailLower)) {
@@ -132,7 +138,7 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
             }
           });
 
-          contacts2.forEach((c: any) => {
+          contacts2.forEach((c: ContactSuggestion) => {
             if (c.email) {
               const emailLower = c.email.toLowerCase();
               if (!seenEmails.has(emailLower)) {
@@ -233,7 +239,7 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
       });
       setShowFilters(false);
     }
-  }, [searchData, isFetching]);
+  }, [searchData, isFetching, setSearchState]);
 
   useEffect(() => {
     if (!searchState.isActive) {

@@ -30,27 +30,25 @@ import { useQueryClient } from '@tanstack/react-query';
 import EmailCard from './EmailCard';
 import EmailToolbar from './EmailToolbar';
 import EmailViewer from './EmailViewer';
-import Toast from '../Toast';
 import { type Email, emailRaw } from '../../api/mailbox';
-import { useEmailPrefetch, useEmailRaw } from '../../hooks/useEmailRaw';
+import { useEmailRaw } from '../../hooks/useEmailRaw';
 import EmailComposer from './EmailComposer';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { selectedEmailAtom } from '../../state/emailAddress';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import ResizablePanel from '../common/ResizeblePanel';
 import EmailEmptyState from './EmailEmptyState';
 import EmailLoadingSkeleton from './EmailSkeleton';
-import { composerOpenAtom } from '../../state/composer';
 import { useKeyboardNavigation } from '../../hooks/useKeyboardShortcuts';
 import {
   emailComposerDataAtom,
   emailComposerKeepMountedAtom,
   emailComposerOpenAtom,
   resetEmailComposerDataAtom,
+  type EmailAttachment as ComposerAttachment,
 } from '../../state/emailComposer';
 import { rawEmailCacheKey } from '../../hooks/useEmailRaw';
 import { userSettingsAtom } from '../../state/settings';
-import { panelSizesAtom } from '../../state/resizable';
 import { flagAtom } from '../../state/flags';
 import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../utils/emailPrint';
 import { userDetailsAtom } from '../../state/userDetails';
@@ -76,6 +74,8 @@ import {
   useFolderUidValidity,
 } from '../../hooks/useFolders';
 import { useEmailCacheUpdater } from '../../hooks/useEmailCacheUpdater';
+import type { EmailLike } from '../../utils/emailThreading';
+import type { Attachment } from 'postal-mime';
 
 interface EmailListProps {
   onRegisterClearCallback?: (callback: () => void) => void;
@@ -85,22 +85,41 @@ interface EmailListProps {
   onFocusFolders?: () => void;
 }
 
-type StringInput = string | string[] | null | undefined;
-
-export function createSafeStringSet(...inputs: StringInput[]): any {
-  return new Set(
-    inputs.filter(Boolean).flatMap((input: any) => {
-      if (Array.isArray(input)) {
-        return input.filter((v) => v && v.trim() !== '');
-      }
-      return input.trim() !== '' ? [input] : [];
-    })
-  );
+// ... Keep your applyThreading function exactly as is ...
+interface ThreadInfo {
+  ids: string[];
+  latestId: string;
+  latestDate: number;
+  count: number;
 }
 
-// ... Keep your applyThreading function exactly as is ...
-function applyThreading(apiResponse: any): any[] {
-  const emails = apiResponse.emails || apiResponse;
+// Deliberately doesn't extend EmailLike: EmailLike's index signature would force
+// every concrete caller-side type (e.g. api/mailbox.ts's `Email`) to be cast before
+// it could satisfy the generic constraint. All fields are optional so any real
+// email shape (Email, EmailLike, etc.) satisfies this structurally with no cast.
+interface ThreadableEmail {
+  Date?: string;
+  FLAGS?: string[];
+  References?: string;
+  'In-Reply-To'?: string;
+}
+
+interface ThreadFields {
+  'Thread-View'?: boolean;
+  'Thread-Reference'?: string[];
+  'Thread-Count'?: number;
+  'Inbox-Visible'?: boolean;
+  'Thread-Latest'?: string;
+  'Thread-Position'?: string;
+  'Thread-HasUnread'?: boolean;
+  'Thread-Emails-Count'?: number;
+  'Thread-Unread-Count'?: number;
+}
+
+function applyThreading<T extends ThreadableEmail>(
+  apiResponse: T[] | { emails?: T[] }
+): (T & ThreadFields)[] {
+  const emails = Array.isArray(apiResponse) ? apiResponse : apiResponse?.emails;
   if (!Array.isArray(emails)) return [];
 
   const normalizeId = (id = '') => id.replace(/[<>]/g, '').trim();
@@ -110,7 +129,7 @@ function applyThreading(apiResponse: any): any[] {
     return matches ? matches.map((v) => normalizeId(v)) : [];
   };
   // const getMessageId = (email: any) => normalizeId(email['Message-Id'] || email['Message-ID']);
-  const getEmailDate = (email: any): number => {
+  const getEmailDate = (email: T): number => {
     try {
       return new Date(email.Date || 0).getTime();
     } catch {
@@ -118,7 +137,7 @@ function applyThreading(apiResponse: any): any[] {
     }
   };
 
-  const emailByMessageId = new Map<string, any>();
+  const emailByMessageId = new Map<string, T>();
   const emailConnections = new Map<string, Set<string>>();
 
   emails.forEach((email) => {
@@ -182,15 +201,7 @@ function applyThreading(apiResponse: any): any[] {
     }
   }
 
-  const threadInfo = new Map<
-    string,
-    {
-      ids: string[];
-      latestId: string;
-      latestDate: number;
-      count: number;
-    }
-  >();
+  const threadInfo = new Map<string, ThreadInfo>();
 
   threads.forEach((ids, threadId) => {
     if (ids.length === 0) return;
@@ -223,11 +234,11 @@ function applyThreading(apiResponse: any): any[] {
         'Thread-HasUnread': email.FLAGS && !email.FLAGS.includes('\\Seen'),
         'Thread-Emails-Count': 1,
         'Thread-Unread-Count': email.FLAGS && !email.FLAGS.includes('\\Seen') ? 1 : 0,
-      };
+      } as T & ThreadFields;
     }
 
-    let threadData = null;
-    for (const [threadId, info] of threadInfo) {
+    let threadData: ThreadInfo | null = null;
+    for (const [, info] of threadInfo) {
       if (info.ids.includes(messageId)) {
         threadData = info;
         break;
@@ -246,7 +257,7 @@ function applyThreading(apiResponse: any): any[] {
         'Thread-HasUnread': email.FLAGS && !email.FLAGS.includes('\\Seen'),
         'Thread-Emails-Count': 1,
         'Thread-Unread-Count': email.FLAGS && !email.FLAGS.includes('\\Seen') ? 1 : 0,
-      };
+      } as T & ThreadFields;
     }
 
     const isThreaded = threadData.count > 1;
@@ -272,7 +283,7 @@ function applyThreading(apiResponse: any): any[] {
       'Thread-HasUnread': unreadCount > 0,
       'Thread-Emails-Count': threadData.count,
       'Thread-Unread-Count': unreadCount,
-    };
+    } as T & ThreadFields;
   });
 }
 
@@ -319,7 +330,7 @@ const EmailList = ({
 
   const currentFolderDetail = useMemo(() => {
     if (!Array.isArray(folderDetails)) return null;
-    return folderDetails.find((f: any) => f.folder_name === (folder || 'INBOX'));
+    return folderDetails.find((f) => f.folder_name === (folder || 'INBOX'));
   }, [folderDetails, folder]);
 
   // On initial load, if UID validity data arrives and differs from stored status, invalidate email cache
@@ -335,7 +346,7 @@ const EmailList = ({
     // Always sync atom so next visit sees the current values and doesn't re-fetch unnecessarily
     if (currentFolderDetail && Array.isArray(folderDetails)) {
       setFolderDetails(
-        folderDetails.map((f: any) =>
+        folderDetails.map((f) =>
           f.folder_name === (folder || 'INBOX') ? { ...f, status: liveUidValidity } : f
         )
       );
@@ -349,7 +360,6 @@ const EmailList = ({
   // Regular emails fetch
   const {
     data: regularData,
-    refetch,
     isFetching: isRegularFetching,
     error: regularError,
   } = useEmails(folder || 'INBOX', regularPage, PER_PAGE);
@@ -392,17 +402,16 @@ const EmailList = ({
   const [viewingEmail, setViewingEmail] = useState<Email | null>(null);
   const [viewingEmailFolder, setViewingEmailFolder] = useState<string | undefined>(undefined);
   const [viewingEmailFlag, setViewingEmailFlag] = useAtom(flagAtom);
-  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [, setShowErrorToast] = useState(false);
   const [selectedEmail, setSelectedEmail] = useAtom(selectedEmailAtom);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
+  const [, setToastMessage] = useState('');
   const [currentEmailContent, setCurrentEmailContent] = useState<string>('');
   const [replyingEmail, setReplyingEmail] = useState<Email | null>(null);
   const [replyingAllEmail, setReplyingAllEmail] = useState<Email | null>(null);
   const [forwardingEmail, setForwardingEmail] = useState<Email | null>(null);
   const [sendDraftEmail, setSendDraftEmail] = useState<Email | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const userDetails = useAtomValue(userDetailsAtom) || '';
+  const userDetails = useAtomValue(userDetailsAtom);
   const [isBulkContactOpen, setIsBulkContactOpen] = useState(false);
   const [contactsToCreate, setContactsToCreate] = useState<Partial<CreateContactData>[]>([]);
   const { mutate: createBulkContact, isPending: isSavingContacts } = useCreateBulkContact();
@@ -423,8 +432,8 @@ const EmailList = ({
     return layout === 'vertical-split' ? 'down' : 'left';
   });
   const [currentEmailIndex, setCurrentEmailIndex] = useState(0);
-  const [currentAttachments, setCurrentAttachments] = useState<any[]>([]);
-  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [currentAttachments, setCurrentAttachments] = useState<Attachment[]>([]);
+  const [, setShowKeyboardHelp] = useState(false);
   const [isKeyboardNavigating, setIsKeyboardNavigating] = useState(false);
   const [composerOpen, setComposerOpen] = useAtom(emailComposerOpenAtom);
   const composerKeepMounted = useAtomValue(emailComposerKeepMountedAtom);
@@ -439,18 +448,19 @@ const EmailList = ({
   const { panelSizes, updatePanelSize } = usePanelSizes();
   const [undoTime, setUndoTime] = useState<number>(5000);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshEnabled] = useState(true);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const emailListScrollRef = useRef<HTMLDivElement | null>(null);
   const savedScrollPositionRef = useRef<number>(0);
-  const setSearchStateOnly = useSetAtom(searchStateAtom);
-  const { prefetchEmailContent } = useEmailPrefetch();
   const createTemplateMutation = useCreateEmailTemplate();
   const { prepareTemplateFromCache } = useTemplateActions();
 
   // CHANGE 5: Get data based on mode
-  const emails =
-    searchState.isActive && searchData?.data ? searchData.data.data : regularData?.emails || {};
+  // Cast preserves an existing quirk: when regularData is undefined this falls
+  // back to `{}`, not `[]` — not changing that behavior here, just the type.
+  const emails = (
+    searchState.isActive && searchData?.data ? searchData.data.data : regularData?.emails || {}
+  ) as Email[];
 
   const total_count =
     searchState.isActive && searchData?.data
@@ -507,14 +517,18 @@ const EmailList = ({
     new Map()
   );
 
-  const simpleEmailArray = Array.isArray(emails) ? emails : Object.values(emails || {});
+  const simpleEmailArray: Email[] = Array.isArray(emails)
+    ? emails
+    : (Object.values(emails || {}) as Email[]);
 
-  function getFilteredThreadedList(threadedEmails: any[]): any[] {
+  function getFilteredThreadedList(
+    threadedEmails: (Email & ThreadFields)[]
+  ): (Email & ThreadFields)[] {
     return threadedEmails
       .filter((email) => email['Inbox-Visible'] === true)
       .map((email) => ({
         ...email,
-        'Thread-Emails-Count': email['Thread-Reference']?.length || 1,
+        'Thread-Emails-Count': (email['Thread-Reference'] as string[] | undefined)?.length || 1,
         'Thread-Unread-Count': email['Thread-Unread-Count'] || 0,
       }))
       .sort((a, b) => {
@@ -524,7 +538,7 @@ const EmailList = ({
       });
   }
 
-  function getListOfEmail(threadedEmails: any[]): any[] {
+  function getListOfEmail(threadedEmails: (Email & ThreadFields)[]): (Email & ThreadFields)[] {
     return (
       threadedEmails.sort((a, b) => {
         const dateA = new Date(a.Date || 0).getTime();
@@ -551,7 +565,7 @@ const EmailList = ({
       return;
     }
 
-    const scraped = scrapeContactsFromEmails(emailsToProcess, userDetails.email);
+    const scraped = scrapeContactsFromEmails(emailsToProcess, userDetails?.email || '');
     setContactsToCreate(scraped);
     setIsBulkContactOpen(true);
   };
@@ -565,7 +579,7 @@ const EmailList = ({
         toast.success({ description: `Successfully added ${valid.length} contacts` });
         queryClient.invalidateQueries({ queryKey: ['contacts'] });
       },
-      onError: (err: any) => {
+      onError: (err) => {
         toast.error({ description: err?.message || 'Failed to save contacts' });
       },
     });
@@ -573,7 +587,7 @@ const EmailList = ({
 
   const emailArray = useMemo(() => {
     if (searchState.isActive) {
-      return simpleEmailArray.sort((a: any, b: any) => {
+      return simpleEmailArray.sort((a, b) => {
         const dateA = new Date(a.Date || 0).getTime();
         const dateB = new Date(b.Date || 0).getTime();
         return dateB - dateA;
@@ -591,10 +605,10 @@ const EmailList = ({
 
   useEffect(() => {
     if (emailArray) {
-      const email_flag = emailArray.find((email: any) => email?.id === viewingEmail?.id);
+      const email_flag = emailArray.find((email) => email?.id === viewingEmail?.id);
       setViewingEmailFlag(email_flag?.FLAGS || []);
     }
-  }, [viewingEmail, emails, emailArray]);
+  }, [viewingEmail, emails, emailArray, setViewingEmailFlag]);
 
   const totalSelectedCount = emailArray.length;
   const checkedCount = checkedEmails.length;
@@ -608,7 +622,7 @@ const EmailList = ({
     setIsMoveDialogOpen(true);
   };
 
-  const handleFolderSelect = (newFol: any) => {
+  const handleFolderSelect = (newFol: { name: string; path: string }) => {
     const loadingId = toast.loading({ description: `Moving to ${newFol.name}…` });
     moveMutate(
       {
@@ -621,7 +635,7 @@ const EmailList = ({
         onSuccess: () => {
           // Count unread emails being moved (emailToMove is still the closure value here)
           const unreadMoved = emailArray.filter(
-            (e: any) => emailToMove.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
+            (e) => emailToMove.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
           ).length;
 
           // Clear selection and close dialog before invalidating the query so the
@@ -648,7 +662,7 @@ const EmailList = ({
             queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
           });
         },
-        onError: (error: any) => {
+        onError: (error) => {
           toast.dismiss(loadingId);
           toast.error({ description: error?.message || 'Failed to move email.' });
         },
@@ -759,7 +773,7 @@ const EmailList = ({
         description: error.message || 'An error occurred while fetching emails. Please try again.',
       });
     }
-  }, [error]);
+  }, [error, toast]);
 
   useEffect(() => {
     if (searchState.isActive) {
@@ -831,14 +845,15 @@ const EmailList = ({
           body: emailsToActOn,
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             handleDeselectAll();
             if (isViewingEmailAffected) {
               handleBackToList();
             }
             toast.dismiss(loadingId);
             toast.success({
-              description: res?.message || 'Email permanently deleted.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email permanently deleted.',
             });
             queryClient.invalidateQueries({
               queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
@@ -927,11 +942,12 @@ const EmailList = ({
           body: [emailIdNum],
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             if (isViewingDeletedEmail) handleBackToList();
             toast.dismiss(loadingId);
             toast.success({
-              description: res?.message || 'Email permanently deleted.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email permanently deleted.',
             });
 
             queryClient.invalidateQueries({
@@ -1022,11 +1038,13 @@ const EmailList = ({
         body: targetIds,
       },
       {
-        onSuccess: (res: any) => {
+        onSuccess: (res) => {
           handleDeselectAll();
           toast.dismiss(loadingId);
           toast.success({
-            description: res?.message || `Marked as ${isSeen ? 'unread' : 'read'}.`,
+            description:
+              (res as unknown as { message?: string })?.message ||
+              `Marked as ${isSeen ? 'unread' : 'read'}.`,
           });
 
           patchEmailFlags(targetIds, isSeen ? undefined : '\\Seen', isSeen ? '\\Seen' : undefined);
@@ -1048,10 +1066,11 @@ const EmailList = ({
           body: [emailIdNum],
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
             toast.success({
-              description: res?.message || 'Email marked as unread.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email marked as unread.',
             });
 
             patchEmailFlags([emailIdNum], '\\Seen');
@@ -1072,10 +1091,11 @@ const EmailList = ({
           body: [emailIdNum],
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
             toast.success({
-              description: res?.message || 'Email marked as unread.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email marked as unread.',
             });
 
             patchEmailFlags([emailIdNum], undefined, '\\Seen');
@@ -1104,11 +1124,12 @@ const EmailList = ({
           body: emailsToActOn,
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             handleDeselectAll();
             toast.dismiss(loadingId);
             toast.success({
-              description: res?.message || 'Email unmarked as flagged.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email unmarked as flagged.',
             });
             patchEmailFlags(emailsToActOn, undefined, '\\Flagged');
           },
@@ -1127,11 +1148,12 @@ const EmailList = ({
           body: emailsToActOn,
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             handleDeselectAll();
             toast.dismiss(loadingId);
             toast.success({
-              description: res?.message || 'Email flagged as flagged.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email flagged as flagged.',
             });
             patchEmailFlags(emailsToActOn, '\\Flagged');
           },
@@ -1158,11 +1180,12 @@ const EmailList = ({
           body: [emailIdNum],
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
             handleDeselectAll();
             toast.success({
-              description: res?.message || 'Email unmarked as flagged.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email unmarked as flagged.',
             });
             patchEmailFlags([emailIdNum], undefined, '\\Flagged');
           },
@@ -1181,11 +1204,12 @@ const EmailList = ({
           body: [emailIdNum],
         },
         {
-          onSuccess: (res: any) => {
+          onSuccess: (res) => {
             toast.dismiss(loadingId);
             handleDeselectAll();
             toast.success({
-              description: res?.message || 'Email flagged as flagged.',
+              description:
+                (res as unknown as { message?: string })?.message || 'Email flagged as flagged.',
             });
             patchEmailFlags([emailIdNum], '\\Flagged');
           },
@@ -1207,7 +1231,7 @@ const EmailList = ({
 
       // Update the atom with the new status
       if (currentFolderDetail) {
-        const newDetails = folderDetails.map((f: any) =>
+        const newDetails = folderDetails.map((f) =>
           f.folder_name === (folder || 'INBOX') ? { ...f, status: response } : f
         );
         setFolderDetails(newDetails);
@@ -1360,8 +1384,8 @@ const EmailList = ({
     setComposerOpen(true);
   };
 
-  const handleForwardAsAttachment = async (targetEmail?: any, rawContent?: string) => {
-    const emailToForward = targetEmail || viewingEmail;
+  const handleForwardAsAttachment = async (targetEmail?: EmailLike, rawContent?: string) => {
+    const emailToForward = targetEmail || (viewingEmail as unknown as EmailLike | null);
     if (!emailToForward) return;
     try {
       // Thread card already provides rawContent — skip network entirely.
@@ -1369,7 +1393,7 @@ const EmailList = ({
       // so queryClient.fetchQuery returns the cached string without a network call.
       let raw = rawContent;
       if (!raw) {
-        const id = emailToForward.id.toString();
+        const id = String(emailToForward.id);
         const folderPath = viewingEmailFolder || folder || 'INBOX';
         // Mirror the stableEmailKey logic in EmailViewer.tsx
         const stableKey =
@@ -1400,8 +1424,16 @@ const EmailList = ({
         ...prev,
         subject: `Fwd: ${subject}`,
         html: '<p><br></p>',
+        // Backend/snake_case-shaped attachment (mime_type, data), not ComposerEmail's
+        // declared camelCase EmailAttachment (mimeType, content) — same pre-existing
+        // mismatch already flagged for this composer atom (see CLAUDE.md).
         attachments: [
-          { filename, mime_type: 'message/rfc822', data: base64, size: uint8.length } as any,
+          {
+            filename,
+            mime_type: 'message/rfc822',
+            data: base64,
+            size: uint8.length,
+          } as unknown as ComposerAttachment,
         ],
       }));
 
@@ -1557,7 +1589,7 @@ const EmailList = ({
       toast.success({
         description: 'Saved! View it in Settings > Templates',
       });
-    } catch (err) {
+    } catch {
       toast.error({
         description: 'Failed to process email for template',
       });
@@ -1693,17 +1725,17 @@ const EmailList = ({
           date={viewingEmail!.Date}
           onContentLoaded={handleEmailContentLoaded}
           onDraftSend={() => viewingEmail && handleSendDraft(viewingEmail)}
-          email={viewingEmail}
+          email={viewingEmail as unknown as EmailLike}
           flagged={viewingEmailFlag}
           onAttachmentsLoaded={setCurrentAttachments}
-          onReply={handleReply}
-          onReplyAll={handleReplyAll}
-          onForward={handleForward}
+          onReply={handleReply as unknown as (email: EmailLike) => void}
+          onReplyAll={handleReplyAll as unknown as (email: EmailLike) => void}
+          onForward={handleForward as unknown as (email: EmailLike) => void}
           onForwardAsAttachment={handleForwardAsAttachment}
           handleSingleEmailDelete={handleSingleEmailDelete}
           handleSingleEmailMarkAsFlagged={handleSingleEmailMarkAsFlagged}
           handleSingleEmailMarkAsRead={handleSingleEmailMarkAsRead}
-          onEditAsNew={handleEditAsNew}
+          onEditAsNew={handleEditAsNew as unknown as (email: EmailLike) => void}
           onSaveAsContact={handleSaveAsContactAction}
         />
       </div>

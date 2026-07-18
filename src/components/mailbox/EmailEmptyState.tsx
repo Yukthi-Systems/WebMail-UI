@@ -53,6 +53,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         title: 'Your inbox is empty',
         description: 'All caught up! No new messages to display.',
         tip: 'New emails will appear here when they arrive.',
+        isError: false,
       };
     }
 
@@ -62,6 +63,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         title: 'No sent emails',
         description: "You haven't sent any emails yet.",
         tip: 'Compose and send your first email to see it here.',
+        isError: false,
       };
     }
 
@@ -71,6 +73,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         title: 'Trash is empty',
         description: 'No deleted emails in trash.',
         tip: 'Deleted emails will be stored here for 30 days.',
+        isError: false,
       };
     }
 
@@ -80,6 +83,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         title: 'No draft emails',
         description: "You don't have any saved drafts.",
         tip: 'Start composing an email and save it as draft.',
+        isError: false,
       };
     }
 
@@ -89,6 +93,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         title: 'No spam emails',
         description: 'Your spam folder is clean.',
         tip: 'Suspected spam emails will appear here.',
+        isError: false,
       };
     }
 
@@ -98,6 +103,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         title: 'No archived emails',
         description: "You haven't archived any emails yet.",
         tip: 'Archive important emails to keep your inbox organized.',
+        isError: false,
       };
     }
 
@@ -107,6 +113,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
       title: 'Folder is empty',
       description: `No emails in ${folder}.`,
       tip: 'Move or filter emails to this folder to organize them.',
+      isError: false,
     };
   };
 
@@ -120,7 +127,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
           <div
             className={`w-24 h-24 rounded-full flex items-center justify-center ${
               // Change background color slightly for error state
-              (content as any).isError ? 'bg-[var(--red-3)]' : 'bg-[var(--gray-3)]'
+              content.isError ? 'bg-[var(--red-3)]' : 'bg-[var(--gray-3)]'
             }`}
           >
             {content.icon}
@@ -134,7 +141,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         </div>
 
         {/* Retry Button (Only for errors) */}
-        {(content as any).isError && onRetry && (
+        {content.isError && onRetry && (
           <div className="pt-2">
             <button
               onClick={onRetry}
@@ -147,7 +154,7 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         )}
 
         {/* Tip (Only show if NOT an error, or if you want to keep it) */}
-        {!(content as any).isError && (
+        {!content.isError && (
           <div className="pt-4">
             <div className="inline-flex items-start gap-2 px-4 py-3 bg-[var(--accent-3)] border border-[var(--accent-6)] rounded-lg">
               <svg

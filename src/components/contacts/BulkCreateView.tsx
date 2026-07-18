@@ -15,12 +15,12 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { Flex, TextField, Button, Box, Table, Dialog } from '@radix-ui/themes';
-import { FaPlus, FaTrash, FaTimes, FaInfoCircle } from 'react-icons/fa';
+import { Flex, TextField, Button, Table, Dialog } from '@radix-ui/themes';
+import { FaPlus, FaTrash, FaTimes } from 'react-icons/fa';
 import DropdownWrapper from '../common/DropdownWrapper';
 import type { CreateContactData } from '../../utils/contact';
 import { useState, useEffect } from 'react';
-import { FaEllipsis, FaEllipsisVertical } from 'react-icons/fa6';
+import { FaEllipsisVertical } from 'react-icons/fa6';
 
 interface BulkCreateViewProps {
   open: boolean;
@@ -92,7 +92,7 @@ export const BulkCreateView = ({
       // Phone validation
       if (
         contact.phone &&
-        !/^[\+]?[1-9][\d]{0,15}$/.test(contact.phone.replace(/[\s\-\(\)]/g, ''))
+        !/^[+]?[1-9][\d]{0,15}$/.test(contact.phone.replace(/[\s\-()]/g, ''))
       ) {
         contactErrors.phone = 'Invalid phone format';
       }

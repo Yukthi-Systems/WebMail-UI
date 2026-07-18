@@ -63,7 +63,8 @@ export const emailComposerOpenAtom = atom(false);
 // reset to false once the send completes, fails, or is undone.
 export const emailComposerKeepMountedAtom = atom(false);
 export const emailComposerModeAtom = atom<'reply' | 'forward' | 'new'>('new');
-export const emailComposerSourceEmailAtom = atom<any>(null);
+// Not currently read anywhere; reserved for the original message when replying/forwarding.
+export const emailComposerSourceEmailAtom = atom<unknown>(null);
 
 export const resetEmailComposerDataAtom = atom(null, (_, set) => {
   // Removed the unused 'get' parameter

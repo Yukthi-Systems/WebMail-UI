@@ -18,38 +18,60 @@
 // EmailTabs.tsx
 import { useState } from 'react';
 import { Tabs } from '@radix-ui/themes';
-import EmailAttachments from './EmailAttachments';
+import EmailAttachments, { type EmailAttachment } from './EmailAttachments';
 import EmailHtmlContent from './EmailHtmlContent';
 import EmailTextContent from './EmailTextContent';
 import { ICSViewer } from './ICSViewer';
 import { useAtomValue } from 'jotai';
 import { userDetailsAtom } from '../../state/userDetails';
 import { emailAddress } from '../../state/emailAddress';
-import { userSettingsAtom } from '../../state/settings';
 import { useSendMail } from '../../hooks/useComposer';
-import { generateMessageId } from '../../api/composer';
-import { useToast } from '../ui/ToastComponent';
+import { generateMessageId, type ComposerRequest } from '../../api/composer';
+import { useToast } from '../../hooks/useToast';
 import { SEND_DEFAULT } from '../../constants/constant';
 import { formatComposedEmailData } from '../../utils/replyForwardHelper';
 
-interface ParsedEmail {
+// Loose shape covering both postal-mime attachments and the composer's local
+// payload shape — filename deliberately excludes `null` (postal-mime's real
+// type) since every consumer here already falls back with `||`, so treating
+// it as `string | undefined` doesn't change behavior but keeps this assignable
+// to EmailHtmlContent's own attachment type without an extra cast.
+interface EmailTabAttachment {
+  filename?: string;
+  mimeType?: string;
+  contentId?: string;
+  content?: string;
+  contentType?: string;
+  data?: string;
+}
+
+interface EmailTabCalendarPart {
+  mimeType?: string;
+  contentType?: string;
+  body?: string;
+}
+
+// Real postal-mime `Email` (content: string | ArrayBuffer) is cast to this at
+// each caller — attachmentEncoding: 'base64' guarantees `content` is always a
+// string in practice, but the library's declared type doesn't reflect that.
+export interface ParsedEmailForTabs {
   html?: string;
   text?: string;
-  attachments: any[];
-  parts?: any[];
+  attachments: EmailTabAttachment[];
+  parts?: EmailTabCalendarPart[];
 }
 
 interface EmailTabsProps {
-  parsedEmail: ParsedEmail;
+  parsedEmail: ParsedEmailForTabs;
   rawEmail: string;
 }
 
-const getIcsData = (parsedEmail: ParsedEmail): string | null => {
+const getIcsData = (parsedEmail: ParsedEmailForTabs): string | null => {
   const calendarPart = parsedEmail?.parts?.find(
-    (p: any) => p.mimeType === 'text/calendar' || p.contentType?.includes('text/calendar')
+    (p) => p.mimeType === 'text/calendar' || p.contentType?.includes('text/calendar')
   );
   const icsAttachment = parsedEmail?.attachments?.find(
-    (a: any) =>
+    (a) =>
       a.filename?.endsWith('.ics') ||
       a.mimeType === 'text/calendar' ||
       a.contentType?.includes('text/calendar')
@@ -68,14 +90,13 @@ const getIcsData = (parsedEmail: ParsedEmail): string | null => {
   return raw;
 };
 
-const EmailTabs = ({ parsedEmail, rawEmail }: EmailTabsProps) => {
+const EmailTabs = ({ parsedEmail }: EmailTabsProps) => {
   const icsData = getIcsData(parsedEmail);
   const defaultTab = parsedEmail.html ? 'html' : parsedEmail.text ? 'text' : 'attachments';
   const [allowExternalContent, setAllowExternalContent] = useState(false);
 
   const userDetails = useAtomValue(userDetailsAtom);
   const currentEmail = useAtomValue(emailAddress);
-  const userSettings = useAtomValue(userSettingsAtom);
   const { mutate: sendMutate } = useSendMail();
   const toast = useToast();
 
@@ -134,9 +155,9 @@ const EmailTabs = ({ parsedEmail, rawEmail }: EmailTabsProps) => {
       }
     );
 
-    sendMutate(mailData as any, {
+    sendMutate(mailData as unknown as ComposerRequest, {
       onSuccess: () => toast.success({ description: 'RSVP response sent to organizer.' }),
-      onError: (err: any) => toast.error({ description: err?.message || 'Failed to send RSVP.' }),
+      onError: (err) => toast.error({ description: err?.message || 'Failed to send RSVP.' }),
     });
   };
 
@@ -177,7 +198,10 @@ const EmailTabs = ({ parsedEmail, rawEmail }: EmailTabsProps) => {
         )}
 
         <Tabs.Content value="attachments">
-          <EmailAttachments attachments={parsedEmail.attachments} emailHtml={parsedEmail.html} />
+          <EmailAttachments
+            attachments={parsedEmail.attachments as unknown as EmailAttachment[]}
+            emailHtml={parsedEmail.html}
+          />
         </Tabs.Content>
       </Tabs.Root>
     </>

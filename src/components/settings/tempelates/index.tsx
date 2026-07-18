@@ -31,7 +31,7 @@ import {
   useUpdateEmailTemplate,
   useEmailTemplate,
 } from '../../../hooks/useTempelate';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 
 export type FilterType = 'all' | 'private' | 'public';
@@ -112,7 +112,7 @@ const EmailTemplateManager = () => {
             body: formData.content,
             is_public: formData.type === 'public',
             meta_data: {
-              created_by: userDetails?.email || fullTemplate?.created_by,
+              created_by: userDetails?.email || fullTemplate?.created_by || '',
               updated_at: new Date().toISOString(),
               created_at: fullTemplate?.created_at ?? '',
             },

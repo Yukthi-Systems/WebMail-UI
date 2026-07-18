@@ -57,7 +57,9 @@ const isValidEmail = (email: string): boolean => {
   return emailRegex.test(email);
 };
 
-const Avatar = ({ name, email, size = 28 }: { name: string; email: string; size?: number }) => {
+// `size` is accepted (callers pass 18/30) but this always renders at a fixed 24 —
+// pre-existing, not fixed here, see CLAUDE.md.
+const Avatar = ({ name, email }: { name: string; email: string; size?: number }) => {
   return (
     <BIMIAvatar
       name={name}
@@ -450,7 +452,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
 
     useEffect(() => {
       if (inputValue.trim() && validationError) setValidationError(false);
-    }, [inputValue]);
+    }, [inputValue, validationError]);
 
     const checkAndAddEmail = async (emailInput: string) => {
       const trimmedInput = emailInput.trim();

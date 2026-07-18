@@ -23,7 +23,7 @@ export const InfoTooltip = () => {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as any)) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
         setVisible(false);
       }
     };

@@ -20,16 +20,6 @@ import { useEffect } from 'react';
 
 export type ComposeButtonStyle = 'default' | 'compact' | 'minimal';
 
-export const COMPOSE_BUTTON_OPTIONS: {
-  value: ComposeButtonStyle;
-  label: string;
-  description: string;
-}[] = [
-  { value: 'default', label: 'Default', description: 'Solid with shadow' },
-  { value: 'compact', label: 'Compact', description: 'Solid, no shadow' },
-  { value: 'minimal', label: 'Minimal', description: 'Ghost style' },
-];
-
 const variantConfig = {
   default: {
     expanded:

@@ -17,6 +17,26 @@
 
 import { decodeWords } from 'postal-mime';
 
+// Printable email/attachment objects carry whatever header keys the source
+// (IMAP fetch, postal-mime parse) provided, so both stay loosely typed.
+interface PrintableEmail {
+  Subject?: string;
+  From?: string;
+  To?: string;
+  Cc?: string;
+  Date?: string | number;
+  _messageId?: string;
+  [key: string]: unknown;
+}
+
+interface PrintableAttachment {
+  filename?: string;
+  size?: number;
+  contentId?: string;
+  content?: string;
+  mimeType?: string;
+}
+
 /** Escape HTML for safe display. */
 export function escapeHtml(text: string): string {
   const div = document.createElement('div');
@@ -40,14 +60,13 @@ function formatBytes(bytes: number): string {
 }
 
 /** Formats email header for printing. */
-function formatEmailHeader(email: any, attachments?: any[]): string {
-  const messageId =
-    email['Message-ID'] ||
+function formatEmailHeader(email: PrintableEmail, attachments?: PrintableAttachment[]): string {
+  const messageId = (email['Message-ID'] ||
     email._messageId ||
     email['Message-id'] ||
     email['Message-Id'] ||
     email['message-id'] ||
-    'N/A';
+    'N/A') as string;
 
   // Escape messageId to handle <> brackets safely
   const escapedMessageId = escapeHtml(messageId);
@@ -76,12 +95,12 @@ function formatEmailHeader(email: any, attachments?: any[]): string {
 
   return `
     <div class="email-header">
-      <h2>${decodeWords(email.Subject) || '(No Subject)'}</h2>
+      <h2>${decodeWords(email.Subject as string) || '(No Subject)'}</h2>
       <div class="email-meta">
-        <p><strong>From:</strong> ${getFullEmailAddress(email.From)}</p>
-        <p><strong>To:</strong> ${getFullEmailAddress(email.To)}</p>
+        <p><strong>From:</strong> ${getFullEmailAddress(email.From || '')}</p>
+        <p><strong>To:</strong> ${getFullEmailAddress(email.To || '')}</p>
         ${email.Cc ? `<p><strong>Cc:</strong> ${getFullEmailAddress(email.Cc)}</p>` : ''}
-        <p><strong>Date:</strong> ${new Date(email.Date).toLocaleString()}</p>
+        <p><strong>Date:</strong> ${new Date(email.Date as string).toLocaleString()}</p>
         <p><strong>Message-ID:</strong> <span style="font-family: monospace; font-size: 12px; word-break: break-all;">${escapedMessageId}</span></p>
       </div>
       ${attachmentsHtml}
@@ -90,7 +109,9 @@ function formatEmailHeader(email: any, attachments?: any[]): string {
 }
 
 /** Print email content with Safari compatibility. */
-export function printEmail(email: any, emailContent: string, attachments?: any[]) {
+export function printEmail(email: unknown, emailContent: string, attachments?: unknown[]) {
+  const printableEmail = email as PrintableEmail;
+  const printableAttachments = attachments as PrintableAttachment[] | undefined;
   const printStyles = `
     <style>
       * {
@@ -208,12 +229,12 @@ export function printEmail(email: any, emailContent: string, attachments?: any[]
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Print - ${decodeWords(email.Subject) || 'Email'}</title>
+        <title>Print - ${decodeWords(printableEmail.Subject as string) || 'Email'}</title>
         ${printStyles}
       </head>
       <body>
         <button class="print-button" onclick="window.print()">Print</button>
-        ${formatEmailHeader(email, attachments)}
+        ${formatEmailHeader(printableEmail, printableAttachments)}
         <div class="email-body">
           ${emailContent}
         </div>
@@ -250,7 +271,7 @@ export function printEmail(email: any, emailContent: string, attachments?: any[]
 }
 
 /** Replace cid: URLs with base64 data URLs for inline attachments. */
-function processCidAttachments(html: string, attachments: any[]): string {
+function processCidAttachments(html: string, attachments: PrintableAttachment[]): string {
   let processed = html;
   attachments.forEach((attachment) => {
     const filename = attachment.filename || '';
@@ -276,7 +297,9 @@ function processCidAttachments(html: string, attachments: any[]): string {
 }
 
 /** Open email in new window. */
-export function viewEmailInWindow(email: any, emailContent: string, attachments?: any[]) {
+export function viewEmailInWindow(email: unknown, emailContent: string, attachments?: unknown[]) {
+  const printableEmail = email as PrintableEmail;
+  const printableAttachments = attachments as PrintableAttachment[] | undefined;
   const windowStyles = `
     <style>
       * {
@@ -347,8 +370,8 @@ export function viewEmailInWindow(email: any, emailContent: string, attachments?
   `;
 
   const processedContent =
-    attachments && attachments.length > 0
-      ? processCidAttachments(emailContent, attachments)
+    printableAttachments && printableAttachments.length > 0
+      ? processCidAttachments(emailContent, printableAttachments)
       : emailContent;
 
   const htmlContent = `
@@ -357,12 +380,12 @@ export function viewEmailInWindow(email: any, emailContent: string, attachments?
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${decodeWords(email.Subject) || 'Email'}</title>
+        <title>${decodeWords(printableEmail.Subject as string) || 'Email'}</title>
         ${windowStyles}
       </head>
       <body>
         <div class="container">
-          ${formatEmailHeader(email)}
+          ${formatEmailHeader(printableEmail)}
           <div class="email-body">
             ${processedContent}
           </div>

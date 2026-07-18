@@ -22,7 +22,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import background from '../../assets/sign-in.svg';
 import { useNavigate } from '@tanstack/react-router';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { useState, useEffect, useRef } from 'react';
 import { userDetailsAtom } from '../../state/userDetails';
 import { useAtom } from 'jotai';
@@ -207,12 +207,12 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
         recaptcha_token: recaptchaToken,
       },
       {
-        onSuccess: (_response: any) => {
+        onSuccess: () => {
           setUserDetails({ email: data.email, domain });
           recaptchaRef.current?.reset();
           setRecaptchaToken(null);
         },
-        onError: (error: any) => {
+        onError: (error) => {
           setIsLoading(false);
 
           // Reset reCAPTCHA on error

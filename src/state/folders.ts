@@ -15,14 +15,39 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { atom } from 'jotai';
-
 import { atomWithStorage } from 'jotai/utils';
 
-export const folderQuotaAtom = atomWithStorage<any>('folderQuota', null, undefined, {
+// name/folder_name and other fields aren't consistently populated by every
+// caller — kept optional so this stays a true description of what's read
+// across the app rather than an aspirational one.
+export interface FolderDetail {
+  name: string;
+  folder_name: string;
+  delimiter?: string;
+  unread_count?: number;
+  flags?: string[];
+  default?: boolean;
+  path?: string;
+  order?: number;
+  status?: {
+    UIDVALIDITY: number;
+    MESSAGES: number;
+    UIDNEXT: number;
+  };
+}
+
+export interface FolderQuota {
+  total_kb: number;
+  total_mb: number;
+  used_kb: number;
+  used_mb: number;
+  used_percent: number;
+}
+
+export const folderQuotaAtom = atomWithStorage<FolderQuota | null>('folderQuota', null, undefined, {
   getOnInit: true,
 });
 
-export const folderDetailsAtom = atomWithStorage<any>('folderDetails', [], undefined, {
+export const folderDetailsAtom = atomWithStorage<FolderDetail[]>('folderDetails', [], undefined, {
   getOnInit: true,
 });

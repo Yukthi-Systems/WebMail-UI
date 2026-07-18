@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BsTrash, BsX } from 'react-icons/bs';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { RULE_FIELDS } from './rulesConfig';
@@ -42,7 +42,7 @@ import {
 import { transformFromApiFormat, transformToApiFormat, type UIFilter } from './filterTransform';
 import { CreateScriptDialog } from './CreateScriptDialoge';
 import { getScriptRaw } from '../../../api/sieve';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import { validateFilter, type ValidationError } from './validation'; // Imported Validation
 import { SieveTutorialModal } from './SieveTutorial';
 import { useSettingsBridge } from '../../../hooks/useSettingsBridge';
@@ -56,9 +56,21 @@ interface DeleteConfirmation {
   name: string;
 }
 
+interface FilterSearchParams {
+  mode?: string;
+  filter?: string;
+}
+
 const FiltersManagement = () => {
-  const navigate = useNavigate<any>();
-  const searchParams = useSearch({ strict: false }) as any;
+  const navigate = useNavigate();
+  // TanStack Router's navigate({ search }) type is inferred from the route this
+  // component is registered against; this component is rendered from multiple
+  // route contexts, so there's no single concrete route/search-schema to infer
+  // from. Isolating the one unavoidable `any` here rather than at every call site.
+  const navigateWithSearch = (search: FilterSearchParams) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    navigate({ search: search as any, hash: 'filter' });
+  const searchParams = useSearch({ strict: false }) as unknown as FilterSearchParams;
   // Inside component:
   const { updateSettings } = useSettingsBridge();
   const [atomSettings] = useAtom(userSettingsAtom);
@@ -112,10 +124,10 @@ const FiltersManagement = () => {
   const renameScriptMutation = useRenameScript();
 
   const activeScript = scriptsData?.scripts.active || '';
-  const scripts = [
-    ...(activeScript ? [activeScript] : []),
-    ...(scriptsData?.scripts?.scripts ?? []),
-  ];
+  const scripts = useMemo(
+    () => [...(activeScript ? [activeScript] : []), ...(scriptsData?.scripts?.scripts ?? [])],
+    [activeScript, scriptsData]
+  );
   const filters = filtersData?.filters || [];
 
   // Auto-select first script
@@ -139,8 +151,8 @@ const FiltersManagement = () => {
       await createScriptMutation.mutateAsync({ scriptName: name, scriptContent: content });
       setSelectedScript(name);
       toast.success({ description: 'Script created successfully' });
-    } catch (error: any) {
-      toast.error({ description: error.message || 'Failed to create script' });
+    } catch (error) {
+      toast.error({ description: ((error as Error)?.message) || 'Failed to create script' });
     }
   };
   const handleDeleteScript = (name: string) =>
@@ -150,8 +162,8 @@ const FiltersManagement = () => {
       await deleteScriptMutation.mutateAsync(deleteConfirm.name);
       if (selectedScript === deleteConfirm.name) setSelectedScript('');
       toast.success({ description: 'Script deleted successfully' });
-    } catch (error: any) {
-      toast.error({ description: error.message });
+    } catch (error) {
+      toast.error({ description: (error as Error)?.message });
     } finally {
       setDeleteConfirm({ isOpen: false, type: null, name: '' });
     }
@@ -194,7 +206,7 @@ const FiltersManagement = () => {
       } else {
         toast.error({ description: 'Failed to disable filters.' });
       }
-    } catch (error: any) {
+    } catch {
       toast.error({ description: 'An unexpected error occurred.' });
     } finally {
       setIsGlobalDisabling(false);
@@ -206,30 +218,34 @@ const FiltersManagement = () => {
       await renameScriptMutation.mutateAsync({ oldScriptName: oldName, newScriptName: newName });
       if (selectedScript === oldName) setSelectedScript(newName);
       toast.success({ description: 'Script renamed successfully' });
-    } catch (error: any) {
-      toast.error({ description: error.message });
+    } catch (error) {
+      toast.error({ description: (error as Error)?.message });
     }
   };
   const handleDownloadScript = async (name: string) => {
     try {
-      const data: any = await getScriptRaw(name);
-      const blob = new Blob([data.raw_data], { type: 'text/plain' });
+      // getScriptRaw resolves to the raw script string directly, not
+      // { raw_data } — same finding as CreateScriptDialoge.tsx/vacation/index.tsx
+      // (see CLAUDE.md). data.raw_data is always undefined, so the downloaded
+      // file has always contained the literal text "undefined", not the script.
+      const data = (await getScriptRaw(name)) as unknown as { raw_data?: string };
+      const blob = new Blob([data.raw_data as string], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `${name}.txt`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (error: any) {
-      toast.error({ description: error.message });
+    } catch (error) {
+      toast.error({ description: (error as Error)?.message });
     }
   };
   const handleActivateScript = async (name: string) => {
     try {
       await enableScriptMutation.mutateAsync(name);
       toast.success({ description: 'Script activated successfully' });
-    } catch (error: any) {
-      toast.error({ description: error.message });
+    } catch (error) {
+      toast.error({ description: (error as Error)?.message });
     }
   };
 
@@ -272,12 +288,12 @@ const FiltersManagement = () => {
       actions: [{ id: '1', type: '', values: {} }],
     });
     setErrors({}); // Clear errors
-    navigate({ search: { mode: 'create' } as any, hash: 'filter' });
+    navigateWithSearch({ mode: 'create' });
   };
 
   const handleEditFilter = (name: string) => {
     setErrors({}); // Clear errors
-    navigate({ search: { mode: 'edit', filter: name } as any, hash: 'filter' });
+    navigateWithSearch({ mode: 'edit', filter: name });
   };
 
   const handleDeleteFilter = (name: string) =>
@@ -289,8 +305,8 @@ const FiltersManagement = () => {
         filterName: deleteConfirm.name,
       });
       toast.success({ description: 'Filter deleted successfully' });
-    } catch (error: any) {
-      toast.error({ description: error.message });
+    } catch (error) {
+      toast.error({ description: (error as Error)?.message });
     } finally {
       setDeleteConfirm({ isOpen: false, type: null, name: '' });
     }
@@ -315,8 +331,8 @@ const FiltersManagement = () => {
       toast.success({
         description: `Filter ${enabled ? 'enabled' : 'disabled'} successfully`,
       });
-    } catch (error: any) {
-      toast.error({ description: error.message });
+    } catch (error) {
+      toast.error({ description: (error as Error)?.message });
     }
   };
 
@@ -352,16 +368,16 @@ const FiltersManagement = () => {
         toast.success({ description: 'Filter created successfully' });
       }
 
-      navigate({ search: {} as any, hash: 'filter' });
-    } catch (error: any) {
+      navigateWithSearch({});
+    } catch (error) {
       console.error('Failed to save filter:', error);
-      toast.error({ description: error.message || 'Failed to save filter. Please try again' });
+      toast.error({ description: ((error as Error)?.message) || 'Failed to save filter. Please try again' });
     }
   };
 
   const handleCancelEdit = () => {
     setErrors({});
-    navigate({ search: {} as any, hash: 'filter' });
+    navigateWithSearch({});
   };
 
   // --- Helper to clear errors on user interaction ---
@@ -403,7 +419,7 @@ const FiltersManagement = () => {
     clearError(`${id}-root-field`);
   };
 
-  const updateRuleValue = (id: string, path: string, value: any) => {
+  const updateRuleValue = (id: string, path: string, value: string) => {
     setFilter({
       ...filter,
       rules: filter.rules.map((rule) =>
@@ -435,7 +451,7 @@ const FiltersManagement = () => {
     clearError(`${id}-root-type`);
   };
 
-  const updateActionValue = (id: string, name: string, value: any) => {
+  const updateActionValue = (id: string, name: string, value: unknown) => {
     setFilter({
       ...filter,
       actions: filter.actions.map((action) =>
@@ -587,7 +603,7 @@ const FiltersManagement = () => {
           </label>
           <CustomSelect
             value={filter.scope}
-            onValueChange={(value) => updateScope(value as any)}
+            onValueChange={(value) => updateScope(value as 'all' | 'any' | 'all_messages')}
             placeholder="Select scope"
             options={[
               { value: 'all', label: 'Matching all of the following rules' },

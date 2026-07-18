@@ -17,22 +17,41 @@
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  type QueryCacheNotifyEvent,
+  type MutationCacheNotifyEvent,
+} from '@tanstack/react-query';
 import { Provider as JotaiProvider } from 'jotai';
 import '@radix-ui/themes/styles.css';
-import { Theme } from '@radix-ui/themes';
 import 'jotai-devtools/styles.css';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { routeTree } from './routeTree.gen';
 import { Toasts } from './components/ui/ToastComponent.tsx';
 import './index.css';
 import ThemeWrapper from './components/ui/ThemeWrapper.tsx';
 import { webmailStore } from './store.ts';
-import { resetLayoutCache } from './routes/_baselayout.tsx';
+import { resetLayoutCache } from './utils/resetLayoutCache.ts';
 import { NotFound } from './components/common/NotFound.tsx';
 import { MinimizedModalsProvider } from './components/common/MinimizedModalContext.tsx';
 import { getCompanySlugFromPath } from './utils/routeUtils.ts';
+
+// beforeinstallprompt isn't in the standard DOM lib yet.
+interface BeforeInstallPromptEvent extends Event {
+  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+  prompt(): Promise<void>;
+}
+
+declare global {
+  interface Window {
+    // Stashed here so components mounted after the event fires (e.g. the profile
+    // menu's install button) can still access it — see Profile.tsx.
+    _deferredPWAPrompt: BeforeInstallPromptEvent | null;
+    // Set by the inline bootstrap script in index.html.
+    hideGlobalLoader?: () => void;
+  }
+}
 
 const redirectToLogin = () => {
   const slug = getCompanySlugFromPath(window.location.pathname);
@@ -49,9 +68,14 @@ const queryClient = new QueryClient({
 });
 
 // ✅ Attach global error handler using event subscription
-queryClient.getQueryCache().subscribe((event: any) => {
-  if (event?.type === 'query' && event.query.state.status === 'error') {
-    const error: any = event.query.state.error;
+// NOTE: `event.type` is 'query' here, but QueryCacheNotifyEvent's real type union
+// never includes that value (it's 'added' | 'removed' | 'updated' | ...) — this
+// condition has therefore always evaluated false, and this handler has never
+// actually fired. Preserved exactly as-is (see CLAUDE.md) rather than "fixed",
+// since enabling it would be a real behavior change, not a lint fix.
+queryClient.getQueryCache().subscribe((event: QueryCacheNotifyEvent) => {
+  if ((event?.type as string) === 'query' && event.query.state.status === 'error') {
+    const error = event.query.state.error;
     const message = error?.message?.toLowerCase() || '';
 
     if (
@@ -67,9 +91,11 @@ queryClient.getQueryCache().subscribe((event: any) => {
   }
 });
 
-queryClient.getMutationCache().subscribe((event: any) => {
-  if (event?.type === 'mutation' && event.mutation.state.status === 'error') {
-    const error: any = event.mutation.state.error;
+// Same dead-condition situation as above ('mutation' is never a real event type) —
+// preserved as-is.
+queryClient.getMutationCache().subscribe((event: MutationCacheNotifyEvent) => {
+  if ((event?.type as string) === 'mutation' && event.mutation?.state.status === 'error') {
+    const error = event.mutation?.state.error;
     const message = error?.message?.toLowerCase() || '';
 
     if (
@@ -84,10 +110,10 @@ queryClient.getMutationCache().subscribe((event: any) => {
   }
 });
 
-(window as any)._deferredPWAPrompt = null;
+window._deferredPWAPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
-  (window as any)._deferredPWAPrompt = e;
+  window._deferredPWAPrompt = e as BeforeInstallPromptEvent;
 });
 
 const router = createRouter({ routeTree, defaultNotFoundComponent: () => <NotFound /> });

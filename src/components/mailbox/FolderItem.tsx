@@ -50,7 +50,6 @@ const FolderItem = ({
   px = '3',
   onDrop,
   isDragging = false,
-  discription = '',
   showCount = true,
   showLabel = true,
   leftSlot,
@@ -72,7 +71,7 @@ const FolderItem = ({
   const decodedDisplayName = useMemo(() => {
     try {
       return decodeURIComponent(displayName);
-    } catch (e) {
+    } catch {
       // Fallback to original if decoding fails (e.g. malformed URI)
       return displayName;
     }

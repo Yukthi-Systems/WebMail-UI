@@ -22,7 +22,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import background from '../../assets/sign-in.svg';
 import { useNavigate, Link } from '@tanstack/react-router'; // Added Link import
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { useState } from 'react';
 import { userDetailsAtom } from '../../state/userDetails';
 import { useAtom } from 'jotai';
@@ -30,7 +30,6 @@ import { MdEmail, MdMailOutline } from 'react-icons/md';
 import {
   FaEye,
   FaEyeSlash,
-  FaGlobe,
   FaShieldAlt,
   FaFileAlt,
   FaTable,
@@ -141,7 +140,7 @@ const Login = () => {
           navigate({ to: '/' });
           setUserDetails({ email: data.email, domain });
         },
-        onError: (error: any) => {
+        onError: (error) => {
           setIsLoading(false);
           toast.error({
             description: error.message || 'Failed to submit form. Please try again.',

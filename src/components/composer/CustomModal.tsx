@@ -19,7 +19,7 @@ import { useEffect, useRef, useState, useId } from 'react';
 import { FaXmark, FaExpand, FaCompress, FaMinus } from 'react-icons/fa6';
 import { Button } from '@radix-ui/themes';
 import { MdRestartAlt } from 'react-icons/md';
-import { useMinimizedModals } from '../common/MinimizedModalContext';
+import { useMinimizedModals } from '../../hooks/useMinimizedModals';
 import { useIsMobile } from '../../hooks/use-mobile';
 
 interface CustomModalProps {
@@ -80,7 +80,7 @@ const CustomModal = ({
       unregister(modalId);
     }
     return () => unregister(modalId);
-  }, [isMinimized, isOpen, title]);
+  }, [isMinimized, isOpen, title, modalId, onClose, register, unregister]);
 
   useEffect(() => {
     if (isFullView) {

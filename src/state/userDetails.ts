@@ -17,6 +17,12 @@
 
 import { atomWithStorage } from 'jotai/utils';
 
-export const userDetailsAtom = atomWithStorage<any>('userDetails', null, undefined, {
+export interface UserDetails {
+  email?: string;
+  domain?: string;
+  [key: string]: unknown;
+}
+
+export const userDetailsAtom = atomWithStorage<UserDetails | null>('userDetails', null, undefined, {
   getOnInit: true,
 });

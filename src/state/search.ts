@@ -17,6 +17,7 @@
 
 // src/state/search.ts
 import { atom } from 'jotai';
+import type { SimplifiedEmail } from '../utils/email';
 
 export interface SearchState {
   isActive: boolean;
@@ -36,7 +37,7 @@ export interface SearchState {
   };
   // Formatted results that EmailList expects
   results: {
-    emails: any[];
+    emails: SimplifiedEmail[];
     total_count: number;
     total_pages: number;
   } | null;

@@ -15,22 +15,14 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { Extension } from '@tiptap/core';
-import Suggestion from '@tiptap/suggestion';
+import { Extension, type Editor, type Range } from '@tiptap/core';
+import Suggestion, { type SuggestionProps, type SuggestionKeyDownProps } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
 import { ReactRenderer } from '@tiptap/react';
 import tippy, { type Instance } from 'tippy.js';
 import React from 'react';
-import { SlashCommandList, type CommandItem } from './SlashCommandList';
-import {
-  FaHeading,
-  FaListUl,
-  FaListOl,
-  FaTable,
-  FaImage,
-  FaQuoteRight,
-  FaCode,
-} from 'react-icons/fa6';
+import { SlashCommandList, type CommandItem, type SlashCommandListRef } from './SlashCommandList';
+import { FaListUl, FaListOl, FaTable } from 'react-icons/fa6';
 
 const getSuggestionItems = ({ query }: { query: string }): CommandItem[] => {
   const items: CommandItem[] = [
@@ -94,7 +86,7 @@ export const SlashCommands = Extension.create({
     return {
       suggestion: {
         char: '/',
-        command: ({ editor, range, props }: any) => {
+        command: ({ editor, range, props }: { editor: Editor; range: Range; props: CommandItem }) => {
           // Execute the item's command
           props.command({ editor, range });
         },
@@ -111,11 +103,11 @@ export const SlashCommands = Extension.create({
         command: this.options.suggestion.command,
         items: getSuggestionItems,
         render: () => {
-          let component: ReactRenderer<any>;
+          let component: ReactRenderer<SlashCommandListRef>;
           let popup: Instance[];
 
           return {
-            onStart: (props: any) => {
+            onStart: (props: SuggestionProps<CommandItem>) => {
               component = new ReactRenderer(SlashCommandList, {
                 props,
                 editor: props.editor,
@@ -126,7 +118,7 @@ export const SlashCommands = Extension.create({
               }
 
               popup = tippy('body', {
-                getReferenceClientRect: props.clientRect,
+                getReferenceClientRect: props.clientRect as () => DOMRect,
                 appendTo: () => document.body,
                 content: component.element,
                 showOnCreate: true,
@@ -136,7 +128,7 @@ export const SlashCommands = Extension.create({
               });
             },
 
-            onUpdate(props: any) {
+            onUpdate(props: SuggestionProps<CommandItem>) {
               component.updateProps(props);
 
               if (!props.clientRect) {
@@ -144,17 +136,17 @@ export const SlashCommands = Extension.create({
               }
 
               popup[0].setProps({
-                getReferenceClientRect: props.clientRect,
+                getReferenceClientRect: props.clientRect as () => DOMRect,
               });
             },
 
-            onKeyDown(props: any) {
+            onKeyDown(props: SuggestionKeyDownProps) {
               if (props.event.key === 'Escape') {
                 popup[0].hide();
                 return true;
               }
 
-              return component.ref?.onKeyDown(props);
+              return component.ref?.onKeyDown({ event: props.event }) ?? false;
             },
 
             onExit() {

@@ -74,7 +74,7 @@ const SPINNER_STYLES = `
 
 const BIMIAvatar = forwardRef<HTMLDivElement | HTMLImageElement, BIMIAvatarProps>(
   ({ email, name, size = 40, className = '', isLoading = false }, ref) => {
-    const { logoUrl, loading, error } = useBIMI(email);
+    const { logoUrl, loading } = useBIMI(email);
     const [imageError, setImageError] = useState(false);
 
     const getInitials = () => {

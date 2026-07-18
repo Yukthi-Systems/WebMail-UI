@@ -22,7 +22,6 @@ import {
   FaFileLines,
   FaTriangleExclamation,
   FaTrash,
-  FaPen,
   FaPlus,
   FaRotateRight,
 } from 'react-icons/fa6';
@@ -35,10 +34,9 @@ import {
   useDeleteEmailFolder,
   useEditEmailFolder,
 } from '../../hooks/useEmails';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFoldersFullPath } from '../../hooks/useFolders';
-import { viewContactModel } from '../../state/contact';
 import { sidebarCollapsedAtom, sidebarHoveredAtom, sidebarPinnedAtom } from '../../state/sidebar';
 import { buildFolderTree, type FolderNode } from '../../utils/folderTree';
 import { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
@@ -54,11 +52,30 @@ interface FoldersProps {
   isDragging?: boolean;
 }
 
+// The initial value (default/order) and the value computed once folderData
+// arrives (unread_count/visible) are different shapes — all fields optional
+// to fit both.
+interface DefaultFolderState {
+  name: string;
+  path: string;
+  default?: boolean;
+  order?: number;
+  unread_count?: number;
+  visible?: boolean;
+}
+
+interface DefaultFoldersMap {
+  inbox: DefaultFolderState;
+  drafts: DefaultFolderState;
+  sent: DefaultFolderState;
+  spam: DefaultFolderState;
+  trash: DefaultFolderState;
+}
+
 const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
   ({ onFolderClick, onDropOnFolder, isDragging = false }, ref) => {
     const setOpenComposer = useSetAtom(composerOpenAtom);
     const setOpen = useSetAtom(createFolderOpenAtom);
-    const setViewContact = useSetAtom(viewContactModel);
     const toast = useToast();
     const queryClient = useQueryClient();
 
@@ -80,12 +97,12 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
     // UI State
     const [isMobile, setIsMobile] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const mouseLeaveTimeoutRef = useRef<any>(null);
+    const mouseLeaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isHoveringCollapsed, setIsHoveringCollapsed] = useState(false);
 
     const { drafts, inbox, sent, spam, trash } = userSettings?.folders ?? {};
-    const hoverExpandTimerRef = useRef<any>(null);
-    const [defaultFolders, setDefaultFolders] = useState<any>({
+    const hoverExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [defaultFolders, setDefaultFolders] = useState<DefaultFoldersMap>({
       inbox: { name: 'Inbox', path: 'INBOX', default: true, order: 0 },
       drafts: { name: 'Drafts', path: 'Drafts', default: true, order: 2 },
       sent: { name: 'Sent', path: 'Sent', default: true, order: 2 },
@@ -233,7 +250,7 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
         };
 
         const resolveFolderWithFlag = (flag: string, preferredName: string) => {
-          const withFlag = folders.filter((f) => f.flags.includes(flag));
+          const withFlag = folders.filter((f) => f.flags?.includes(flag));
           if (withFlag.length === 1) return withFlag[0];
           if (withFlag.length > 1) {
             return withFlag.find((f) => f.folder_name === preferredName) || withFlag[0];
@@ -288,7 +305,7 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
 
         setDefaultFolders(updatedDefaults);
 
-        const defaultPaths = Object.values(updatedDefaults).map((d: any) => d.path);
+        const defaultPaths = Object.values(updatedDefaults).map((d) => d.path);
 
         const visibleFolders = folders.filter((f) => {
           return isFolderVisible(f.folder_name, f.delimiter);
@@ -327,7 +344,7 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
             toast.success({ description: 'Folder deleted.' });
             queryClient.invalidateQueries({ queryKey: ['foldersFullPath'] });
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({ description: error.message || 'Failed to delete folder.' });
           },
@@ -336,7 +353,7 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
     };
 
     const handleEdit = (oldPath: string, newName: string) => {
-      const delimiter = folderData.find((f: any) => f.folder_name === oldPath)?.delimiter || '.';
+      const delimiter = folderData.find((f) => f.folder_name === oldPath)?.delimiter || '.';
       const parentPath = oldPath.substring(0, oldPath.lastIndexOf(delimiter));
       const newPath = parentPath ? `${parentPath}${delimiter}${newName}` : newName;
 
@@ -349,7 +366,7 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
             toast.success({ description: 'Folder renamed.' });
             queryClient.invalidateQueries({ queryKey: ['foldersFullPath'] });
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({ description: error.message || 'Failed to rename folder.' });
           },
@@ -358,7 +375,7 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
     };
 
     const handleCreateFolder = (parentPath: string, newFolderName: string) => {
-      const delimiter = folderData.find((f: any) => f.folder_name === parentPath)?.delimiter || '.';
+      const delimiter = folderData.find((f) => f.folder_name === parentPath)?.delimiter || '.';
       const fullPath = `${parentPath}${delimiter}${newFolderName}`;
 
       const loadingId = toast.loading({ description: 'Creating folder…' });
@@ -370,7 +387,7 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
             toast.success({ description: 'Folder created.' });
             queryClient.invalidateQueries({ queryKey: ['foldersFullPath'] });
           },
-          onError: (error: any) => {
+          onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({ description: error.message || 'Failed to create folder.' });
           },

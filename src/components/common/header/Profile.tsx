@@ -15,13 +15,11 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react';
-import { FaHardDrive, FaPlus } from 'react-icons/fa6';
+import React, { useState } from 'react';
 import BIMIAvatar from '../BimiAvatar';
 import { useLogout } from '../../../hooks/useLogout';
 import { useNavigate } from '@tanstack/react-router';
 import { useAtomValue } from 'jotai';
-import { folderQuotaAtom } from '../../../state/folders';
 import { FaSignOutAlt, FaTimes, FaMobileAlt, FaShareAlt } from 'react-icons/fa';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { userSettingsAtom } from '../../../state/settings';
@@ -38,24 +36,23 @@ interface ProfileDropdownProps {
 const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose }) => {
   const logoutMutation = useLogout();
   const navigate = useNavigate();
-  const folderQuota = useAtomValue(folderQuotaAtom);
   const userDetails = useAtomValue(userDetailsAtom);
   const userSettings = useAtomValue(userSettingsAtom);
   const location = useLocation();
   const slug = getCompanySlugFromPath(location.pathname);
 
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(
-    () => (window as any)._deferredPWAPrompt ?? null
+  const [deferredPrompt, setDeferredPrompt] = useState(
+    () => window._deferredPWAPrompt ?? null
   );
 
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isInStandaloneMode =
     window.matchMedia('(display-mode: standalone)').matches ||
-    (window.navigator as any).standalone === true;
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
   const showIOSHint = isIOS && !isInStandaloneMode;
 
   const currentUser = {
-    email: userDetails?.email,
+    email: userDetails?.email || '',
     name: userSettings?.general?.from_address?.name || '',
   };
 
@@ -74,13 +71,21 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose }) =>
       onSuccess: () => {
         webmailStore.set(csrfTokenAtom, null);
         localStorage.clear();
-        slug ? navigate({ to: '/$slug', params: { slug } }) : navigate({ to: '/login' });
+        if (slug) {
+          navigate({ to: '/$slug', params: { slug } });
+        } else {
+          navigate({ to: '/login' });
+        }
         onClose();
       },
       onError: () => {
         webmailStore.set(csrfTokenAtom, null);
         localStorage.clear();
-        slug ? navigate({ to: '/$slug', params: { slug } }) : navigate({ to: '/login' });
+        if (slug) {
+          navigate({ to: '/$slug', params: { slug } });
+        } else {
+          navigate({ to: '/login' });
+        }
         onClose();
       },
     });

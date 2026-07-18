@@ -25,7 +25,6 @@ import {
   FiAlertCircle,
   FiCheckCircle,
   FiDownload,
-  FiLoader,
   FiInfo,
   FiChevronDown,
   FiChevronUp,
@@ -166,8 +165,9 @@ function parseFile(file: File): Promise<{ rows: ParsedRow[]; missingHeaders: str
 
         const rows = normalised.map((row, i) => validateRow(row, i + 2)); // +2 for header + 1-based
         resolve({ rows, missingHeaders: [] });
-      } catch (err: any) {
-        reject(new Error(`Failed to parse file: ${err.message}`));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        reject(new Error(`Failed to parse file: ${message}`));
       }
     };
 
@@ -227,23 +227,6 @@ function ProgressRing({ pct }: { pct: number }) {
   );
 }
 
-function ValidationBadge({ count, type }: { count: number; type: 'error' | 'ok' }) {
-  if (type === 'error') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--red-3)] text-[var(--red-11)]">
-        <FiAlertCircle className="w-3 h-3" />
-        {count} invalid
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--green-3)] text-[var(--green-11)]">
-      <FiCheckCircle className="w-3 h-3" />
-      {count} valid
-    </span>
-  );
-}
-
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 
 interface Props {
@@ -294,8 +277,8 @@ export default function DomainBulkImportModal({ isOpen, onClose }: Props) {
       }
       setRows(parsed);
       setPhase('parsed');
-    } catch (err: any) {
-      setParseError(err.message);
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : String(err));
     }
   }, []);
 
@@ -327,7 +310,7 @@ export default function DomainBulkImportModal({ isOpen, onClose }: Props) {
       setCurrentDomain(row.domain);
 
       try {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           createMutation.mutate(
             {
               domain: row.domain,
@@ -339,13 +322,13 @@ export default function DomainBulkImportModal({ isOpen, onClose }: Props) {
               sieve_port: row.sieve_port,
               is_active: row.is_active,
               is_v2_user: row.is_v2_user,
-            } as any,
+            },
             {
               onSuccess: () => {
                 successes++;
                 resolve();
               },
-              onError: (err: any) => {
+              onError: (err) => {
                 errors.push({
                   domain: row.domain,
                   rowIndex: row._rowIndex,

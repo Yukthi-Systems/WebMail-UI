@@ -28,6 +28,7 @@ import { MAX_FOLDER_DEPTH } from '../../constants/constant';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { sortFoldersAscending } from '../../utils/folderUtils';
+import { folderSchema } from './folderSchema';
 
 const cleanFolderName = (folderName: string): string => {
   return folderName.replace(/^"(.+)"$/, '$1').replace(/\\"/g, '"');
@@ -45,18 +46,6 @@ interface CustomFolderProps {
   onDrop?: (folderPath: string) => void;
   isDragging?: boolean;
 }
-
-export const folderSchema = yup.object({
-  newFolderName: yup
-    .string()
-    .required('Folder name is required')
-    .min(1, 'Name is too short')
-    .max(30, 'Name is too long')
-    .matches(
-      /^[a-zA-Z0-9](?:[a-zA-Z0-9\s-_]*[a-zA-Z0-9])?$/,
-      'Only letters, numbers, spaces, hyphens, and underscores are allowed. Cannot start or end with a space/symbol.'
-    ),
-});
 
 type FolderFormData = yup.InferType<typeof folderSchema>;
 

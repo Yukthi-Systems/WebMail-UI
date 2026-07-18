@@ -27,12 +27,13 @@ import {
   type Domain,
   type CreateDomainData,
   type UpdateDomainData,
+  type DomainListResponse,
 } from '../api/admin-domain';
-import { useToast } from '../components/ui/ToastComponent';
+import { useToast } from './useToast';
 
 export function useListDomains(page = 1, size = 20, query?: string) {
   const apiKey = useAtomValue(apiKeyAtom);
-  return useQuery<any, Error>({
+  return useQuery<DomainListResponse, Error>({
     queryKey: ['domains', page, size, query, apiKey],
     queryFn: () => getDomainList(page, size, query),
     placeholderData: keepPreviousData,
@@ -44,11 +45,13 @@ export function useListDomains(page = 1, size = 20, query?: string) {
 }
 
 export function useGetDomain(domain?: string) {
-  return useQuery<any, Error>({
+  // getDomain()'s declared return type (Domain) doesn't match its actual response
+  // shape ({ data: Domain }) — pre-existing API-layer mismatch, preserved via cast.
+  return useQuery<{ data: Domain }, Error>({
     queryKey: ['domain', domain],
     queryFn: () => {
       if (!domain) throw new Error('Domain name is required');
-      return getDomain(domain);
+      return getDomain(domain) as unknown as Promise<{ data: Domain }>;
     },
     enabled: !!domain,
     staleTime: 5 * 60 * 1000,
@@ -97,7 +100,7 @@ export function useDeleteDomain() {
     onSuccess: (_data, domain) => {
       toast.success({ description: 'Domain deleted successfully' });
       // Update all cached domain list pages — remove the deleted entry and decrement count
-      queryClient.setQueriesData<any>({ queryKey: ['domains'] }, (old: any) => {
+      queryClient.setQueriesData<DomainListResponse>({ queryKey: ['domains'] }, (old) => {
         if (!old?.data) return old;
         return {
           ...old,

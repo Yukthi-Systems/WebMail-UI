@@ -17,6 +17,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { FaChevronDown, FaChevronRight, FaFolder, FaFolderOpen } from 'react-icons/fa6';
+import type { FolderDetail } from '../../state/folders';
 
 interface FolderNode {
   name: string;
@@ -26,7 +27,7 @@ interface FolderNode {
 }
 
 interface NestedFolderSelectProps {
-  folders: any[]; // Array from folderDetailsAtom
+  folders: FolderDetail[];
   value: string;
   onChange: (path: string) => void;
   placeholder?: string;
@@ -34,7 +35,7 @@ interface NestedFolderSelectProps {
 }
 
 // Build folder tree structure
-const buildFolderTree = (folders: any[]): FolderNode[] => {
+const buildFolderTree = (folders: FolderDetail[]): FolderNode[] => {
   const folderMap = new Map<string, FolderNode>();
   const rootNodes: FolderNode[] = [];
 

@@ -24,9 +24,9 @@ import { FiArrowLeft } from 'react-icons/fi';
 import { Flex, Switch, Text } from '@radix-ui/themes';
 import { Controller } from 'react-hook-form';
 import { useCreateDomain, useUpdateDomain, useGetDomain } from '../../../hooks/useAdminDomain';
-import { useToast } from '../../ui/ToastComponent';
 import { apiKeyAtom } from '../../../state/auth';
 import { useAtomValue } from 'jotai';
+import type { CreateDomainData } from '../../../api/admin-domain';
 
 const schema = yup.object().shape({
   domain: yup.string().required('Domain name is required'),
@@ -66,7 +66,6 @@ function DomainForm() {
   const { data: domainData, isLoading } = useGetDomain(params.domain);
   const createMutation = useCreateDomain();
   const updateMutation = useUpdateDomain();
-  const toast = useToast();
 
   const {
     register,
@@ -116,7 +115,7 @@ function DomainForm() {
         }
       );
     } else {
-      createMutation.mutate(data as any, {
+      createMutation.mutate(data as unknown as CreateDomainData, {
         onSuccess: () => {
           navigate({ to: '/1219/admin/domain' });
         },
@@ -382,7 +381,15 @@ function DomainForm() {
   );
 }
 
-const FormField = ({ label, error, children }: any) => (
+const FormField = ({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) => (
   <div className="space-y-2">
     <label className="block text-sm font-medium text-[var(--gray-12)]">
       {label} <span className="text-[var(--red-9)]">*</span>

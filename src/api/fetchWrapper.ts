@@ -47,7 +47,12 @@ export const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
   return res;
 };
 
-export const fetchListWithAuth = async (url: string, options: any) => {
+export const fetchListWithAuth = async (
+  url: string,
+  // `timeout` isn't a real fetch() option — browsers silently ignore it — but a
+  // caller passes it, so it's kept in the type to avoid changing behavior here.
+  options: RequestInit & { timeout?: number } = {}
+) => {
   const res = await fetch(url, {
     credentials: 'include',
     ...options,

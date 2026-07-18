@@ -24,7 +24,7 @@ import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useCreateEmailFolder } from '../../hooks/useEmails';
-import { useToast } from '../ui/ToastComponent';
+import { useToast } from '../../hooks/useToast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react'; // Added useEffect
 
@@ -64,7 +64,7 @@ function CreateFolder() {
           setOpen(false);
           methods.reset();
         },
-        onError: (error: any) => {
+        onError: (error) => {
           toast.dismiss(loadingId);
           toast.error({
             description: error.message || 'Failed to create folder. Please try again.',

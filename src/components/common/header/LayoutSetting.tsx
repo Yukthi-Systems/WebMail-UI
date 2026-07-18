@@ -21,8 +21,9 @@ import { BsLayoutSplit, BsLayoutSidebar, BsSquare, BsWindow } from 'react-icons/
 import { HiMiniArrowsPointingIn } from 'react-icons/hi2';
 import { useAtom, useSetAtom } from 'jotai';
 import { userSettingsAtom } from '../../../state/settings';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import { FaChevronDown, FaCheck } from 'react-icons/fa6';
+import type { IconType } from 'react-icons';
 import { useSettingsBridge } from '../../../hooks/useSettingsBridge';
 import { leftNavVisibleAtom } from '../../../state/leftNav';
 import { sidebarCollapsedAtom, sidebarPinnedAtom } from '../../../state/sidebar';
@@ -33,7 +34,7 @@ export type LayoutType = 'side-by-side' | 'vertical-split' | 'compact' | 'immers
 interface LayoutOption {
   value: LayoutType;
   label: string;
-  icon: any;
+  icon: IconType;
   description: string;
 }
 
@@ -137,7 +138,7 @@ const LayoutSelector = () => {
         description: `Layout changed to ${LAYOUT_OPTIONS.find((l) => l.value === newLayout)?.label}`,
         duration: 1500,
       });
-    } catch (err) {
+    } catch {
       toast.error({
         description: 'Failed to update layout preference',
       });

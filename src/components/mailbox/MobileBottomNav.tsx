@@ -65,7 +65,7 @@ const MobileBottomNav = ({ onFolderClick }: MobileBottomNavProps) => {
   // Get unread counts
   const getUnreadCount = (folderName: string) => {
     if (!folderData) return 0;
-    const folder = folderData.find((f: any) => f.folder_name === folderName);
+    const folder = folderData.find((f) => f.folder_name === folderName);
     return folder?.unread_count || 0;
   };
 

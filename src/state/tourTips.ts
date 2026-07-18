@@ -16,6 +16,7 @@
  */
 
 // src/state/tourTips.ts
+import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 
 export interface TourTipState {
@@ -26,3 +27,6 @@ export interface TourTipState {
 }
 
 export const tourTipsAtom = atomWithStorage<TourTipState>('tour_tips', {});
+
+// Tracks which tooltip is currently active, so only one auto-shows at a time.
+export const activeTourTipAtom = atom<string | null>(null);

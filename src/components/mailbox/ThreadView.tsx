@@ -21,13 +21,13 @@ import { FaEnvelope, FaTimes } from 'react-icons/fa';
 import { BiRefresh } from 'react-icons/bi';
 import ThreadEmailCard from './ThreadEmailCard';
 import ThreadLoadingState from './ThreadLoadingState';
-import { LuMessageCircleWarning } from 'react-icons/lu';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../state/settings';
 import { useMemo } from 'react';
+import type { EmailLike } from '../../utils/emailThreading';
 
 interface ThreadViewProps {
-  listofThreadEmails: any[];
+  listofThreadEmails: EmailLike[];
   messageId: string;
   folderPath?: string;
   date: string;
@@ -35,11 +35,11 @@ interface ThreadViewProps {
   splitView?: boolean;
   onBack?: () => void;
   formatUserDateNice: (date: string) => string;
-  onReply?: (email: any) => void;
-  onForward?: (email: any) => void;
-  onForwardAsAttachment?: (email: any, rawContent: string) => void;
-  onEditAsNew?: (email: any) => void;
-  onReplyAll?: (email: any) => void;
+  onReply?: (email: EmailLike) => void;
+  onForward?: (email: EmailLike) => void;
+  onForwardAsAttachment?: (email: EmailLike, rawContent: string) => void;
+  onEditAsNew?: (email: EmailLike) => void;
+  onReplyAll?: (email: EmailLike) => void;
   handleSingleEmailDelete?: (emailId: string) => void;
   isLoadingInitial: boolean;
   FilteredListLength?: (emailId: string) => void;
@@ -76,6 +76,21 @@ export const ThreadView = ({
   const userSettings = useAtomValue(userSettingsAtom);
   const sortOrder = userSettings?.email?.thread_sort_order || 'desc';
 
+  // Must run unconditionally (rules-of-hooks) — moved above the isLoadingInitial
+  // early return below, which previously made this hook call conditional.
+  const sortedEmails = useMemo(() => {
+    return [...listofThreadEmails].sort((a, b) => {
+      const timeA = new Date(a.Date as string).getTime() || 0;
+      const timeB = new Date(b.Date as string).getTime() || 0;
+
+      if (sortOrder === 'desc') {
+        return timeB - timeA;
+      } else {
+        return timeA - timeB;
+      }
+    });
+  }, [listofThreadEmails, sortOrder]);
+
   if (isLoadingInitial) {
     return (
       <div className="h-full flex flex-col">
@@ -93,19 +108,6 @@ export const ThreadView = ({
       </div>
     );
   }
-
-  const sortedEmails = useMemo(() => {
-    return [...listofThreadEmails].sort((a, b) => {
-      const timeA = new Date(a.Date).getTime() || 0;
-      const timeB = new Date(b.Date).getTime() || 0;
-
-      if (sortOrder === 'desc') {
-        return timeB - timeA;
-      } else {
-        return timeA - timeB;
-      }
-    });
-  }, [listofThreadEmails, sortOrder]);
 
   return (
     <div className="h-full flex flex-col">
@@ -125,14 +127,16 @@ export const ThreadView = ({
           <NoMessagesFound />
         ) : (
           <div className="w-full mx-auto">
-            {sortedEmails.map((threadEmail: any, index: number) => (
+            {sortedEmails.map((threadEmail, index: number) => (
               <div key={`${threadEmail.id}-${threadEmail.folderPath}`}>
                 <ThreadEmailCard
                   threadEmail={threadEmail}
                   folderPath={threadEmail.folderPath || folderPath || ''}
                   isCurrentEmail={threadEmail.id === messageId}
                   onContentLoaded={onContentLoaded}
-                  foundedIn={threadEmail.folderPath !== folderPath ? threadEmail.folderPath : ''}
+                  foundedIn={
+                    threadEmail.folderPath !== folderPath ? threadEmail.folderPath || '' : ''
+                  }
                   onReply={onReply}
                   onForward={onForward}
                   onForwardAsAttachment={onForwardAsAttachment}
@@ -169,7 +173,7 @@ const ThreadHeader = ({
   isRefetching,
   onRefresh,
 }: {
-  listofThreadEmails: any[];
+  listofThreadEmails: EmailLike[];
   date: string;
   formatUserDateNice: (date: string) => string;
   splitView?: boolean;

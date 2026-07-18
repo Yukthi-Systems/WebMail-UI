@@ -19,6 +19,30 @@
 
 import { getMessageId } from './emailUtils';
 
+// Raw email/thread objects flowing through this module carry whatever header
+// keys the source (IMAP fetch, postal-mime parse, etc.) provided, plus the
+// 'Thread-*' bookkeeping fields this module attaches — hence the index signature.
+export interface EmailLike {
+  id?: string | number;
+  Date?: string;
+  FLAGS?: string[];
+  Subject?: string;
+  References?: string;
+  'In-Reply-To'?: string;
+  folderPath?: string;
+  [key: string]: unknown;
+}
+
+export interface ThreadedEmailLike extends EmailLike {
+  'Thread-View'?: boolean;
+  'Thread-Reference'?: string[];
+  'Thread-Count'?: number;
+  'Inbox-Visible'?: boolean;
+  'Thread-Latest'?: string;
+  'Thread-Position'?: string;
+  'Thread-HasUnread'?: boolean;
+}
+
 export const normalizeId = (id = '') => id.replace(/[<>]/g, '').trim();
 
 export const extractIds = (value = ''): string[] => {
@@ -34,17 +58,17 @@ export const getCleanSubject = (subject = ''): string => {
     .toLowerCase();
 };
 
-export const getEmailDate = (email: any): number => {
+export const getEmailDate = (email: EmailLike | undefined): number => {
   try {
-    return new Date(email.Date || 0).getTime();
+    return new Date(email?.Date || 0).getTime();
   } catch {
     return 0;
   }
 };
 
 // Helper to build thread connections
-const buildThreadConnections = (emails: any[]) => {
-  const emailById = new Map<string, any>();
+const buildThreadConnections = (emails: EmailLike[]) => {
+  const emailById = new Map<string, EmailLike>();
   const emailThreadMap = new Map<string, Set<string>>();
 
   // Build message ID index
@@ -61,7 +85,7 @@ const buildThreadConnections = (emails: any[]) => {
     if (!messageId) return;
 
     const references = extractIds(email['References']);
-    const inReplyTo = normalizeId(email['In-Reply-To']);
+    const inReplyTo = normalizeId(email['In-Reply-To'] as string);
     const allReferences = [...references];
     if (inReplyTo) allReferences.push(inReplyTo);
 
@@ -86,7 +110,7 @@ const buildThreadConnections = (emails: any[]) => {
 const findThreadRoot = (
   messageId: string,
   emailThreadMap: Map<string, Set<string>>,
-  emailById: Map<string, any>
+  emailById: Map<string, EmailLike>
 ): string => {
   const visited = new Set<string>();
   let current = messageId;
@@ -122,8 +146,8 @@ const findThreadRoot = (
 
 // Group messages into threads
 const groupMessagesIntoThreads = (
-  emails: any[],
-  emailById: Map<string, any>,
+  emails: EmailLike[],
+  emailById: Map<string, EmailLike>,
   emailThreadMap: Map<string, Set<string>>
 ) => {
   const threadGroups = new Map<string, Set<string>>();
@@ -145,7 +169,10 @@ const groupMessagesIntoThreads = (
 };
 
 // Prepare thread info
-const prepareThreadInfo = (threadGroups: Map<string, Set<string>>, emailById: Map<string, any>) => {
+const prepareThreadInfo = (
+  threadGroups: Map<string, Set<string>>,
+  emailById: Map<string, EmailLike>
+) => {
   const threadInfo = new Map<
     string,
     {
@@ -191,9 +218,10 @@ const prepareThreadInfo = (threadGroups: Map<string, Set<string>>, emailById: Ma
 };
 
 // Main threading function
-export const applyThreading = (apiResponse: any): any[] => {
-  const emails = apiResponse.emails || apiResponse;
-  if (!Array.isArray(emails)) return [];
+export const applyThreading = (apiResponse: unknown): ThreadedEmailLike[] => {
+  const emailsRaw = (apiResponse as { emails?: unknown })?.emails ?? apiResponse;
+  if (!Array.isArray(emailsRaw)) return [];
+  const emails = emailsRaw as EmailLike[];
 
   // Build thread connections
   const { emailById, emailThreadMap } = buildThreadConnections(emails);
@@ -252,7 +280,7 @@ export const applyThreading = (apiResponse: any): any[] => {
 };
 
 // Helper functions for filtering
-export const getFilteredThreadedList = (threadedEmails: any[]): any[] => {
+export const getFilteredThreadedList = (threadedEmails: ThreadedEmailLike[]): ThreadedEmailLike[] => {
   return threadedEmails
     .filter((email) => email['Inbox-Visible'] === true)
     .map((email) => ({
@@ -267,7 +295,7 @@ export const getFilteredThreadedList = (threadedEmails: any[]): any[] => {
     });
 };
 
-export const getListOfEmail = (threadedEmails: any[]): any[] => {
+export const getListOfEmail = (threadedEmails: EmailLike[]): EmailLike[] => {
   return (
     threadedEmails.sort((a, b) => {
       const dateA = new Date(a.Date || 0).getTime();

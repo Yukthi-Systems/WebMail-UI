@@ -37,7 +37,6 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   filters,
   setFilters,
   onSearch,
-  onClose,
   onReset,
 }) => {
   const sizeOperatorOptions = [
@@ -89,7 +88,9 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
         <div className="flex gap-2">
           <CustomSelect
             value={filters.sizeOperator}
-            onChange={(val) => setFilters((prev) => ({ ...prev, sizeOperator: val as any }))}
+            onChange={(val) =>
+              setFilters((prev) => ({ ...prev, sizeOperator: val as 'greater' | 'less' }))
+            }
             options={sizeOperatorOptions}
             placeholder="Op"
             className="flex-1"
@@ -104,7 +105,9 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           />
           <CustomSelect
             value={filters.sizeUnit}
-            onChange={(val) => setFilters((prev) => ({ ...prev, sizeUnit: val as any }))}
+            onChange={(val) =>
+              setFilters((prev) => ({ ...prev, sizeUnit: val as 'KB' | 'MB' | 'GB' }))
+            }
             options={sizeUnitOptions}
             placeholder="Unit"
             className="w-16"

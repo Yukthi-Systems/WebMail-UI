@@ -66,7 +66,7 @@ const FolderManager: React.FC = () => {
 
   useEffect(() => {
     if (folderData) {
-      setData(folderData);
+      setData(folderData as unknown as ApiResponse);
     }
   }, [folderData]);
 
@@ -294,7 +294,7 @@ const FolderManager: React.FC = () => {
               <div className="text-red-500 text-6xl mb-4">⚠️</div>
               <p className="text-gray-700 mb-4">Unable to load folder data</p>
               <button
-                onClick={refetch}
+                onClick={() => refetch()}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
               >
                 Retry
@@ -316,7 +316,7 @@ const FolderManager: React.FC = () => {
           <div className="flex justify-between items-center mb-2">
             <h1 className="text-2xl font-bold text-gray-800">Folder Flag Manager</h1>
             <button
-              onClick={refetch}
+              onClick={() => refetch()}
               className="px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm"
             >
               <MdOutlineRefresh />

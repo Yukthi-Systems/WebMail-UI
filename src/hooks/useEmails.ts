@@ -16,8 +16,6 @@
  */
 
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
-import { useAtomValue } from 'jotai';
-import { folderDetailsAtom } from '../state/folders';
 import {
   copyEmail,
   createEmailFolder,

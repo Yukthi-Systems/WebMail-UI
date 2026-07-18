@@ -58,11 +58,13 @@ export function Input({
   } = useFormContext();
 
   // Helper function to get nested errors
-  const getNestedError = (obj: any, path: string) => {
-    return path.split('.').reduce((o, key) => (o ? o[key] : undefined), obj);
+  const getNestedError = (obj: unknown, path: string) => {
+    return path
+      .split('.')
+      .reduce((o, key) => (o ? (o as Record<string, unknown>)[key] : undefined), obj);
   };
 
-  const error = getNestedError(errors, name);
+  const error = getNestedError(errors, name) as { message?: string } | undefined;
 
   return (
     <div className={`${customStyle} w-full mb-3`}>

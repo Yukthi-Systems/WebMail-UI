@@ -24,7 +24,8 @@ import type { DynamicField } from './rulesConfig';
 import type { ActionField } from './actionsConfig';
 import { folderDetailsAtom } from '../../../state/folders';
 import { NestedFolderSelect } from '../../common/NestedFolderSelect';
-import type { ValidationError } from 'yup';
+import type { ValidationError } from './validation';
+import type { UIRule } from './filterTransform';
 
 // Helper Component for Error Text
 const ErrorText = ({ error }: { error?: string }) => {
@@ -36,18 +37,18 @@ interface RulesFieldRendererProps {
   fields: DynamicField[];
   ruleId: string;
   pathPrefix: string;
-  rules: any[];
-  updateRuleValue: (id: string, path: string, value: any) => void;
-  errors: any;
+  rules: UIRule[];
+  updateRuleValue: (id: string, path: string, value: string) => void;
+  errors: ValidationError;
   onClearError: (key: string) => void;
 }
 
 interface ActionsFieldRendererProps {
   fields: ActionField[];
   actionId: string;
-  values: { [key: string]: any };
-  updateActionValue: (id: string, name: string, value: any) => void;
-  errors: any;
+  values: { [key: string]: unknown };
+  updateActionValue: (id: string, name: string, value: unknown) => void;
+  errors: ValidationError;
   onClearError: (key: string) => void;
 }
 
@@ -70,7 +71,7 @@ export const RulesFieldRenderer: React.FC<RulesFieldRendererProps> = ({
       const fieldIndex = startIndex + idx;
       const path = `${pathPrefix}${fieldIndex}`;
       const fieldKey = `${ruleId}-${path}`;
-      const error: any = errors[fieldKey];
+      const error = errors[fieldKey];
 
       const currentValue = rules.find((r) => r.id === ruleId)?.values[path];
 
@@ -79,7 +80,7 @@ export const RulesFieldRenderer: React.FC<RulesFieldRendererProps> = ({
           ? field.options[0].value
           : currentValue || '';
 
-      const handleChange = (val: any) => {
+      const handleChange = (val: string) => {
         updateRuleValue(ruleId, path, val);
         onClearError(fieldKey);
       };
@@ -213,11 +214,12 @@ export const ActionsFieldRenderer: React.FC<ActionsFieldRendererProps> = ({
     <div className="space-y-2">
       {fields.map((field) => {
         const currentValue = values[field.name];
+        const currentStringValue = (currentValue as string) || '';
         const fieldKey = `${actionId}-${field.name}`;
         const error = errors[fieldKey];
         const isRequired = field.required !== false;
 
-        const handleChange = (val: any) => {
+        const handleChange = (val: unknown) => {
           updateActionValue(actionId, field.name, val);
           onClearError(fieldKey);
         };
@@ -238,7 +240,7 @@ export const ActionsFieldRenderer: React.FC<ActionsFieldRendererProps> = ({
               </label>
               <NestedFolderSelect
                 folders={folderDetails || []}
-                value={currentValue || ''}
+                value={currentStringValue}
                 onChange={handleChange}
                 placeholder={field.placeholder || 'Select folder'}
                 className={`w-full ${error ? 'border-[var(--red-9)]' : ''}`}
@@ -252,7 +254,7 @@ export const ActionsFieldRenderer: React.FC<ActionsFieldRendererProps> = ({
         const defaultValue =
           field.type === 'select' && !currentValue && selectOptions[0]
             ? selectOptions[0].value
-            : currentValue || '';
+            : currentStringValue;
 
         switch (field.type) {
           case 'select':
@@ -284,7 +286,7 @@ export const ActionsFieldRenderer: React.FC<ActionsFieldRendererProps> = ({
                 </label>
                 <input
                   type={field.type}
-                  value={currentValue || ''}
+                  value={currentStringValue}
                   onChange={(e) => handleChange(e.target.value)}
                   placeholder={field.placeholder}
                   className={inputClass}
@@ -301,7 +303,7 @@ export const ActionsFieldRenderer: React.FC<ActionsFieldRendererProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={currentValue || ''}
+                  value={currentStringValue}
                   onChange={(e) => handleChange(e.target.value)}
                   placeholder={field.placeholder}
                   className={inputClass}
@@ -317,7 +319,7 @@ export const ActionsFieldRenderer: React.FC<ActionsFieldRendererProps> = ({
                   {field.label} {isRequired && <span className="text-[var(--red-9)]">*</span>}
                 </label>
                 <textarea
-                  value={currentValue || ''}
+                  value={currentStringValue}
                   onChange={(e) => handleChange(e.target.value)}
                   placeholder={field.placeholder}
                   rows={4}
@@ -334,7 +336,7 @@ export const ActionsFieldRenderer: React.FC<ActionsFieldRendererProps> = ({
                 className="flex items-center justify-start py-2 px-3 gap-4 rounded-md hover:bg-[var(--gray-2)] transition-colors"
               >
                 <Switch.Root
-                  checked={currentValue || false}
+                  checked={Boolean(currentValue)}
                   onCheckedChange={handleChange}
                   className="w-11 h-6 bg-[var(--gray-5)] rounded-full relative data-[state=checked]:bg-[var(--accent-9)] transition-colors outline-none cursor-pointer hover:bg-[var(--gray-6)] data-[state=checked]:hover:bg-[var(--accent-10)]"
                 >

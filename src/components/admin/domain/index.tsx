@@ -38,10 +38,10 @@ import {
 import { useAtomValue } from 'jotai';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { apiKeyAtom } from '../../../state/auth';
-import { useToast } from '../../ui/ToastComponent';
+import { useToast } from '../../../hooks/useToast';
 import DomainDetailsModal from './DomainDetailsModal';
 import { useDeleteDomain, useListDomains } from '../../../hooks/useAdminDomain';
-import { getDomainList } from '../../../api/admin-domain';
+import { getDomainList, type Domain } from '../../../api/admin-domain';
 import { formatEmailDate } from '../../../utils/dateFormat';
 import DomainBulkImportModal from './BulkImport';
 import DomainBulkEditModal from './BulkEdit';
@@ -73,7 +73,7 @@ function DomainList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteDomainName, setDeleteDomainName] = useState('');
   const [viewOpen, setViewOpen] = useState(false);
-  const [selectedDomain, setSelectedDomain] = useState<any>(null);
+  const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
 
   // Note: 'openDropdown' state is no longer needed as Radix handles this internally per instance.
 
@@ -135,7 +135,7 @@ function DomainList() {
       const header =
         'domain,smtp_server,smtp_port,imap_server,imap_port,sieve_server,sieve_port,is_active,is_v2_user\n';
       const body = domains
-        .map((d: any) =>
+        .map((d) =>
           [
             d.domain,
             d.smtp_server,
@@ -156,8 +156,9 @@ function DomainList() {
       a.download = `domains-export-${Date.now()}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err: any) {
-      toast.error({ description: err.message || 'Failed to download CSV' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to download CSV';
+      toast.error({ description: message });
     } finally {
       setIsDownloading(false);
     }
@@ -213,11 +214,6 @@ function DomainList() {
     }
   }, [apiKey, navigate]);
 
-  useEffect(() => {
-    if (!apiKey) {
-      navigate({ to: '/1219/admin/login' });
-    }
-  }, []);
   return (
     <>
       <div className="min-h-screen bg-[var(--gray-1)]">
@@ -401,7 +397,7 @@ function DomainList() {
                         </tr>
                       </thead>
                       <tbody className="bg-[var(--gray-1)]">
-                        {domainList.map((domain: any, index: number) => (
+                        {domainList.map((domain, index) => (
                           <tr
                             key={domain.domain}
                             className={`border-b border-[var(--gray-4)] hover:bg-[var(--accent-2)] transition-colors duration-150 ${

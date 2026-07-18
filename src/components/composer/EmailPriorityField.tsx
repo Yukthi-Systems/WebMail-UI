@@ -17,6 +17,7 @@
 
 import { Box, Button, DropdownMenu } from '@radix-ui/themes';
 import { FaFlag, FaArrowUp, FaArrowDown } from 'react-icons/fa6';
+import type { IconType } from 'react-icons';
 import DropdownWrapper from '../common/DropdownWrapper';
 import type { EmailPriority } from '.';
 
@@ -26,7 +27,7 @@ type EmailPriorityFieldProps = {
 };
 
 const EmailPriorityField = ({ priority, onChange }: EmailPriorityFieldProps) => {
-  const priorityConfig: Record<EmailPriority, { label: string; icon: React.ComponentType<any> }> = {
+  const priorityConfig: Record<EmailPriority, { label: string; icon: IconType }> = {
     normal: {
       label: 'Normal Priority',
       icon: FaFlag,

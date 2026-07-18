@@ -30,9 +30,11 @@ export interface ListScriptsApiResponse {
   scripts: SieveScriptList;
 }
 
-// API uses tuple arrays, not objects
-export type SieveFilterCondition = any[]; // e.g., ["Subject", ":matches", "Junk*"]
-export type SieveFilterAction = any[]; // e.g., ["fileinto", "Junks"]
+// API uses tuple arrays, not objects. Element types vary per condition/action
+// kind (strings for field/operator/value, but e.g. size comparisons can carry
+// numbers), so these stay loosely typed rather than guessing a fixed tuple shape.
+export type SieveFilterCondition = unknown[]; // e.g., ["Subject", ":matches", "Junk*"]
+export type SieveFilterAction = unknown[]; // e.g., ["fileinto", "Junks"]
 
 export interface SieveFilter {
   name: string;
@@ -90,7 +92,7 @@ export interface UpdateFilterRequest {
 export interface SieveApiResponse {
   success: boolean;
   message?: string;
-  data?: any;
+  data?: unknown;
 }
 
 // List all scripts

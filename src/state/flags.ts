@@ -17,4 +17,4 @@
 
 import { atom } from 'jotai';
 
-export const flagAtom = atom([]);
+export const flagAtom = atom<string[]>([]);

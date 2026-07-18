@@ -35,7 +35,8 @@ const ThemeWrapper: React.FC<DynamicThemeProps> = ({ children }) => {
     <Theme
       style={{ fontFamily: "'Roboto', sans-serif" }}
       appearance={appearance}
-      accentColor={accentColor as any} // Radix supports: gray, gold, bronze, brown, yellow, amber, orange, tomato, red, ruby, crimson, pink, plum, purple, violet, iris, indigo, blue, cyan, teal, jade, green, grass, lime, mint, sky
+      // Radix supports: gray, gold, bronze, brown, yellow, amber, orange, tomato, red, ruby, crimson, pink, plum, purple, violet, iris, indigo, blue, cyan, teal, jade, green, grass, lime, mint, sky
+      accentColor={accentColor as React.ComponentProps<typeof Theme>['accentColor']}
       radius="large"
     >
       {children}
