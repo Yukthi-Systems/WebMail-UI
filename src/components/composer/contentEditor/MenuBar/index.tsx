@@ -26,7 +26,7 @@ import ImageMenu from './ImageMenu';
 import AdvancedMenu from './AdvancedMenu';
 import LinkMenu from './LinkMenu';
 import FontFamilySelect from './FontFamilySelect';
-import { userSettingsAtom } from '../../../state/settings';
+import { userSettingsAtom } from '../../../../state/settings';
 
 type MenuBarProps = { editor: Editor | null };
 
