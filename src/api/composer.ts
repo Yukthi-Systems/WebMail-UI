@@ -47,6 +47,7 @@ export type ComposerRequest = {
   reply_to?: EmailAddressObject; // Should be object, not string
   headers?: Record<string, string | string[]>;
   priority?: 'normal' | 'high' | 'low';
+  read_receipt?: boolean;
   timestamp?: string;
   is_draft: boolean;
   message_id?: string;

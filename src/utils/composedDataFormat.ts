@@ -137,6 +137,7 @@ export const formatComposedEmailData = (
     priority?: 'normal' | 'high' | 'low';
     isDraft?: boolean;
     messageId?: string;
+    readReceipt?: boolean;
   }
 ): ComposerRequest & { in_line_attachments: InlineAttachment[] } => {
   // Extend return type
@@ -193,6 +194,7 @@ export const formatComposedEmailData = (
     reply_to,
     headers: composed.headers,
     priority: options?.priority ?? 'normal',
+    read_receipt: options?.readReceipt ?? false,
     timestamp: composed.date,
     is_draft: options?.isDraft ?? false,
     message_id: messageId,
