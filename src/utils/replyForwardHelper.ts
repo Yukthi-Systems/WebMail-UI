@@ -450,6 +450,7 @@ export const formatComposedEmailData = (
     folder_path: string;
     priority: EmailPriority;
     isDraft: boolean;
+    readReceipt?: boolean;
   }
 ) => {
   const { folder_path, isDraft } = options;
@@ -487,6 +488,7 @@ export const formatComposedEmailData = (
     from_id: data.from_id || { email: '', name: '' },
     timestamp: new Date().toISOString(),
     is_draft: isDraft,
+    read_receipt: options.readReceipt ?? false,
     message_id: data.messageId || generateMessageId(),
     draft_saved: false,
   };
