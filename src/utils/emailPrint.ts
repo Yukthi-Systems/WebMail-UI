@@ -112,6 +112,10 @@ function formatEmailHeader(email: PrintableEmail, attachments?: PrintableAttachm
 export function printEmail(email: unknown, emailContent: string, attachments?: unknown[]) {
   const printableEmail = email as PrintableEmail;
   const printableAttachments = attachments as PrintableAttachment[] | undefined;
+  const processedEmailContent =
+    printableAttachments && printableAttachments.length > 0
+      ? processCidAttachments(emailContent, printableAttachments)
+      : emailContent;
   const printStyles = `
     <style>
       * {
@@ -215,10 +219,6 @@ export function printEmail(email: unknown, emailContent: string, attachments?: u
         .email-header {
           page-break-after: avoid;
         }
-        
-        .email-body {
-          page-break-inside: avoid;
-        }
       }
     </style>
   `;
@@ -236,7 +236,7 @@ export function printEmail(email: unknown, emailContent: string, attachments?: u
         <button class="print-button" onclick="window.print()">Print</button>
         ${formatEmailHeader(printableEmail, printableAttachments)}
         <div class="email-body">
-          ${emailContent}
+          ${processedEmailContent}
         </div>
       </body>
     </html>
