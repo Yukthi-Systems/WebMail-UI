@@ -103,6 +103,8 @@ export default defineConfig(({ mode }) => {
           // Take control immediately on first install, no waiting for reload
           clientsClaim: true,
           skipWaiting: true,
+          // Purge caches from previous deploys so Cache Storage doesn't grow forever
+          cleanupOutdatedCaches: true,
           // Exclude API calls from SW interception
           navigateFallbackDenylist: [/^\/api\//],
         },
