@@ -16,7 +16,10 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Box, Button, Dialog, Flex, Text } from '@radix-ui/themes';
+import { FaExclamationTriangle } from 'react-icons/fa';
 import { FaPaperPlane, FaDeleteLeft, FaFloppyDisk } from 'react-icons/fa6';
+import { mightHaveForgottenAttachment as mightHaveForgottenAttachmentCheck } from '../../../utils/attachmentReminder';
 import type { Email } from '../../../api/mailbox';
 import type { Email as ParsedPostalEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { useParams } from '@tanstack/react-router';
@@ -132,6 +135,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   const setKeepMounted = useSetAtom(emailComposerKeepMountedAtom);
   const currentEmail = useAtomValue(emailAddress);
   const [isSending, setIsSending] = useState(false);
+  const [showAttachmentConfirm, setShowAttachmentConfirm] = useState(false);
+  const [pendingSendAction, setPendingSendAction] = useState<(() => void) | null>(null);
   // State for storing original email headers
   const [originalHeaders, setOriginalHeaders] = useState<EmailHeaders>({});
   const [originalMessageId, setOriginalMessageId] = useState<string | string[]>('');
@@ -888,16 +893,30 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     if (pendingCc) overrides.cc = effectiveCc;
     if (pendingBcc) overrides.bcc = effectiveBcc;
 
-    handleMailAction({
-      isDraft: false,
-      folder_path: folder_path,
-      successTitle: 'Mail Sent',
-      successDescription: 'Your email sent successfully',
-      errorTitle: 'Failed to send mail',
-      setSending: setIsSending,
-      allowUndo: true,
-      dataOverrides: overrides,
-    });
+    const sendNow = () => {
+      handleMailAction({
+        isDraft: false,
+        folder_path: folder_path,
+        successTitle: 'Mail Sent',
+        successDescription: 'Your email sent successfully',
+        errorTitle: 'Failed to send mail',
+        setSending: setIsSending,
+        allowUndo: true,
+        dataOverrides: overrides,
+      });
+    };
+
+    const bodyMentionsAttachment = mightHaveForgottenAttachmentCheck(
+      composerData.text || '',
+      composerData.attachments?.length || 0
+    );
+
+    if (bodyMentionsAttachment) {
+      setPendingSendAction(() => sendNow);
+      setShowAttachmentConfirm(true);
+    } else {
+      sendNow();
+    }
   };
 
   const handleSaveDraft = () => {
@@ -1079,6 +1098,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   });
 
   return (
+    <>
     <CustomModal
       isOpen={composerOpen}
       isFullView={fullViewEnabled}
@@ -1322,6 +1342,50 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         )}
       </div>
     </CustomModal>
+    {/* Forgotten Attachment Confirmation Modal */}
+    <Dialog.Root open={showAttachmentConfirm} onOpenChange={setShowAttachmentConfirm}>
+      <Dialog.Content style={{ maxWidth: 450, borderRadius: 8 }}>
+        <Dialog.Title>
+          <Flex align="center" gap="2">
+            <FaExclamationTriangle color="#f59e0b" />
+            Did you forget to attach a file?
+          </Flex>
+        </Dialog.Title>
+
+        <Box py="4">
+          <Text size="2" color="gray">
+            Your message mentions an attachment, but no files are attached to this email.
+          </Text>
+
+          <Box mt="4" p="3" style={{ backgroundColor: 'var(--yellow-2)', borderRadius: 6 }}>
+            <Text size="2" color="yellow">
+              Are you sure you want to send this without attaching anything?
+            </Text>
+          </Box>
+        </Box>
+
+        <Flex gap="3" justify="end">
+          <Dialog.Close>
+            <Button variant="soft" color="gray" onClick={() => setShowAttachmentConfirm(false)}>
+              Cancel
+            </Button>
+          </Dialog.Close>
+          <Button
+            variant="solid"
+            color="red"
+            onClick={() => {
+              if (pendingSendAction) {
+                pendingSendAction();
+              }
+              setShowAttachmentConfirm(false);
+            }}
+          >
+            Send anyway
+          </Button>
+        </Flex>
+      </Dialog.Content>
+    </Dialog.Root>
+    </>
   );
 };
 

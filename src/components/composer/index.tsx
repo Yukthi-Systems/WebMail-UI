@@ -31,7 +31,12 @@ import RecipientField, { type RecipientFieldHandle } from './RecipientField';
 import SubjectField from './SubjectField';
 import ContentEditor from './contentEditor';
 import AttachmentUploader from './AttachmentUploader';
-import { toBase64, MAX_TOTAL_SIZE, MAX_INDIVIDUAL_FILE_SIZE, formatFileSize } from './attachmentUtils';
+import {
+  toBase64,
+  MAX_TOTAL_SIZE,
+  MAX_INDIVIDUAL_FILE_SIZE,
+  formatFileSize,
+} from './attachmentUtils';
 import { useDropzone } from 'react-dropzone';
 import { FaPaperclip } from 'react-icons/fa6';
 import { formatComposedEmailData } from '../../utils/composedDataFormat';
@@ -49,6 +54,7 @@ import CustomModal from './CustomModal';
 import { SEND_DEFAULT } from '../../constants/constant';
 import { useIsMobile } from '../../hooks/use-mobile';
 import { getEditorDimensions } from '../../utils/dimensions';
+import { mightHaveForgottenAttachment as mightHaveForgottenAttachmentCheck } from '../../utils/attachmentReminder';
 
 export type EmailPriority = 'normal' | 'high' | 'low';
 
@@ -136,6 +142,7 @@ const Composer = () => {
 
   // Add state for empty message confirmation modal
   const [showEmptyMessageConfirm, setShowEmptyMessageConfirm] = useState(false);
+  const [showAttachmentConfirm, setShowAttachmentConfirm] = useState(false);
   const [pendingSendAction, setPendingSendAction] = useState<(() => void) | null>(null);
 
   // Add state for close confirmation dialog
@@ -229,6 +236,16 @@ const Composer = () => {
 
     return textContent.length === 0 && plainText.length === 0;
   }, [composerData.html, composerData.text, userSettings?.general]);
+
+  // Detect body text mentioning an attachment when none has been added
+  const mightHaveForgottenAttachment = useMemo(
+    () =>
+      mightHaveForgottenAttachmentCheck(
+        composerData.text || '',
+        composerData.attachments?.length || 0
+      ),
+    [composerData.attachments, composerData.text]
+  );
 
   // Load draft from localStorage when composer opens
   useEffect(() => {
@@ -656,7 +673,8 @@ const Composer = () => {
           onError: (err) => {
             if (loadingId) toast.dismiss(loadingId);
             toast.error({
-              description: err?.message || 'An error occurred while sending mail. Please try again.',
+              description:
+                err?.message || 'An error occurred while sending mail. Please try again.',
             });
             // On error, clear the sent message ID
             if (!isDraft) {
@@ -754,12 +772,17 @@ const Composer = () => {
       // Pass overrides to the confirmed action
       setPendingSendAction(() => () => sendEmailConfirmed(overrides));
       setShowEmptyMessageConfirm(true);
+    } else if (mightHaveForgottenAttachment) {
+      // Body mentions an attachment but none was added — confirm before sending
+      setPendingSendAction(() => () => sendEmailConfirmed(overrides));
+      setShowAttachmentConfirm(true);
     } else {
       // Send immediately if message has content
       sendEmailConfirmed(overrides);
     }
   }, [
     isMessageEmpty,
+    mightHaveForgottenAttachment,
     sendEmailConfirmed,
     composerData.to,
     composerData.cc,
@@ -1400,6 +1423,49 @@ const Composer = () => {
                   pendingSendAction();
                 }
                 setShowEmptyMessageConfirm(false);
+              }}
+            >
+              Send anyway
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+      {/* Forgotten Attachment Confirmation Modal */}
+      <Dialog.Root open={showAttachmentConfirm} onOpenChange={setShowAttachmentConfirm}>
+        <Dialog.Content style={{ maxWidth: 450, borderRadius: 8 }}>
+          <Dialog.Title>
+            <Flex align="center" gap="2">
+              <FaExclamationTriangle color="#f59e0b" />
+              Did you forget to attach a file?
+            </Flex>
+          </Dialog.Title>
+
+          <Box py="4">
+            <Text size="2" color="gray">
+              Your message mentions an attachment, but no files are attached to this email.
+            </Text>
+
+            <Box mt="4" p="3" style={{ backgroundColor: 'var(--yellow-2)', borderRadius: 6 }}>
+              <Text size="2" color="yellow">
+                Are you sure you want to send this without attaching anything?
+              </Text>
+            </Box>
+          </Box>
+
+          <Flex gap="3" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray" onClick={() => setShowAttachmentConfirm(false)}>
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button
+              variant="solid"
+              color="red"
+              onClick={() => {
+                if (pendingSendAction) {
+                  pendingSendAction();
+                }
+                setShowAttachmentConfirm(false);
               }}
             >
               Send anyway
