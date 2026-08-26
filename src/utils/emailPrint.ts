@@ -211,14 +211,22 @@ export function printEmail(email: unknown, emailContent: string, attachments?: u
           margin: 0;
           padding: 16px;
         }
-        
+
         .print-button {
           display: none !important;
         }
-        
+
         .email-header {
           page-break-after: avoid;
         }
+      }
+
+      /* Word/Outlook HTML emails set a named @page (e.g. "page: WordSection1")
+         on their content div. Chromium's print engine treats a named-page
+         change as a forced page break, which blows a gap into the printout
+         regardless of our own page-break rules — neutralize it. */
+      .email-body, .email-body * {
+        page: auto !important;
       }
     </style>
   `;
@@ -365,6 +373,13 @@ export function viewEmailInWindow(email: unknown, emailContent: string, attachme
       .email-body img {
         max-width: 100%;
         height: auto;
+      }
+
+      /* Word/Outlook HTML emails set a named @page (e.g. "page: WordSection1")
+         on their content div, which forces an unwanted page break if this
+         window is printed — neutralize it here too. */
+      .email-body, .email-body * {
+        page: auto !important;
       }
     </style>
   `;
