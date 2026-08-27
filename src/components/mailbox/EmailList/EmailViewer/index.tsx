@@ -29,13 +29,18 @@ import { useParams } from '@tanstack/react-router';
 import { ThreadView } from './ThreadView';
 import { SingleEmailView } from './SingleEmailView';
 import { useEmailParser } from '../../../../hooks/useEmailParser';
-import { extractIds, getMessageId } from '../../../../utils/emailUtils';
-import { Separator } from '@radix-ui/themes';
+import { extractIds, getMessageId, getReadReceiptRequest } from '../../../../utils/emailUtils';
+import { AlertDialog, Button, Flex, Separator, Text } from '@radix-ui/themes';
 import { FaEnvelope } from 'react-icons/fa';
 import { decodeWords } from 'postal-mime';
 import { useDeleteMail, useMoveMail } from '../../../../hooks/useEmails';
 import { useToast } from '../../../../hooks/useToast';
 import { useThreadEmails, useThreadMutations } from '../../../../hooks/useThreadEmails';
+import { useSendMail } from '../../../../hooks/useComposer';
+import { generateMessageId, type ComposerRequest } from '../../../../api/composer';
+import { emailAddress } from '../../../../state/emailAddress';
+import { userDetailsAtom } from '../../../../state/userDetails';
+import { SEND_DEFAULT } from '../../../../constants/constant';
 import type { EmailLike } from '../../../../utils/emailThreading';
 import type { Attachment } from 'postal-mime';
 
@@ -135,6 +140,105 @@ const EmailViewer = ({
     onContentLoaded,
     onAttachmentsLoaded,
   });
+
+  // ------------------------------------------------------------------
+  // READ RECEIPT PROMPT
+  // Ask the reader whether to notify the sender when the message they're
+  // viewing carries a Disposition-Notification-To / Return-Receipt-To
+  // header. The choice is remembered per message so re-opening it doesn't
+  // ask again.
+  // ------------------------------------------------------------------
+  const currentUser = useAtomValue(emailAddress);
+  const userDetails = useAtomValue(userDetailsAtom);
+  const { mutate: sendReceiptMutate, isPending: isSendingReceipt } = useSendMail();
+  const [showReadReceiptPrompt, setShowReadReceiptPrompt] = useState(false);
+  const readReceiptRequest = useMemo(() => getReadReceiptRequest(headers), [headers]);
+  const readReceiptStorageKey = `webmail-read-receipt-${stableEmailKey}`;
+
+  useEffect(() => {
+    if (isLoading || isParsing || !readReceiptRequest) return;
+
+    // Never prompt on an email the current user sent themselves.
+    if (
+      currentUser?.address &&
+      readReceiptRequest.email.toLowerCase() === currentUser.address.toLowerCase()
+    ) {
+      return;
+    }
+
+    if (localStorage.getItem(readReceiptStorageKey)) return;
+
+    setShowReadReceiptPrompt(true);
+  }, [isLoading, isParsing, readReceiptRequest, currentUser?.address, readReceiptStorageKey]);
+
+  const handleDeclineReadReceipt = () => {
+    localStorage.setItem(readReceiptStorageKey, 'declined');
+    setShowReadReceiptPrompt(false);
+  };
+
+  const handleSendReadReceipt = () => {
+    if (!readReceiptRequest) return;
+
+    const decodedSubject = decodeWords(subject) || '(No Subject)';
+    const bodyText = `This is a read receipt for the email "${decodedSubject}" sent on ${date}.\n\nThis receipt only acknowledges that the message was displayed on the recipient's device. It does not guarantee that the content was read or understood.`;
+
+    const payload: ComposerRequest = {
+      from_id: { email: currentUser?.address || '', name: currentUser?.name || '' },
+      to: [{ email: readReceiptRequest.email, name: readReceiptRequest.name }],
+      cc: [],
+      bcc: [],
+      subject: `Read: ${decodedSubject}`,
+      body_text: bodyText,
+      body_html: `<p>${bodyText.replace(/\n\n/g, '</p><p>')}</p>`,
+      attachments: [],
+      in_line_attachments: [],
+      folder_path: SEND_DEFAULT || 'Sent',
+      headers: {},
+      priority: 'normal',
+      read_receipt: false,
+      is_draft: false,
+      message_id: generateMessageId(userDetails?.domain || ''),
+      draft_saved: false,
+    };
+
+    sendReceiptMutate(payload, {
+      onSuccess: () => {
+        localStorage.setItem(readReceiptStorageKey, 'sent');
+        toast.success({ description: 'Read receipt sent.' });
+      },
+      onError: (err) => {
+        toast.error({ description: err?.message || 'Failed to send read receipt.' });
+      },
+    });
+
+    setShowReadReceiptPrompt(false);
+  };
+
+  const readReceiptDialog = (
+    <AlertDialog.Root open={showReadReceiptPrompt} onOpenChange={setShowReadReceiptPrompt}>
+      <AlertDialog.Content style={{ maxWidth: 450, borderRadius: 12 }}>
+        <Flex direction="column" gap="4">
+          <AlertDialog.Title>Read Receipt Requested</AlertDialog.Title>
+          <Text size="2" color="gray">
+            The sender has requested a read receipt for this message. Would you like to notify
+            them that you've read it?
+          </Text>
+          <Flex gap="3" justify="end">
+            <AlertDialog.Cancel>
+              <Button variant="soft" color="gray" onClick={handleDeclineReadReceipt}>
+                Don't Send
+              </Button>
+            </AlertDialog.Cancel>
+            <AlertDialog.Action>
+              <Button onClick={handleSendReadReceipt} disabled={isSendingReceipt}>
+                Send Read Receipt
+              </Button>
+            </AlertDialog.Action>
+          </Flex>
+        </Flex>
+      </AlertDialog.Content>
+    </AlertDialog.Root>
+  );
 
   const threadedView = userSettings?.email?.mail_thead_view || 'all threads';
 
@@ -413,34 +517,38 @@ const EmailViewer = ({
 
   if (isThreadedViewActive) {
     return (
-      <ThreadView
-        listofThreadEmails={listofThreadEmails}
-        messageId={messageId}
-        folderPath={folderPath}
-        date={date}
-        onContentLoaded={onContentLoaded}
-        splitView={splitView}
-        onBack={onBack}
-        formatUserDateNice={formatUserDateNice}
-        onReply={onReply}
-        onForward={onForward}
-        onForwardAsAttachment={onForwardAsAttachment}
-        onReplyAll={onReplyAll}
-        onEditAsNew={onEditAsNew}
-        onSaveAsContact={onSaveAsContact}
-        handleSingleEmailDelete={deletedThreadMessage}
-        isLoadingInitial={isThreadLoading}
-        FilteredListLength={FilteredListLength}
-        handleSingleEmailMarkAsFlagged={handleSingleEmailMarkAsFlagged}
-        handleSingleEmailMarkAsRead={handleSingleEmailMarkAsRead}
-        reFetchMails={() => invalidateThread()}
-        // Pass fetching state for loading indicators during background updates
-        isRefetching={isThreadFetching && !isThreadLoading}
-      />
+      <>
+        <ThreadView
+          listofThreadEmails={listofThreadEmails}
+          messageId={messageId}
+          folderPath={folderPath}
+          date={date}
+          onContentLoaded={onContentLoaded}
+          splitView={splitView}
+          onBack={onBack}
+          formatUserDateNice={formatUserDateNice}
+          onReply={onReply}
+          onForward={onForward}
+          onForwardAsAttachment={onForwardAsAttachment}
+          onReplyAll={onReplyAll}
+          onEditAsNew={onEditAsNew}
+          onSaveAsContact={onSaveAsContact}
+          handleSingleEmailDelete={deletedThreadMessage}
+          isLoadingInitial={isThreadLoading}
+          FilteredListLength={FilteredListLength}
+          handleSingleEmailMarkAsFlagged={handleSingleEmailMarkAsFlagged}
+          handleSingleEmailMarkAsRead={handleSingleEmailMarkAsRead}
+          reFetchMails={() => invalidateThread()}
+          // Pass fetching state for loading indicators during background updates
+          isRefetching={isThreadFetching && !isThreadLoading}
+        />
+        {readReceiptDialog}
+      </>
     );
   }
 
   return (
+    <>
     <SingleEmailView
       rawEmail={rawEmail}
       isLoading={isLoading}
@@ -465,6 +573,8 @@ const EmailViewer = ({
       setIsHeaderPopoverOpen={setIsHeaderPopoverOpen}
       renderHeaderInfo={renderHeaderInfo}
     />
+    {readReceiptDialog}
+    </>
   );
 };
 

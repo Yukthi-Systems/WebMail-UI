@@ -80,6 +80,26 @@ export function normalizeFieldNames(obj: unknown): Record<string, unknown> {
   return normalized;
 }
 
+// RFC 3798 uses 'Disposition-Notification-To'; some older clients (e.g. Outlook)
+// send 'Return-Receipt-To' instead. Header keys arrive in mixed casing depending
+// on whether they came from the raw-text extractor or postal-mime, so match
+// case-insensitively.
+export function getReadReceiptRequest(
+  headers: Record<string, string>
+): { email: string; name: string } | null {
+  if (!headers) return null;
+
+  const key = Object.keys(headers).find((k) => {
+    const lower = k.toLowerCase();
+    return lower === 'disposition-notification-to' || lower === 'return-receipt-to';
+  });
+
+  if (!key || !headers[key]?.trim()) return null;
+
+  const { name, email } = parseEmail(headers[key]);
+  return email ? { name, email } : null;
+}
+
 export const normalizeId = (id = '') => id.replace(/[<>]/g, '').trim();
 
 export const getMessageId = (email: unknown) => {

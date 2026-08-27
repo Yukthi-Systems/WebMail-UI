@@ -47,6 +47,7 @@ import {
 import { useDropzone } from 'react-dropzone';
 import { FaPaperclip } from 'react-icons/fa6';
 import EmailPriorityField from '../../composer/EmailPriorityField';
+import ReadReceiptField from '../../composer/ReadReceiptField';
 import { generateMessageId, sendMailV2, type ComposerRequest } from '../../../api/composer';
 import { useDeleteMail } from '../../../hooks/useEmails';
 import { useToast } from '../../../hooks/useToast';
@@ -155,6 +156,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     bcc: false,
   });
   const [priority, setPriority] = useState<EmailPriority>('normal');
+  const [readReceipt, setReadReceipt] = useState(false);
   const [folder_path, setFolderPath] = useState<string>(folder || SEND_DEFAULT || 'Sent');
   const [sendPath, setSendPath] = useState<string>('Sent');
   const [saveDraft, setSaveDraft] = useState<string>('Drafts');
@@ -576,6 +578,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       folder_path: saveDraft || 'Drafts',
       priority,
       isDraft: true,
+      readReceipt,
     });
 
     // formatComposedEmailData returns html/text fields; ComposerRequest expects
@@ -589,7 +592,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         console.error('error', err);
       },
     });
-  }, [quotedHtml, priority, draftMutate, isQuotaExceeded, saveDraft]);
+  }, [quotedHtml, priority, readReceipt, draftMutate, isQuotaExceeded, saveDraft]);
 
   const [debouncedSaveToDraft, cancelDebouncedSaveToDraft] = useDebounce(saveToDraft, 15000);
 
@@ -674,6 +677,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       folder_path: isDraft ? saveDraft || 'Drafts' : sendPath || folder_path,
       priority: priority,
       isDraft,
+      readReceipt,
     });
 
     const mutateFn = isDraft ? draftMutate : sendMutate;
@@ -1119,7 +1123,10 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       }
       footer={
         <div className="flex flex-row justify-between items-center w-full gap-3">
-          <EmailPriorityField priority={priority} onChange={setPriority} />
+          <div className="flex items-center gap-3">
+            <EmailPriorityField priority={priority} onChange={setPriority} />
+            <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
+          </div>
 
           <div className="flex items-center gap-2 md:gap-3 flex-wrap justify-end">
             <button

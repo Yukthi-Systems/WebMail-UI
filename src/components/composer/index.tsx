@@ -41,6 +41,7 @@ import { useDropzone } from 'react-dropzone';
 import { FaPaperclip } from 'react-icons/fa6';
 import { formatComposedEmailData } from '../../utils/composedDataFormat';
 import EmailPriorityField from './EmailPriorityField';
+import ReadReceiptField from './ReadReceiptField';
 import { useDraftMail, useSendMail } from '../../hooks/useComposer';
 import { emailAddress } from '../../state/emailAddress';
 import { userSettingsAtom } from '../../state/settings';
@@ -63,6 +64,7 @@ interface LocalStorageDraft {
   messageId: string;
   composerData: ComposedEmailData;
   priority: EmailPriority;
+  readReceipt?: boolean;
   folder: string;
   timestamp: number;
 }
@@ -113,6 +115,7 @@ const Composer = () => {
     bcc: false,
   });
   const [priority, setPriority] = useState<EmailPriority>('normal');
+  const [readReceipt, setReadReceipt] = useState(false);
   const { mutate: saveMutate } = useSendMail();
   const { mutate: draftMutate, isPending: isDrafting } = useDraftMail();
   const currentEmail = useAtomValue(emailAddress);
@@ -267,6 +270,7 @@ const Composer = () => {
           setDraftMessageId(draft.messageId); // Also store in atom for persistence
           setComposerData(draft.composerData);
           setPriority(draft.priority);
+          setReadReceipt(draft.readReceipt ?? false);
           // setFolder(draft.folder);
 
           toast.success({
@@ -302,7 +306,12 @@ const Composer = () => {
 
   // Save to localStorage - UPDATED to use current messageId
   const saveToLocalStorage = useCallback(
-    (data: ComposedEmailData, currentPriority: EmailPriority, currentFolder: string) => {
+    (
+      data: ComposedEmailData,
+      currentPriority: EmailPriority,
+      currentFolder: string,
+      currentReadReceipt: boolean
+    ) => {
       // Don't save if quota is exceeded
       if (isQuotaExceeded) {
         return;
@@ -314,6 +323,7 @@ const Composer = () => {
         messageId: currentMsgId,
         composerData: data,
         priority: currentPriority,
+        readReceipt: currentReadReceipt,
         folder: currentFolder,
         timestamp: Date.now(),
       };
@@ -443,7 +453,7 @@ const Composer = () => {
 
     if (hasContent || hasRecipients || hasSubject) {
       // Save to localStorage for immediate recovery
-      saveToLocalStorage(currentComposerData, priority, folder);
+      saveToLocalStorage(currentComposerData, priority, folder, readReceipt);
 
       // Use the current draftMessageId or generate one specifically for draft
       const currentDraftMessageId = draftMessageId || generateMessageId(userDetails?.domain || '');
@@ -463,6 +473,7 @@ const Composer = () => {
         priority,
         isDraft: true,
         messageId: currentDraftMessageId, // Use draft-specific Message-ID
+        readReceipt,
       });
 
       // Also save to backend API, but limit frequency to avoid too many API calls
@@ -482,6 +493,7 @@ const Composer = () => {
     composerData,
     currentEmail,
     priority,
+    readReceipt,
     folder,
     saveToLocalStorage,
     draftMutate,
@@ -564,6 +576,7 @@ const Composer = () => {
         priority,
         isDraft,
         messageId: currentMsgId,
+        readReceipt,
       });
 
       const mutateFn = isDraft ? draftMutate : saveMutate;
@@ -685,7 +698,7 @@ const Composer = () => {
             }
             // Restore localStorage on error for drafts (only if quota not exceeded)
             if (isDraft && !isQuotaExceeded) {
-              saveToLocalStorage(composerData, priority, folder);
+              saveToLocalStorage(composerData, priority, folder, readReceipt);
             }
           },
         });
@@ -695,6 +708,7 @@ const Composer = () => {
       composerData,
       currentEmail,
       priority,
+      readReceipt,
       draftMutate,
       saveMutate,
       removeFromLocalStorage,
@@ -912,7 +926,7 @@ const Composer = () => {
 
     if (hasContent || hasRecipients || hasSubject) {
       // Save to localStorage for immediate recovery
-      saveToLocalStorage(currentComposerData, priority, folder);
+      saveToLocalStorage(currentComposerData, priority, folder, readReceipt);
 
       // Also save to backend API, but limit frequency to avoid too many API calls
       if (autoSaveCountRef.current < 10) {
@@ -920,7 +934,15 @@ const Composer = () => {
         saveDraftToBackend();
       }
     }
-  }, [priority, folder, saveToLocalStorage, saveDraftToBackend, isQuotaExceeded, isDrafting]);
+  }, [
+    priority,
+    readReceipt,
+    folder,
+    saveToLocalStorage,
+    saveDraftToBackend,
+    isQuotaExceeded,
+    isDrafting,
+  ]);
 
   // Create a debounced version of saveToDraft with cancel function
   const [debouncedSaveToDraft, cancelDebouncedSaveToDraft] = useDebounce(saveToDraft, 15000); // 15 second delay
@@ -1240,6 +1262,7 @@ const Composer = () => {
           <div className="w-full flex flex-row md:gap-2 md:items-center px-2 space-y-2 md:space-y-0">
             <TemplateSelector onTemplateSelect={handleTemplateSelect} />
             <EmailPriorityField priority={priority} onChange={setPriority} />
+            <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
           </div>
 
           {/* Quota Warning */}
