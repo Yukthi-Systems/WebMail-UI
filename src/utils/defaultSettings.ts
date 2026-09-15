@@ -75,6 +75,7 @@ export const getDefaultUserSettings = (folderData?: FolderDetail[]): UserSetting
       mail_thead_view: 'all threads',
       thread_sort_order: 'desc',
       show_quick_hover_actions: true,
+      permanent_delete_threshold: 90,
     },
     compose: {
       show_to_field: true,

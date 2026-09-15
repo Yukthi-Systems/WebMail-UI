@@ -572,6 +572,32 @@ const General = ({ data }: GeneralProps) => {
                 />
               </Settings>
 
+              <Settings
+                label="Permanent Delete Threshold"
+                description="Prompt for permanent delete when quota reaches this percentage"
+              >
+                <Controller
+                  name="email.permanent_delete_threshold"
+                  control={control}
+                  render={({ field }) => (
+                    <DropdownWrapper
+                      items={[80, 85, 90, 95, 98, 100].map((percent) => ({
+                        key: percent.toString(),
+                        label: `${percent}%`,
+                        selected: field.value === percent,
+                        onSelect: () => field.onChange(percent),
+                      }))}
+                      trigger={
+                        <Button variant="outline" className="w-full justify-between">
+                          <span>{field.value ?? 90}% quota</span>
+                          <DropdownMenu.TriggerIcon />
+                        </Button>
+                      }
+                    />
+                  )}
+                />
+              </Settings>
+
               <Settings label="Expand Message Threads">
                 <Controller
                   name="email.mail_thead_view"
@@ -1347,6 +1373,32 @@ const General = ({ data }: GeneralProps) => {
                             trigger={
                               <Button variant="outline" className="w-full justify-between">
                                 <span>Cancel send within {field.value} seconds</span>
+                                <DropdownMenu.TriggerIcon />
+                              </Button>
+                            }
+                          />
+                        )}
+                      />
+                    </Settings>
+
+                    <Settings
+                      label="Permanent Delete Threshold"
+                      description="Prompt for permanent delete when quota reaches this percentage"
+                    >
+                      <Controller
+                        name="email.permanent_delete_threshold"
+                        control={control}
+                        render={({ field }) => (
+                          <DropdownWrapper
+                            items={[80, 85, 90, 95, 98, 100].map((percent) => ({
+                              key: percent.toString(),
+                              label: `${percent}%`,
+                              selected: field.value === percent,
+                              onSelect: () => field.onChange(percent),
+                            }))}
+                            trigger={
+                              <Button variant="outline" className="w-full justify-between">
+                                <span>{field.value ?? 90}% quota</span>
                                 <DropdownMenu.TriggerIcon />
                               </Button>
                             }

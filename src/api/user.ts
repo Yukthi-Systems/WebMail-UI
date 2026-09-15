@@ -128,6 +128,7 @@ export type GeneralSettings = {
     show_header_button: boolean;
     thread_sort_order: 'asc' | 'desc';
     show_quick_hover_actions: boolean;
+    permanent_delete_threshold?: number;
   };
   compose: {
     show_to_field: boolean;

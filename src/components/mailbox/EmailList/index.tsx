@@ -67,7 +67,8 @@ import { BulkCreateView } from '../../contacts/BulkCreateView';
 import { getMessageId } from '../../../utils/emailUtils';
 import CustomModal from '../../composer/CustomModal';
 import { useIsMobile } from '../../../hooks/use-mobile';
-import { folderDetailsAtom } from '../../../state/folders';
+import { folderDetailsAtom, folderQuotaAtom } from '../../../state/folders';
+import PermanentDeleteConfirm from './PermanentDeleteConfirm';
 import {
   useUpdateFolderUnreadCount,
   useUpdateAnyFolderUnreadCount,
@@ -320,6 +321,13 @@ const EmailList = ({
   const [emailToMove, setEmailToMove] = useState<number[]>([]);
   const isMobile = useIsMobile();
   const folderDetails = useAtomValue(folderDetailsAtom);
+  const folderQuota = useAtomValue(folderQuotaAtom);
+  
+  const permanentDeleteThreshold = userSettings?.email?.permanent_delete_threshold ?? 90;
+  const isQuotaNearFull = (folderQuota?.used_percent ?? 0) >= permanentDeleteThreshold;
+  
+  const [isPermanentDeleteDialogOpen, setIsPermanentDeleteDialogOpen] = useState(false);
+  const [permanentDeleteEmails, setPermanentDeleteEmails] = useState<number[]>([]);
   const setFolderDetails = useSetAtom(folderDetailsAtom);
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folder || 'INBOX');
   const updateAnyFolderUnreadCount = useUpdateAnyFolderUnreadCount();
@@ -827,8 +835,7 @@ const EmailList = ({
     setComposerOpen(true);
   };
 
-  const handleDelete = () => {
-    const emailsToActOn = getEmailsToActOn();
+  const doMoveToTrash = (emailsToActOn: number[]) => {
     const actionId = `delete-${Date.now()}-${Math.random()}`;
     const isViewingEmailAffected = viewingEmail && emailsToActOn.includes(Number(viewingEmail.id));
 
@@ -837,181 +844,121 @@ const EmailList = ({
       originalFolder: folder || 'INBOX',
     });
 
-    if (folder === 'Trash') {
-      const loadingId = toast.loading({ description: 'Deleting email(s)…' });
-      deleteMutate(
+    if (isViewingEmailAffected) {
+      handleBackToList();
+    }
+    toast.success({
+      description: 'Email is moving to trash',
+      undo: {
+        label: 'Undo',
+        onClick: () => {
+          pendingDeleteActions.current.delete(actionId);
+          toast.success({ description: 'Delete cancelled' });
+        },
+        duration: undoTime,
+      },
+    });
+
+    setTimeout(() => {
+      if (!pendingDeleteActions.current.has(actionId)) return;
+
+      const loadingId = toast.loading({ description: 'Moving to trash…' });
+      moveMutate(
         {
           path: folder || 'INBOX',
+          sourceFolder: folder || 'INBOX',
+          destFolder: 'Trash',
           body: emailsToActOn,
         },
         {
-          onSuccess: (res) => {
-            handleDeselectAll();
-            if (isViewingEmailAffected) {
-              handleBackToList();
-            }
+          onSuccess: () => {
             toast.dismiss(loadingId);
-            toast.success({
-              description:
-                (res as unknown as { message?: string })?.message || 'Email permanently deleted.',
-            });
+            handleDeselectAll();
             queryClient.invalidateQueries({
               queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
             });
             if (searchState.isActive) {
               queryClient.invalidateQueries({ queryKey: ['search-emails'] });
             }
+            pendingDeleteActions.current.delete(actionId);
           },
           onError: (error) => {
             toast.dismiss(loadingId);
             toast.error({
-              description: error?.message || 'Failed to delete email.',
+              description: error?.message || 'Failed to move email to trash.',
             });
+            pendingDeleteActions.current.delete(actionId);
           },
         }
       );
-    } else {
-      if (isViewingEmailAffected) {
-        handleBackToList();
-      }
-      toast.success({
-        description: 'Email is moving to trash',
-        undo: {
-          label: 'Undo',
-          onClick: () => {
-            // Cancel the pending action — emails haven't moved yet, nothing to reverse
-            pendingDeleteActions.current.delete(actionId);
-            toast.success({ description: 'Delete cancelled' });
-          },
-          duration: undoTime,
-        },
-      });
+    }, undoTime);
+  };
 
-      setTimeout(() => {
-        if (!pendingDeleteActions.current.has(actionId)) return;
-
-        const loadingId = toast.loading({ description: 'Moving to trash…' });
-        moveMutate(
-          {
-            path: folder || 'INBOX',
-            sourceFolder: folder || 'INBOX',
-            destFolder: 'Trash',
-            body: emailsToActOn,
-          },
-          {
-            onSuccess: () => {
-              toast.dismiss(loadingId);
-              handleDeselectAll();
-              queryClient.invalidateQueries({
-                queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
-              });
-              if (searchState.isActive) {
-                queryClient.invalidateQueries({ queryKey: ['search-emails'] });
-              }
-              pendingDeleteActions.current.delete(actionId);
-            },
-            onError: (error) => {
-              toast.dismiss(loadingId);
-              toast.error({
-                description: error?.message || 'Failed to move email to trash.',
-              });
-              pendingDeleteActions.current.delete(actionId);
-            },
+  const doPermanentDelete = (emailsToActOn: number[]) => {
+    const isViewingEmailAffected = viewingEmail && emailsToActOn.includes(Number(viewingEmail.id));
+    const loadingId = toast.loading({ description: 'Deleting email(s)…' });
+    deleteMutate(
+      {
+        path: folder || 'INBOX',
+        body: emailsToActOn,
+      },
+      {
+        onSuccess: (res) => {
+          handleDeselectAll();
+          if (isViewingEmailAffected) {
+            handleBackToList();
           }
-        );
-      }, undoTime);
+          toast.dismiss(loadingId);
+          toast.success({
+            description:
+              (res as unknown as { message?: string })?.message || 'Email permanently deleted.',
+          });
+          queryClient.invalidateQueries({
+            queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
+          });
+          if (searchState.isActive) {
+            queryClient.invalidateQueries({ queryKey: ['search-emails'] });
+          }
+        },
+        onError: (error) => {
+          toast.dismiss(loadingId);
+          toast.error({
+            description: error?.message || 'Failed to delete email.',
+          });
+        },
+      }
+    );
+  };
+
+  const handleDelete = () => {
+    const emailsToActOn = getEmailsToActOn();
+
+    if (isQuotaNearFull && folder !== 'Trash') {
+      setPermanentDeleteEmails(emailsToActOn);
+      setIsPermanentDeleteDialogOpen(true);
+      return;
+    }
+
+    if (folder === 'Trash') {
+      doPermanentDelete(emailsToActOn);
+    } else {
+      doMoveToTrash(emailsToActOn);
     }
   };
 
   const handleSingleEmailDelete = (emailId: string) => {
     const emailIdNum = Number(emailId);
-    const actionId = `delete-${Date.now()}-${Math.random()}`;
 
-    pendingDeleteActions.current.set(actionId, {
-      emailIds: [emailIdNum],
-      originalFolder: folder || 'INBOX',
-    });
-
-    const isViewingDeletedEmail = viewingEmail && Number(viewingEmail.id) === emailIdNum;
+    if (isQuotaNearFull && folder !== 'Trash') {
+      setPermanentDeleteEmails([emailIdNum]);
+      setIsPermanentDeleteDialogOpen(true);
+      return;
+    }
 
     if (folder === 'Trash') {
-      const loadingId = toast.loading({ description: 'Deleting email…' });
-      deleteMutate(
-        {
-          path: folder || 'INBOX',
-          body: [emailIdNum],
-        },
-        {
-          onSuccess: (res) => {
-            if (isViewingDeletedEmail) handleBackToList();
-            toast.dismiss(loadingId);
-            toast.success({
-              description:
-                (res as unknown as { message?: string })?.message || 'Email permanently deleted.',
-            });
-
-            queryClient.invalidateQueries({
-              queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
-            });
-            if (searchState.isActive) {
-              queryClient.invalidateQueries({ queryKey: ['search-emails'] });
-            }
-          },
-          onError: (error) => {
-            toast.dismiss(loadingId);
-            toast.error({
-              description: error?.message || 'Failed to delete email.',
-            });
-          },
-        }
-      );
+      doPermanentDelete([emailIdNum]);
     } else {
-      toast.success({
-        description: 'Email is moving to trash',
-        undo: {
-          label: 'Undo',
-          onClick: () => {
-            // Cancel the pending action — email hasn't moved yet, nothing to reverse
-            pendingDeleteActions.current.delete(actionId);
-            toast.success({ description: 'Delete cancelled' });
-          },
-          duration: undoTime,
-        },
-      });
-
-      setTimeout(() => {
-        if (!pendingDeleteActions.current.has(actionId)) return;
-
-        const loadingId = toast.loading({ description: 'Moving to trash…' });
-        moveMutate(
-          {
-            path: folder || 'INBOX',
-            sourceFolder: folder || 'INBOX',
-            destFolder: 'Trash',
-            body: [emailIdNum],
-          },
-          {
-            onSuccess: () => {
-              toast.dismiss(loadingId);
-              if (isViewingDeletedEmail) handleBackToList();
-              queryClient.invalidateQueries({
-                queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
-              });
-              if (searchState.isActive) {
-                queryClient.invalidateQueries({ queryKey: ['search-emails'] });
-              }
-              pendingDeleteActions.current.delete(actionId);
-            },
-            onError: (error) => {
-              toast.dismiss(loadingId);
-              toast.error({
-                description: error?.message || 'Failed to move email to trash.',
-              });
-              pendingDeleteActions.current.delete(actionId);
-            },
-          }
-        );
-      }, undoTime);
+      doMoveToTrash([emailIdNum]);
     }
   };
 
@@ -1997,6 +1944,21 @@ const EmailList = ({
         }}
         onSave={handleBulkContactSave}
         isLoading={isSavingContacts}
+      />
+
+      <PermanentDeleteConfirm
+        open={isPermanentDeleteDialogOpen}
+        onOpenChange={setIsPermanentDeleteDialogOpen}
+        emailCount={permanentDeleteEmails.length}
+        quotaPercent={folderQuota?.used_percent}
+        onMoveToTrash={() => {
+          setIsPermanentDeleteDialogOpen(false);
+          doMoveToTrash(permanentDeleteEmails);
+        }}
+        onPermanentDelete={() => {
+          setIsPermanentDeleteDialogOpen(false);
+          doPermanentDelete(permanentDeleteEmails);
+        }}
       />
     </div>
   );
