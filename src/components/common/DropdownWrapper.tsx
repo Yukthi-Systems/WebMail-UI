@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { DropdownMenu, Button, Box } from '@radix-ui/themes';
 
 export interface DropdownItem {
@@ -42,6 +42,39 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   disabled = false,
   className = '',
 }) => {
+  const [open, setOpen] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handlePointerDownCapture = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      // Prevent Radix onPointerDown from triggering immediately on touch contact so dragging/scrolling works
+      e.preventDefault();
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStartRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = Math.abs(t.clientX - touchStartRef.current.x);
+    const dy = Math.abs(t.clientY - touchStartRef.current.y);
+    const dt = Date.now() - touchStartRef.current.time;
+    touchStartRef.current = null;
+
+    // If finger moved less than 12px within 500ms, it's an intentional tap!
+    if (dx < 12 && dy < 12 && dt < 500 && !disabled) {
+      setOpen((prev) => !prev);
+    }
+  };
+
   const getColorClasses = (color?: string) => {
     if (!color || color === 'default') {
       return {
@@ -73,20 +106,27 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
   return (
     <Box className={className}>
-      <DropdownMenu.Root>
-        {trigger ? (
-          // DropdownMenu.Trigger's declared props don't include Radix's own
-          // `asChild`, even though the underlying primitive supports it.
-          <DropdownMenu.Trigger {...({ asChild: true } as { asChild: boolean })}>
-            {trigger}
-          </DropdownMenu.Trigger>
-        ) : (
-          <DropdownMenu.Trigger>
-            <Button variant="soft" disabled={disabled}>
-              Select
-            </Button>
-          </DropdownMenu.Trigger>
-        )}
+      <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+        <div
+          className="inline-block"
+          onPointerDownCapture={handlePointerDownCapture}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {trigger ? (
+            // DropdownMenu.Trigger's declared props don't include Radix's own
+            // `asChild`, even though the underlying primitive supports it.
+            <DropdownMenu.Trigger {...({ asChild: true } as { asChild: boolean })}>
+              {trigger}
+            </DropdownMenu.Trigger>
+          ) : (
+            <DropdownMenu.Trigger>
+              <Button variant="soft" disabled={disabled}>
+                Select
+              </Button>
+            </DropdownMenu.Trigger>
+          )}
+        </div>
         <DropdownMenu.Content className="bg-[var(--color-panel-solid)] border border-[var(--gray-6)] shadow-lg">
           <div className="max-h-[350px] overflow-auto py-1">
             {items.map((item, index) => (

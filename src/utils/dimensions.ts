@@ -23,14 +23,14 @@ export function getEditorDimensions(
   if (isMobile) {
     if (hasAttachment) {
       return {
-        height: 'calc(100vh - 330px)',
-        maxHeight: 'calc(100vh - 260px)',
+        height: 'calc(100dvh - 330px)',
+        maxHeight: 'calc(100dvh - 260px)',
       };
     }
 
     return {
-      height: 'calc(100vh - 330px)',
-      maxHeight: 'calc(100vh - 260px)',
+      height: 'calc(100dvh - 330px)',
+      maxHeight: 'calc(100dvh - 260px)',
     };
   }
 

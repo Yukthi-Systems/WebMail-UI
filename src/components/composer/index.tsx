@@ -209,6 +209,36 @@ const Composer = () => {
     messageIdRef.current = messageId;
   }, [messageId]);
 
+  // Track dragging in the slideable strip so scrolling does not trigger child buttons
+  const isDraggingStripRef = useRef(false);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  const handleStripTouchStart = useCallback((e: React.TouchEvent) => {
+    isDraggingStripRef.current = false;
+    touchStartPosRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    };
+  }, []);
+
+  const handleStripTouchMove = useCallback((e: React.TouchEvent) => {
+    const dx = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x);
+    const dy = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y);
+    if (dx > 12 || dy > 12) {
+      isDraggingStripRef.current = true;
+    }
+  }, []);
+
+  const handleStripClickCapture = useCallback((e: React.MouseEvent) => {
+    if (isDraggingStripRef.current) {
+      e.stopPropagation();
+      e.preventDefault();
+      setTimeout(() => {
+        isDraggingStripRef.current = false;
+      }, 50);
+    }
+  }, []);
+
   // Check if message body is empty (excluding signature)
   const isMessageEmpty = useMemo(() => {
     if (!composerData.html) return true;
@@ -1110,15 +1140,16 @@ const Composer = () => {
         isFullView={fullViewEnabled}
         onToggleFullView={() => setFullViewEnabled((prev) => !prev)}
         footer={
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-2 sm:gap-3 w-full">
             <Button
               variant="ghost"
               size="2"
               onClick={handleComposerCancel}
-              className="text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)]"
+              className="text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] min-h-[38px] px-3 touch-manipulation"
+              aria-label="Cancel compose"
             >
               <FaDeleteLeft />
-              Cancel
+              <span>Cancel</span>
             </Button>
 
             {show_save_draft_button && (
@@ -1128,7 +1159,7 @@ const Composer = () => {
                   variant="ghost"
                   size="2"
                   onClick={handleDraftButtonClick}
-                  className={`text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] ${
+                  className={`text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] min-h-[38px] px-3 touch-manipulation ${
                     isQuotaExceeded ||
                     // RecipientFieldHandle doesn't actually expose `inputValue` (only `flush`),
                     // so this always evaluates truthy — pre-existing no-op, not fixed here.
@@ -1140,17 +1171,19 @@ const Composer = () => {
                   title={
                     !composerData.to?.length ? 'At least one recipient required to save draft' : ''
                   }
+                  aria-label="Save draft"
                   // We can't rely solely on state for 'disabled' because of pending text in Ref
                   disabled={isQuotaExceeded || isDrafting}
                 >
                   {isDrafting ? (
                     <>
-                      <span className="hidden sm:inline">Saving...</span>
+                      <FaFloppyDisk className="animate-pulse" />
+                      <span>Saving...</span>
                     </>
                   ) : (
                     <>
                       <FaFloppyDisk />
-                      <span className="hidden sm:inline">
+                      <span>
                         Save Draft{isQuotaExceeded && ' (Disabled)'}
                       </span>
                     </>
@@ -1166,11 +1199,12 @@ const Composer = () => {
                   variant="solid"
                   size="2"
                   onClick={handleSendButtonClick}
-                  className="bg-[var(--blue-9)] hover:bg-[var(--blue-10)] text-white font-medium"
+                  className="bg-[var(--blue-9)] hover:bg-[var(--blue-10)] text-white font-medium min-h-[38px] px-4 touch-manipulation shadow-sm"
+                  aria-label="Send email"
                   disabled={isQuotaExceeded}
                 >
                   <FaPaperPlane />
-                  Send
+                  <span>Send</span>
                 </Button>
               </>
             )}
@@ -1258,11 +1292,23 @@ const Composer = () => {
             />
           )}
 
-          {/* Priority and Template */}
-          <div className="w-full flex flex-row md:gap-2 md:items-center px-2 space-y-2 md:space-y-0">
-            <TemplateSelector onTemplateSelect={handleTemplateSelect} />
-            <EmailPriorityField priority={priority} onChange={setPriority} />
-            <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
+          {/* Priority, Template, and Read Receipt - Slideable row on mobile */}
+          <div
+            className="w-full flex items-center gap-2.5 px-1 py-1 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap shrink-0 overscroll-x-contain"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+            onTouchStart={handleStripTouchStart}
+            onTouchMove={handleStripTouchMove}
+            onClickCapture={handleStripClickCapture}
+          >
+            <div className="shrink-0">
+              <TemplateSelector onTemplateSelect={handleTemplateSelect} />
+            </div>
+            <div className="shrink-0">
+              <EmailPriorityField priority={priority} onChange={setPriority} />
+            </div>
+            <div className="shrink-0 flex items-center h-[34px] px-2.5 rounded-lg border border-[var(--gray-5)] bg-[var(--gray-2)]/60 hover:bg-[var(--gray-3)] transition-colors">
+              <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
+            </div>
           </div>
 
           {/* Quota Warning */}

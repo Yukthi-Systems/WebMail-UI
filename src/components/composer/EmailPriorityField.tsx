@@ -53,7 +53,7 @@ const EmailPriorityField = ({ priority, onChange }: EmailPriorityFieldProps) => 
   const currentConfig = priorityConfig[priority];
 
   const trigger = (
-    <Button variant="soft" className="min-w-[160px] justify-between">
+    <Button variant="soft" className="min-w-[160px] justify-between touch-manipulation">
       <div className="flex items-center gap-2">
         <currentConfig.icon size={14} />
         <span className="truncate">{currentConfig.label}</span>

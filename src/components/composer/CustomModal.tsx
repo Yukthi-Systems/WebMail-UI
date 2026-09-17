@@ -54,6 +54,38 @@ const CustomModal = ({
   const modalId = useId();
   const { register, unregister } = useMinimizedModals();
   const isMobile = useIsMobile();
+  const [viewportState, setViewportState] = useState<{ height?: number; top?: number }>({});
+
+  useEffect(() => {
+    if (!isMobile || typeof window === 'undefined') return;
+
+    const updateViewport = () => {
+      if (window.visualViewport) {
+        setViewportState({
+          height: window.visualViewport.height,
+          top: window.visualViewport.offsetTop,
+        });
+      }
+    };
+
+    updateViewport();
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateViewport);
+      window.visualViewport.addEventListener('scroll', updateViewport);
+    } else {
+      window.addEventListener('resize', updateViewport);
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', updateViewport);
+        window.visualViewport.removeEventListener('scroll', updateViewport);
+      } else {
+        window.removeEventListener('resize', updateViewport);
+      }
+    };
+  }, [isMobile, isOpen]);
 
   const dragCache = useRef({
     startX: 0,
@@ -90,15 +122,20 @@ const CustomModal = ({
   }, [isFullView]);
 
   useEffect(() => {
-    if (isOpen && blocking && !isMinimized) {
+    if (isOpen && (blocking || isMobile) && !isMinimized) {
       document.body.style.overflow = 'hidden';
+      if (isMobile) {
+        document.body.style.touchAction = 'none';
+      }
     } else {
       document.body.style.overflow = 'unset';
+      document.body.style.touchAction = 'unset';
     }
     return () => {
       document.body.style.overflow = 'unset';
+      document.body.style.touchAction = 'unset';
     };
-  }, [isOpen, blocking, isMinimized]);
+  }, [isOpen, blocking, isMinimized, isMobile]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -109,7 +146,7 @@ const CustomModal = ({
   }, [isOpen, onClose, isMinimized]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!draggable || isFullView || isMinimized || !modalRef.current) return;
+    if (isMobile || !draggable || isFullView || isMinimized || !modalRef.current) return;
 
     isDraggingRef.current = true;
 
@@ -209,7 +246,7 @@ const CustomModal = ({
       ' shadow-[0_-4px_24px_-2px_rgba(0,0,0,0.18),0_8px_32px_-4px_rgba(0,0,0,0.18),0_0_0_1px_rgba(0,0,0,0.06)]';
     if (isMinimized) return 'hidden';
     if (isMobile) {
-      return `${baseClasses} w-screen h-screen top-0 left-0 rounded-none`;
+      return `${baseClasses} inset-0 w-full max-w-[100vw] h-full h-[100dvh] max-h-[100dvh] rounded-none overflow-hidden`;
     }
     if (isFullView) {
       return `${baseClasses} w-[95vw] max-h-[90vh] top-1/2 left-1/2 transition-all duration-300 ease-in-out`;
@@ -249,13 +286,29 @@ const CustomModal = ({
       <div
         ref={modalRef}
         className={getContainerClasses()}
-        style={{ transform: getTransform(), opacity: 1 }}
+        style={{
+          transform: getTransform(),
+          opacity: 1,
+          ...(isMobile
+            ? {
+                height: viewportState.height ? `${viewportState.height}px` : '100dvh',
+                maxHeight: viewportState.height ? `${viewportState.height}px` : '100dvh',
+                top: viewportState.top !== undefined ? `${viewportState.top}px` : 0,
+                left: 0,
+                right: 0,
+                bottom: 'auto',
+              }
+            : {}),
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div
-          className={`px-5 py-4 border-b border-[var(--gray-5)] flex items-center justify-between shrink-0 shadow-[0_1px_4px_rgba(0,0,0,0.08)]
-            ${draggable && !isFullView ? 'cursor-move' : ''}`}
+          className={`px-4 sm:px-5 py-3 sm:py-4 border-b border-[var(--gray-5)] flex items-center justify-between shrink-0 shadow-[0_1px_4px_rgba(0,0,0,0.08)]
+            ${draggable && !isFullView && !isMobile ? 'cursor-move' : ''}`}
+          style={{
+            paddingTop: isMobile ? 'max(0.75rem, env(safe-area-inset-top, 0.75rem))' : undefined,
+          }}
           onMouseDown={handleMouseDown}
         >
           <h2 className="text-lg font-semibold m-0 select-none truncate pr-4">{title}</h2>
@@ -305,9 +358,16 @@ const CustomModal = ({
             </Button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0 animate-fadeIn">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 sm:py-4 min-h-0 animate-fadeIn">{children}</div>
         {footer && (
-          <div className="px-5 py-3 border-t border-[var(--gray-5)] bg-[var(--gray-1)] rounded-b-lg shrink-0">
+          <div
+            className="px-4 sm:px-5 pt-3 border-t border-[var(--gray-5)] bg-[var(--gray-1)] rounded-none sm:rounded-b-lg shrink-0 z-10"
+            style={{
+              paddingBottom: isMobile
+                ? 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))'
+                : '0.75rem',
+            }}
+          >
             {footer}
           </div>
         )}

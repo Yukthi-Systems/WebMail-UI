@@ -218,6 +218,36 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     composerDataRef.current = composerData;
   }, [composerData]);
 
+  // Track dragging in the slideable strip so scrolling does not trigger child buttons
+  const isDraggingStripRef = useRef(false);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  const handleStripTouchStart = useCallback((e: React.TouchEvent) => {
+    isDraggingStripRef.current = false;
+    touchStartPosRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    };
+  }, []);
+
+  const handleStripTouchMove = useCallback((e: React.TouchEvent) => {
+    const dx = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x);
+    const dy = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y);
+    if (dx > 12 || dy > 12) {
+      isDraggingStripRef.current = true;
+    }
+  }, []);
+
+  const handleStripClickCapture = useCallback((e: React.MouseEvent) => {
+    if (isDraggingStripRef.current) {
+      e.stopPropagation();
+      e.preventDefault();
+      setTimeout(() => {
+        isDraggingStripRef.current = false;
+      }, 50);
+    }
+  }, []);
+
   const toggleField = (field: keyof typeof fieldVisibility) => {
     setFieldVisibility((prev) => ({
       ...prev,
@@ -1122,27 +1152,28 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                 : 'New Message'
       }
       footer={
-        <div className="flex flex-row justify-between items-center w-full gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-row items-center justify-between w-full gap-2 sm:gap-3">
+          <div className="hidden sm:flex items-center gap-3">
             <EmailPriorityField priority={priority} onChange={setPriority} />
             <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
           </div>
 
-          <div className="flex items-center gap-2 md:gap-3 flex-wrap justify-end">
+          <div className="flex items-center gap-2 sm:gap-3 justify-end ml-auto">
             <button
               onClick={handleComposerCancel}
-              className="flex items-center gap-2 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] px-3 py-2 rounded text-sm"
+              className="flex items-center gap-2 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] px-3 py-2 rounded text-sm min-h-[38px] touch-manipulation"
               disabled={isLoading}
+              aria-label="Cancel compose"
             >
               <FaDeleteLeft />
-              <span className="hidden sm:inline">Cancel</span>
+              <span>Cancel</span>
             </button>
 
-            <div className="h-6 w-px bg-[var(--gray-6)] hidden sm:block" />
+            <div className="h-6 w-px bg-[var(--gray-6)]" />
 
             <button
               onClick={handleSaveDraft}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors min-h-[38px] touch-manipulation ${
                 isQuotaExceeded ||
                 (!composerData.to?.length &&
                   !(toRef.current as unknown as { inputValue?: string })?.inputValue) ||
@@ -1153,30 +1184,31 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
               title={
                 !composerData.to?.length ? 'At least one recipient required to save draft' : ''
               }
-              // Note: We can't easily check internal ref value here for disabling button,
-              // but handleSaveDraft handles the validation check on click.
               disabled={isLoading || isQuotaExceeded || isDrafting}
+              aria-label="Save draft"
             >
               {isDrafting ? (
                 <>
-                  <span className="hidden sm:inline">Saving...</span>
+                  <FaFloppyDisk className="animate-pulse" />
+                  <span>Saving...</span>
                 </>
               ) : (
                 <>
                   <FaFloppyDisk />
-                  <span className="hidden sm:inline">
+                  <span>
                     Save Draft{isQuotaExceeded && ' (Disabled)'}
                   </span>
                 </>
               )}
             </button>
 
-            <div className="h-6 w-px bg-[var(--gray-6)] hidden sm:block" />
+            <div className="h-6 w-px bg-[var(--gray-6)]" />
 
             <button
               onClick={handleSend}
-              className="flex items-center gap-2 bg-[var(--accent-9)] hover:bg-[var(--accent-10)] text-white font-medium px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              className="flex items-center gap-2 bg-[var(--accent-9)] hover:bg-[var(--accent-10)] text-white font-medium px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm min-h-[38px] touch-manipulation shadow-sm"
               disabled={isLoading || isSending}
+              aria-label="Send email"
             >
               {isSending ? (
                 <>
@@ -1196,12 +1228,12 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  <span className="hidden sm:inline">Sending...</span>
+                  <span>Sending...</span>
                 </>
               ) : (
                 <>
                   <FaPaperPlane />
-                  <span className="hidden sm:inline">Send</span>
+                  <span>Send</span>
                 </>
               )}
             </button>
@@ -1295,6 +1327,22 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
               value={composerData.subject || ''}
               onChange={(subject) => updateComposerData({ subject })}
             />
+
+            {/* Priority and Read Receipt for mobile screens - Slideable row */}
+            <div
+              className="flex sm:hidden items-center gap-2.5 px-1 py-1 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap shrink-0 overscroll-x-contain"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+              onTouchStart={handleStripTouchStart}
+              onTouchMove={handleStripTouchMove}
+              onClickCapture={handleStripClickCapture}
+            >
+              <div className="shrink-0">
+                <EmailPriorityField priority={priority} onChange={setPriority} />
+              </div>
+              <div className="shrink-0 flex items-center h-[34px] px-2.5 rounded-lg border border-[var(--gray-5)] bg-[var(--gray-2)]/60 hover:bg-[var(--gray-3)] transition-colors">
+                <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
+              </div>
+            </div>
 
             {/* Content Editor and Attachments */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2">

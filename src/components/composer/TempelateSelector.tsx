@@ -16,7 +16,8 @@
  */
 
 // src/components/composer/TemplateSelector.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { FaFileAlt, FaSpinner, FaChevronDown } from 'react-icons/fa';
 import { useEmailTemplates, useEmailTemplate } from '../../hooks/useTempelate';
 import { useAtom, useAtomValue } from 'jotai';
@@ -38,6 +39,11 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const userDetails = useAtomValue(userDetailsAtom);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
   const location = useLocation();
   const slug = getCompanySlugFromPath(location.pathname);
 
@@ -102,13 +108,26 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
 
   const isLoading = loadingPersonal || loadingShared;
 
+  const toggleOpen = () => {
+    if (!isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - 330));
+      setDropdownPosition({
+        top: rect.bottom + 6,
+        left,
+      });
+    }
+    setIsOpen((prev) => !prev);
+  };
+
   return (
     <div className="relative">
       {/* Trigger Button */}
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] rounded-lg transition-all border border-[var(--gray-5)]"
+        onClick={toggleOpen}
+        className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] rounded-lg transition-all border border-[var(--gray-5)] whitespace-nowrap"
       >
         <FaFileAlt className="w-3.5 h-3.5" />
         Use Template
@@ -116,115 +135,125 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
       </button>
 
       {/* Dropdown */}
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+      {isOpen &&
+        createPortal(
+          <>
+            {/* Backdrop */}
+            <div className="fixed inset-0 z-[10000]" onClick={() => setIsOpen(false)} />
 
-          {/* Dropdown Content */}
-          <div className="absolute top-full left-0 mt-2 w-80 bg-[var(--gray-1)] border border-[var(--gray-6)] rounded-lg shadow-xl z-50 overflow-hidden">
-            {/* Header with Search */}
-            <div className="p-3 border-b border-[var(--gray-5)]">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-[var(--gray-12)]">Select Template</h3>
-                <button
-                  onClick={handleClickAdd}
-                  className="p-1 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] rounded flex items-center gap-1"
-                  title="Create New Template"
-                >
-                  <FaPlus className="w-3 h-3" />
-                  <span className="text-xs">New</span>
-                </button>
+            {/* Dropdown Content */}
+            <div
+              style={{
+                position: 'fixed',
+                top: `${dropdownPosition.top}px`,
+                left: `${dropdownPosition.left}px`,
+                zIndex: 10001,
+              }}
+              className="w-80 max-w-[calc(100vw-16px)] bg-[var(--gray-1)] border border-[var(--gray-6)] rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            >
+              {/* Header with Search */}
+              <div className="p-3 border-b border-[var(--gray-5)]">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-[var(--gray-12)]">Select Template</h3>
+                  <button
+                    onClick={handleClickAdd}
+                    className="p-1 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] rounded flex items-center gap-1"
+                    title="Create New Template"
+                  >
+                    <FaPlus className="w-3 h-3" />
+                    <span className="text-xs">New</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search templates..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-1.5 text-sm bg-[var(--gray-2)] border border-[var(--gray-5)] rounded-lg text-[var(--gray-12)] placeholder:text-[var(--gray-9)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-8)]"
+                />
               </div>
-              <input
-                type="text"
-                placeholder="Search templates..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-1.5 text-sm bg-[var(--gray-2)] border border-[var(--gray-5)] rounded-lg text-[var(--gray-12)] placeholder:text-[var(--gray-9)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-8)]"
-              />
-            </div>
 
-            {/* Templates List */}
-            <div className="max-h-96 overflow-y-auto">
-              {isLoading ? (
-                <div className="flex items-center justify-center p-8">
-                  <FaSpinner className="animate-spin text-xl text-[var(--gray-9)]" />
-                </div>
-              ) : filteredTemplates.length === 0 ? (
-                <div className="p-8 text-center text-sm text-[var(--gray-10)]">
-                  {searchTerm ? 'No templates found' : 'No templates available'}
-                </div>
-              ) : (
-                <>
-                  {/* Personal Templates */}
-                  {filteredPersonal.length > 0 && (
-                    <div className="p-2">
-                      <div className="px-2 py-1 text-xs font-semibold text-[var(--gray-10)] uppercase">
-                        My Templates
+              {/* Templates List */}
+              <div className="max-h-96 overflow-y-auto">
+                {isLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <FaSpinner className="animate-spin text-xl text-[var(--gray-9)]" />
+                  </div>
+                ) : filteredTemplates.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-[var(--gray-10)]">
+                    {searchTerm ? 'No templates found' : 'No templates available'}
+                  </div>
+                ) : (
+                  <>
+                    {/* Personal Templates */}
+                    {filteredPersonal.length > 0 && (
+                      <div className="p-2">
+                        <div className="px-2 py-1 text-xs font-semibold text-[var(--gray-10)] uppercase">
+                          My Templates
+                        </div>
+                        {filteredPersonal.map((template) => (
+                          <button
+                            key={template.template_id}
+                            onClick={() => handleTemplateClick(template.template_id)}
+                            disabled={loadingTemplate}
+                            className="w-full px-3 py-2 text-left hover:bg-[var(--gray-3)] rounded-lg transition-all flex items-center justify-between group disabled:opacity-50"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-[var(--gray-12)] truncate">
+                                {template.name}
+                              </div>
+                              <div className="text-xs text-[var(--gray-10)] truncate">
+                                Updated {new Date(template.modified_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                            {loadingTemplate &&
+                              selectedTemplateId === template.template_id.toString() && (
+                                <FaSpinner className="animate-spin w-3 h-3 text-[var(--gray-9)]" />
+                              )}
+                          </button>
+                        ))}
                       </div>
-                      {filteredPersonal.map((template) => (
-                        <button
-                          key={template.template_id}
-                          onClick={() => handleTemplateClick(template.template_id)}
-                          disabled={loadingTemplate}
-                          className="w-full px-3 py-2 text-left hover:bg-[var(--gray-3)] rounded-lg transition-all flex items-center justify-between group disabled:opacity-50"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-[var(--gray-12)] truncate">
-                              {template.name}
-                            </div>
-                            <div className="text-xs text-[var(--gray-10)] truncate">
-                              Updated {new Date(template.modified_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                          {loadingTemplate &&
-                            selectedTemplateId === template.template_id.toString() && (
-                              <FaSpinner className="animate-spin w-3 h-3 text-[var(--gray-9)]" />
-                            )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                    )}
 
-                  {/* Shared Templates (from other users only) */}
-                  {filteredShared.length > 0 && (
-                    <div
-                      className={`p-2 ${filteredPersonal.length > 0 ? 'border-t border-[var(--gray-5)]' : ''}`}
-                    >
-                      <div className="px-2 py-1 text-xs font-semibold text-[var(--gray-10)] uppercase">
-                        Shared by Others
+                    {/* Shared Templates (from other users only) */}
+                    {filteredShared.length > 0 && (
+                      <div
+                        className={`p-2 ${filteredPersonal.length > 0 ? 'border-t border-[var(--gray-5)]' : ''}`}
+                      >
+                        <div className="px-2 py-1 text-xs font-semibold text-[var(--gray-10)] uppercase">
+                          Shared by Others
+                        </div>
+                        {filteredShared.map((template) => (
+                          <button
+                            key={template.template_id}
+                            onClick={() => handleTemplateClick(template.template_id)}
+                            disabled={loadingTemplate}
+                            className="w-full px-3 py-2 text-left hover:bg-[var(--gray-3)] rounded-lg transition-all flex items-center justify-between group disabled:opacity-50"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-[var(--gray-12)] truncate">
+                                {template.name}
+                              </div>
+                              <div className="text-xs text-[var(--gray-10)] truncate">
+                                By {template.created_by} •{' '}
+                                {new Date(template.modified_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                            {loadingTemplate &&
+                              selectedTemplateId === template.template_id.toString() && (
+                                <FaSpinner className="animate-spin w-3 h-3 text-[var(--gray-9)]" />
+                              )}
+                          </button>
+                        ))}
                       </div>
-                      {filteredShared.map((template) => (
-                        <button
-                          key={template.template_id}
-                          onClick={() => handleTemplateClick(template.template_id)}
-                          disabled={loadingTemplate}
-                          className="w-full px-3 py-2 text-left hover:bg-[var(--gray-3)] rounded-lg transition-all flex items-center justify-between group disabled:opacity-50"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-[var(--gray-12)] truncate">
-                              {template.name}
-                            </div>
-                            <div className="text-xs text-[var(--gray-10)] truncate">
-                              By {template.created_by} •{' '}
-                              {new Date(template.modified_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                          {loadingTemplate &&
-                            selectedTemplateId === template.template_id.toString() && (
-                              <FaSpinner className="animate-spin w-3 h-3 text-[var(--gray-9)]" />
-                            )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>,
+          document.body
+        )}
     </div>
   );
 };
