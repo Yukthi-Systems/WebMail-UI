@@ -39,9 +39,11 @@ import {
   FaSpinner,
   FaExclamationTriangle,
   FaEnvelope,
+  FaPrint,
 } from 'react-icons/fa';
 import { useToast } from '../../../../../hooks/useToast';
 import { sanitizeHTMLContent } from '../../../../../utils/sanitizeHTMLContent';
+import { printAttachment } from '../../../../../utils/emailPrint';
 
 /** Loose shape covering both postal-mime attachments and the composer's own attachment payloads. */
 export interface EmailAttachment {
@@ -756,8 +758,8 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   // ─── Office + EML HTML rendering ──────────────────────────────────────────
 
   const processOfficePreview = useCallback(
-    async (attachment: EmailAttachment, index: number) => {
-      if (officeHtml.has(index)) return;
+    async (attachment: EmailAttachment, index: number): Promise<string | undefined> => {
+      if (officeHtml.has(index)) return officeHtml.get(index);
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
 
       setLoadingIndex(index);
@@ -776,14 +778,62 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
           next.delete(index);
           return next;
         });
+        return html;
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Preview failed';
         setOfficeError((prev) => new Map(prev).set(index, message));
+        return undefined;
       } finally {
         setLoadingIndex(null);
       }
     },
     [officeHtml]
+  );
+
+  // ─── Print capability & handler ───────────────────────────────────────────
+
+  const canPrint = useCallback(
+    (mimeType: string): boolean =>
+      mimeType.startsWith('image/') ||
+      mimeType === 'application/pdf' ||
+      mimeType.startsWith('text/') ||
+      mimeType === 'application/json' ||
+      mimeType === 'text/csv' ||
+      isWordFile(mimeType) ||
+      isExcelFile(mimeType) ||
+      isEmlFile(mimeType),
+    []
+  );
+
+  const handlePrint = useCallback(
+    async (attachment: EmailAttachment, index: number) => {
+      const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
+      if (!canPrint(mime)) {
+        toast.error({
+          description: `Printing is not supported for ${getFileTypeLabel(mime)} files`,
+        });
+        return;
+      }
+
+      let html = officeHtml.get(index);
+      if ((isWordFile(mime) || isExcelFile(mime) || isEmlFile(mime)) && !html) {
+        html = await processOfficePreview(attachment, index);
+      }
+
+      let url = blobUrls.get(index);
+      if (!url) {
+        url = createBlobUrl(attachment, index) ?? undefined;
+      }
+
+      printAttachment({
+        filename: attachment.filename || 'attachment',
+        mimeType: mime,
+        content: attachment.content,
+        blobUrl: url,
+        renderedHtml: html,
+      });
+    },
+    [blobUrls, canPrint, createBlobUrl, officeHtml, processOfficePreview, toast]
   );
 
   // ─── Open preview modal ────────────────────────────────────────────────────
@@ -957,7 +1007,28 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
     ? normalizeMimeType(currentAttachment.mimeType, currentAttachment.filename)
     : '';
   const isPreviewable = currentAttachment && canPreview(currentMimeType);
+  const isPrintable = currentAttachment && canPrint(currentMimeType);
   const isCurrentLoading = previewIndex !== null && loadingIndex === previewIndex;
+
+  useEffect(() => {
+    if (previewIndex === null || !currentAttachment) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closePreview();
+      } else if (e.key === 'ArrowRight' && displayAttachments.length > 1) {
+        navigatePreview('next');
+      } else if (e.key === 'ArrowLeft' && displayAttachments.length > 1) {
+        navigatePreview('prev');
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint(currentAttachment, previewIndex);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewIndex, currentAttachment, closePreview, navigatePreview, displayAttachments.length, handlePrint]);
 
   return (
     <>
@@ -1023,6 +1094,19 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                           <FaShare size={12} />
                         </button>
                       )}
+                      {canPrint(mimeType) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePrint(attachment, index);
+                          }}
+                          className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-[var(--gray-11)] hover:text-[var(--gray-12)] bg-[var(--gray-3)] hover:bg-[var(--gray-4)] border border-[var(--gray-6)] hover:border-[var(--gray-7)] rounded-md transition-all duration-200"
+                          title="Print"
+                          aria-label="Print attachment"
+                        >
+                          <FaPrint size={12} />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1071,13 +1155,27 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                   <button
                     onClick={() => setIsFullscreen(!isFullscreen)}
                     className="p-2 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-4)] rounded-md transition-colors"
+                    title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                   >
                     {isFullscreen ? <FaCompress size={14} /> : <FaExpand size={14} />}
+                  </button>
+                )}
+                {isPrintable && (
+                  <button
+                    onClick={() => handlePrint(currentAttachment, previewIndex)}
+                    className="p-2 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-4)] rounded-md transition-colors"
+                    title="Print Attachment (Ctrl+P / Cmd+P)"
+                    aria-label="Print Attachment"
+                  >
+                    <FaPrint size={14} />
                   </button>
                 )}
                 <button
                   onClick={() => handleDownload(currentAttachment)}
                   className="p-2 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-4)] rounded-md transition-colors"
+                  title="Download Attachment"
+                  aria-label="Download Attachment"
                 >
                   <FaDownload size={14} />
                 </button>
@@ -1085,6 +1183,8 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                 <button
                   onClick={closePreview}
                   className="p-2 text-[var(--gray-11)] hover:text-[var(--red-9)] hover:bg-[var(--red-3)] rounded-md transition-colors"
+                  title="Close Preview (Esc)"
+                  aria-label="Close Preview"
                 >
                   <FaTimes size={16} />
                 </button>

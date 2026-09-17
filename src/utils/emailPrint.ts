@@ -535,3 +535,259 @@ function isSafari(): boolean {
   const ua = navigator.userAgent.toLowerCase();
   return ua.indexOf('safari') !== -1 && ua.indexOf('chrome') === -1;
 }
+
+export interface PrintableAttachmentOptions {
+  filename?: string;
+  mimeType: string;
+  content: string; // base64 content
+  blobUrl?: string;
+  renderedHtml?: string; // for office/eml docs
+}
+
+/** Print an attachment (PDF, image, office document, text, etc.) */
+export function printAttachment(options: PrintableAttachmentOptions) {
+  const { filename = 'attachment', mimeType, content, blobUrl, renderedHtml } = options;
+  const safeFilename = escapeHtml(filename);
+
+  // 1. PDF
+  if (mimeType === 'application/pdf') {
+    const pdfUrl = blobUrl || (content ? `data:application/pdf;base64,${content}` : null);
+    if (!pdfUrl) return;
+
+    // Try hidden iframe first for in-page print dialog
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.src = pdfUrl;
+    document.body.appendChild(iframe);
+
+    let printed = false;
+    const tryPrint = () => {
+      if (printed) return;
+      printed = true;
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch {
+        // Fallback to window.open for PDF plugins that block iframe printing
+        const win = window.open(pdfUrl, '_blank');
+        if (win) {
+          win.focus();
+          setTimeout(() => win.print(), 500);
+        }
+      }
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 3000);
+    };
+
+    iframe.onload = () => setTimeout(tryPrint, 300);
+    setTimeout(tryPrint, 1500); // fallback if onload doesn't trigger
+    return;
+  }
+
+  // 2. Images
+  if (mimeType.startsWith('image/')) {
+    const imageUrl = blobUrl || (content ? `data:${mimeType};base64,${content}` : null);
+    if (!imageUrl) return;
+
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    if (!printWindow) {
+      alert('Please allow popups to print attachments');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Print - ${safeFilename}</title>
+          <style>
+            @page {
+              margin: 1cm;
+              size: auto;
+            }
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            body {
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+              background: #fff;
+            }
+            img {
+              max-width: 100%;
+              max-height: 95vh;
+              object-fit: contain;
+            }
+            @media print {
+              body {
+                min-height: auto;
+              }
+              img {
+                max-width: 100%;
+                max-height: 100%;
+                page-break-inside: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <img src="${imageUrl}" onload="window.focus(); setTimeout(function() { window.print(); window.close(); }, 250);" />
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    return;
+  }
+
+  // 3. Office Documents / EML with rendered HTML
+  if (renderedHtml) {
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      alert('Please allow popups to print attachments');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Print - ${safeFilename}</title>
+          <style>
+            @page {
+              margin: 1.5cm;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+              padding: 24px;
+              color: #111;
+              line-height: 1.5;
+            }
+            table {
+              border-collapse: collapse;
+              width: 100%;
+              margin: 16px 0;
+            }
+            th, td {
+              border: 1px solid #ccc;
+              padding: 6px 10px;
+              font-size: 12px;
+              text-align: left;
+            }
+            th {
+              background: #f5f5f5;
+              font-weight: bold;
+            }
+            h1, h2, h3 {
+              margin-bottom: 12px;
+            }
+            p {
+              margin-bottom: 8px;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              table {
+                page-break-inside: auto;
+              }
+              tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          ${renderedHtml}
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 300);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    return;
+  }
+
+  // 4. Text / Plain text / CSV / JSON
+  if (mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'text/csv') {
+    let decodedText = '';
+    try {
+      decodedText = atob(content);
+    } catch {
+      decodedText = content;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    if (!printWindow) {
+      alert('Please allow popups to print attachments');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Print - ${safeFilename}</title>
+          <style>
+            @page {
+              margin: 1.5cm;
+            }
+            body {
+              font-family: "Courier New", Courier, monospace;
+              font-size: 12px;
+              line-height: 1.4;
+              padding: 24px;
+              color: #111;
+            }
+            pre {
+              white-space: pre-wrap;
+              word-break: break-word;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <pre>${escapeHtml(decodedText)}</pre>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 250);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    return;
+  }
+}
