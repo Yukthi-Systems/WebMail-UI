@@ -828,6 +828,8 @@ const EmailList = ({
 
   const handleDeselectAll = () => {
     setCheckedEmails([]);
+    setIsSelectionMode(false);
+    setLastSelectedIndex(null);
   };
 
   const handleEditAsNew = (email: Email) => {

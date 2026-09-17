@@ -98,6 +98,8 @@ const EmailCard = ({
   const [tooltipPosition, setTooltipPosition] = useState<'bottom' | 'top'>('bottom');
   const tooltipTriggerRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef<boolean>(false);
+  const suppressClickRef = useRef<boolean>(false);
   const touchStartTimeRef = useRef<number>(0);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number>(0);
@@ -438,6 +440,12 @@ const EmailCard = ({
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
+    // If this click was triggered by lifting the finger after a long-press, ignore it
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+
     if (
       e.target instanceof HTMLElement &&
       (e.target.closest('input[type="checkbox"]') ||
@@ -445,6 +453,13 @@ const EmailCard = ({
         e.target.closest('a'))
     )
       return;
+
+    // In selection mode, clicking any email selects/deselects it instead of opening
+    if (isSelectionMode) {
+      onSelectionChange?.(email.id, !isSelected, index);
+      return;
+    }
+
     onEmailClick?.(email);
   };
 
@@ -530,11 +545,15 @@ const EmailCard = ({
     touchStartYRef.current = touch.clientY;
     touchStartXRef.current = touch.clientX;
     touchMovedRef.current = false;
+    longPressTriggeredRef.current = false;
     setIsPressed(true);
     longPressTimerRef.current = setTimeout(() => {
       if (!touchMovedRef.current) {
+        longPressTriggeredRef.current = true;
+        suppressClickRef.current = true;
+        setIsPressed(false);
         onEnterSelectionMode?.();
-        onSelectionChange?.(email.id, true);
+        onSelectionChange?.(email.id, true, index);
         navigator.vibrate?.(50);
       }
     }, 500);
@@ -555,21 +574,24 @@ const EmailCard = ({
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchEnd = () => {
     setIsPressed(false);
-    const touchDuration = Date.now() - touchStartTimeRef.current;
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-    if (touchDuration < 500 && !touchMovedRef.current && !isSelectionMode)
-      handleCardClick(e as unknown as React.MouseEvent);
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      // Already selected via long-press timeout; suppressClickRef prevents trailing click
+      return;
+    }
     touchMovedRef.current = false;
   };
 
   const handleTouchCancel = () => {
     setIsPressed(false);
     touchMovedRef.current = false;
+    longPressTriggeredRef.current = false;
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -661,15 +683,25 @@ const EmailCard = ({
             {/* Mobile Layout */}
             <div className="block md:hidden">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-1 relative">
+                <div
+                  className="flex-shrink-0 mt-1 relative cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isSelectionMode) {
+                      onEnterSelectionMode?.();
+                    }
+                    onSelectionChange?.(email.id, !isSelected, index);
+                  }}
+                  title={isSelectionMode ? (isSelected ? 'Deselect email' : 'Select email') : 'Select email'}
+                >
                   <BIMIAvatar
                     name={senderName}
                     email={senderEmail}
                     size={32}
-                    className="cursor-pointer hover:ring-2 hover:ring-[var(--accent-8)] transition-all"
+                    className="hover:ring-2 hover:ring-[var(--accent-8)] transition-all"
                   />
                   {isSelected && (
-                    <div className="absolute -top-[15px] -left-[7px] w-4 h-4 bg-[var(--accent-9)] text-white rounded-full flex items-center justify-center text-[10px] font-bold">
+                    <div className="absolute -top-1 -left-1 w-4 h-4 bg-[var(--accent-9)] text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm ring-1 ring-white dark:ring-[var(--gray-1)]">
                       ✓
                     </div>
                   )}
@@ -699,24 +731,28 @@ const EmailCard = ({
                           )}
                         </div>
                       )}
-                      <button
-                        onClick={handleMarkAsReadClick}
-                        className="p-1 hover:bg-[var(--accent-3)] rounded transition-colors"
-                        title={emailSeen ? 'Mark as Unread' : 'Mark as Read'}
-                      >
-                        {emailSeen ? (
-                          <MdMarkEmailUnread className="w-3 h-3 text-[var(--gray-10)]" />
-                        ) : (
-                          <MdMarkEmailRead className="w-3 h-3 text-[var(--gray-10)]" />
-                        )}
-                      </button>
-                      <button
-                        onClick={handleDeleteClick}
-                        className="p-1 hover:bg-[var(--red-3)] rounded transition-colors group/mobile-delete"
-                        title={folder === 'Trash' ? 'Delete Permanently' : 'Move to Trash'}
-                      >
-                        <FaTrash className="w-3 h-3 text-[var(--gray-10)] group-hover/mobile-delete:text-[var(--red-11)]" />
-                      </button>
+                      {!isSelectionMode && (
+                        <>
+                          <button
+                            onClick={handleMarkAsReadClick}
+                            className="p-1 hover:bg-[var(--accent-3)] rounded transition-colors"
+                            title={emailSeen ? 'Mark as Unread' : 'Mark as Read'}
+                          >
+                            {emailSeen ? (
+                              <MdMarkEmailUnread className="w-3 h-3 text-[var(--gray-10)]" />
+                            ) : (
+                              <MdMarkEmailRead className="w-3 h-3 text-[var(--gray-10)]" />
+                            )}
+                          </button>
+                          <button
+                            onClick={handleDeleteClick}
+                            className="p-1 hover:bg-[var(--red-3)] rounded transition-colors group/mobile-delete"
+                            title={folder === 'Trash' ? 'Delete Permanently' : 'Move to Trash'}
+                          >
+                            <FaTrash className="w-3 h-3 text-[var(--gray-10)] group-hover/mobile-delete:text-[var(--red-11)]" />
+                          </button>
+                        </>
+                      )}
                       {hasAttachments && (
                         <FaPaperclip className="text-[10px] text-[var(--gray-9)]" />
                       )}
