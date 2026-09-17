@@ -51,6 +51,7 @@ import { rawEmailCacheKey } from '../../../hooks/useEmailRaw';
 import { userSettingsAtom } from '../../../state/settings';
 import { flagAtom } from '../../../state/flags';
 import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../utils/emailPrint';
+import { formatForwardSubject } from '../../../utils/replyForwardHelper';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { usePanelSizes } from '../../../hooks/usePanelSizes';
 import { searchStateAtom } from '../../../state/search';
@@ -1371,7 +1372,7 @@ const EmailList = ({
       resetComposerData();
       setComposerData((prev) => ({
         ...prev,
-        subject: `Fwd: ${subject}`,
+        subject: formatForwardSubject(subject),
         html: '<p><br></p>',
         // Backend/snake_case-shaped attachment (mime_type, data), not ComposerEmail's
         // declared camelCase EmailAttachment (mimeType, content) — same pre-existing

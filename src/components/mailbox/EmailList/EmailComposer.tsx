@@ -62,6 +62,8 @@ import {
   extractHeadersFromRawEmail,
   buildReplyHeaders,
   processIncomingHtml,
+  formatReplySubject,
+  formatForwardSubject,
   type EmailPriority,
   type EmailHeaders,
   type Address,
@@ -413,7 +415,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
             : parseEmailAddresses(email?.From || '');
 
           basicData.to = replyAddress;
-          basicData.subject = `Re: ${decodeWords(email.Subject) || ''}`;
+          basicData.subject = formatReplySubject(email.Subject);
         } else if (mode === 'replyAll') {
           const replyToHeader = basicData.headers?.['Reply-To'] || basicData.headers?.['reply-to'];
 
@@ -446,9 +448,9 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
           if (ccAddresses.length > 0) {
             setFieldVisibility((prev) => ({ ...prev, cc: true }));
           }
-          basicData.subject = `Re: ${decodeWords(email.Subject) || ''}`;
+          basicData.subject = formatReplySubject(email.Subject);
         } else if (mode === 'forward') {
-          basicData.subject = `Fwd: ${decodeWords(email.Subject) || ''}`;
+          basicData.subject = formatForwardSubject(email.Subject);
           basicData.to = [];
 
           if (parsed && parsed.html) {

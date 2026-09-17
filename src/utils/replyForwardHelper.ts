@@ -76,6 +76,40 @@ export const generateUniqueId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
+/**
+ * Ensures "Re: " prefix is added exactly once at the beginning of the subject.
+ * Strips any pre-existing variations (e.g., "Re:", "RE:", "re:", "Re: Re:", "Re[2]:", "Re(2):")
+ * to prevent duplicate prefixes when replying multiple times.
+ */
+export const formatReplySubject = (rawSubject: string | undefined): string => {
+  if (!rawSubject) return 'Re: ';
+  const decoded = decodeWords(rawSubject).trim();
+  if (!decoded) return 'Re: ';
+
+  // Match and strip any leading series of re/re[#]/re(#) prefixes
+  const cleaned = decoded.replace(/^(?:\s*(?:re|re\[\d+\]|re\(\d+\))\s*:\s*)+/gi, '').trim();
+
+  return `Re: ${cleaned}`;
+};
+
+/**
+ * Ensures "Fwd: " prefix is added exactly once at the beginning of the subject.
+ * Strips any pre-existing variations (e.g., "Fwd:", "FWD:", "Fw:", "FW:", "Fwd: Fwd:")
+ * to prevent duplicate prefixes when forwarding multiple times.
+ */
+export const formatForwardSubject = (rawSubject: string | undefined): string => {
+  if (!rawSubject) return 'Fwd: ';
+  const decoded = decodeWords(rawSubject).trim();
+  if (!decoded) return 'Fwd: ';
+
+  // Match and strip any leading series of fwd/fw/fwd[#]/fw[#] prefixes
+  const cleaned = decoded
+    .replace(/^(?:\s*(?:fwd|fw|fwd\[\d+\]|fw\[\d+\]|fwd\(\d+\)|fw\(\d+\))\s*:\s*)+/gi, '')
+    .trim();
+
+  return `Fwd: ${cleaned}`;
+};
+
 // ────────────────────────────────────────────────
 // Address & Header Parsing
 // ────────────────────────────────────────────────
