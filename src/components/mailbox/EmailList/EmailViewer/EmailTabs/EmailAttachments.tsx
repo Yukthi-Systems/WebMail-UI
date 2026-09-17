@@ -984,24 +984,6 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
     return null;
   };
 
-  // ─── Empty state ───────────────────────────────────────────────────────────
-
-  if (!displayAttachments?.length) {
-    return (
-      <div className="p-6 text-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-[var(--gray-3)] flex items-center justify-center">
-            <FaPaperclip size={20} className="text-[var(--gray-9)]" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-sm font-medium text-[var(--gray-12)]">No attachments</h3>
-            <p className="text-xs text-[var(--gray-11)]">This email has no attachments</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const currentAttachment = previewIndex !== null ? displayAttachments[previewIndex] : null;
   const currentMimeType = currentAttachment
     ? normalizeMimeType(currentAttachment.mimeType, currentAttachment.filename)
@@ -1029,6 +1011,24 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewIndex, currentAttachment, closePreview, navigatePreview, displayAttachments.length, handlePrint]);
+
+  // ─── Empty state ───────────────────────────────────────────────────────────
+
+  if (!displayAttachments?.length) {
+    return (
+      <div className="p-6 text-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-[var(--gray-3)] flex items-center justify-center">
+            <FaPaperclip size={20} className="text-[var(--gray-9)]" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-[var(--gray-12)]">No attachments</h3>
+            <p className="text-xs text-[var(--gray-11)]">This email has no attachments</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
