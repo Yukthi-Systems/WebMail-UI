@@ -16,6 +16,7 @@
  */
 
 import { decodeWords } from 'postal-mime';
+import { sanitizeEmailHtml } from './sanitizeHTMLContent';
 
 // Printable email/attachment objects carry whatever header keys the source
 // (IMAP fetch, postal-mime parse) provided, so both stay loosely typed.
@@ -95,7 +96,7 @@ function formatEmailHeader(email: PrintableEmail, attachments?: PrintableAttachm
 
   return `
     <div class="email-header">
-      <h2>${decodeWords(email.Subject as string) || '(No Subject)'}</h2>
+      <h2>${escapeHtml(decodeWords(email.Subject as string) || '(No Subject)')}</h2>
       <div class="email-meta">
         <p><strong>From:</strong> ${getFullEmailAddress(email.From || '')}</p>
         <p><strong>To:</strong> ${getFullEmailAddress(email.To || '')}</p>
@@ -112,10 +113,12 @@ function formatEmailHeader(email: PrintableEmail, attachments?: PrintableAttachm
 export function printEmail(email: unknown, emailContent: string, attachments?: unknown[]) {
   const printableEmail = email as PrintableEmail;
   const printableAttachments = attachments as PrintableAttachment[] | undefined;
-  const processedEmailContent =
+  // The window shares the app's origin, so strip scripts from the email body
+  const processedEmailContent = sanitizeEmailHtml(
     printableAttachments && printableAttachments.length > 0
       ? processCidAttachments(emailContent, printableAttachments)
-      : emailContent;
+      : emailContent
+  );
   const printStyles = `
     <style>
       * {
@@ -237,7 +240,7 @@ export function printEmail(email: unknown, emailContent: string, attachments?: u
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Print - ${decodeWords(printableEmail.Subject as string) || 'Email'}</title>
+        <title>Print - ${escapeHtml(decodeWords(printableEmail.Subject as string) || 'Email')}</title>
         ${printStyles}
       </head>
       <body>
@@ -384,10 +387,12 @@ export function viewEmailInWindow(email: unknown, emailContent: string, attachme
     </style>
   `;
 
-  const processedContent =
+  // The window shares the app's origin, so strip scripts from the email body
+  const processedContent = sanitizeEmailHtml(
     printableAttachments && printableAttachments.length > 0
       ? processCidAttachments(emailContent, printableAttachments)
-      : emailContent;
+      : emailContent
+  );
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -395,7 +400,7 @@ export function viewEmailInWindow(email: unknown, emailContent: string, attachme
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${decodeWords(printableEmail.Subject as string) || 'Email'}</title>
+        <title>${escapeHtml(decodeWords(printableEmail.Subject as string) || 'Email')}</title>
         ${windowStyles}
       </head>
       <body>

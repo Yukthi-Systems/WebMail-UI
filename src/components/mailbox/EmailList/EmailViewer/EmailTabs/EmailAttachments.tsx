@@ -120,6 +120,17 @@ const isOfficeFile = (mimeType: string) =>
 
 const isEmlFile = (mimeType: string) => mimeType === 'message/rfc822';
 
+/** Decodes base64 attachment content as UTF-8 text. */
+const decodeBase64Text = (base64Content: string): string => {
+  const base64Data = base64Content.replace(/^data:[^;]+;base64,/, '');
+  try {
+    const bytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch {
+    return '';
+  }
+};
+
 // ─── EML Parser ──────────────────────────────────────────────────────────────
 
 interface EmlParsed {
@@ -456,7 +467,7 @@ const renderExcelToHtml = async (base64Content: string, mimeType: string): Promi
     const tabs = sheetNames
       .map(
         (name: string, i: number) =>
-          `<button class="sheet-tab ${i === 0 ? 'active' : ''}" data-sheet="${i}" onclick="switchSheet(${i})">${name}</button>`
+          `<button class="sheet-tab ${i === 0 ? 'active' : ''}" data-sheet="${i}" onclick="switchSheet(${i})">${escHtml(name)}</button>`
       )
       .join('');
 
@@ -918,7 +929,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
           srcDoc={html}
           className="w-full h-full border-none bg-white"
           title={attachment.filename}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
         />
       );
     }
@@ -968,15 +979,40 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
       );
     }
 
-    // PDF / plain text
-    if (mime === 'application/pdf' || mime.startsWith('text/')) {
+    // PDF
+    if (mime === 'application/pdf') {
       const url = blobUrls.get(index);
       if (!url) return null;
       return (
         <iframe
-          src={mime === 'application/pdf' ? `${url}#toolbar=0` : url}
+          src={`${url}#toolbar=0`}
           className="w-full h-full border-none bg-white"
           title={attachment.filename}
+        />
+      );
+    }
+
+    if (mime.startsWith('text/html')) {
+      return (
+        <iframe
+          srcDoc={decodeBase64Text(attachment.content)}
+          className="w-full h-full border-none bg-white"
+          title={attachment.filename}
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        />
+      );
+    }
+
+    // Other text (plain, csv, xml…): no scripts
+    if (mime.startsWith('text/')) {
+      const url = blobUrls.get(index);
+      if (!url) return null;
+      return (
+        <iframe
+          src={url}
+          className="w-full h-full border-none bg-white"
+          title={attachment.filename}
+          sandbox=""
         />
       );
     }

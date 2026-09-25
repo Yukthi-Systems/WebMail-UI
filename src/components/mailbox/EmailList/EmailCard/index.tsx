@@ -22,6 +22,7 @@ import { decodeWords } from 'postal-mime';
 import BIMIAvatar from '../../../common/BimiAvatar';
 import { Checkbox, ContextMenu } from '@radix-ui/themes';
 import { parseEmail } from '../../../../utils/emailPerser';
+import { escapeHtml } from '../../../../utils/emailPrint';
 import { useUserTimezone } from '../../../../hooks/useTimezone';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../../state/settings';
@@ -495,14 +496,14 @@ const EmailCard = ({
     dragPreview.innerHTML = `
       <div style="display:flex;align-items:start;gap:12px;">
         <div style="width:36px;height:36px;border-radius:50%;background:var(--accent-3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;font-weight:600;color:var(--accent-11);">
-          ${isMultiple ? count : senderName.charAt(0).toUpperCase()}
+          ${isMultiple ? count : escapeHtml(senderName.charAt(0).toUpperCase())}
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:14px;font-weight:600;color:var(--gray-12);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            ${isMultiple ? `${count} emails selected` : senderName}
+            ${isMultiple ? `${count} emails selected` : escapeHtml(senderName)}
           </div>
           <div style="font-size:12px;color:var(--gray-11);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            ${isMultiple ? 'Drag to move' : decodeWords(email.Subject) || '(No Subject)'}
+            ${isMultiple ? 'Drag to move' : escapeHtml(decodeWords(email.Subject) || '(No Subject)')}
           </div>
         </div>
       </div>

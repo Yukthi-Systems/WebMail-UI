@@ -34,6 +34,15 @@ function isExternal(url: string): boolean {
   return /^https?:\/\//i.test(normalized) || /^https?:\//i.test(normalized);
 }
 
+
+export function sanitizeEmailHtml(html: string): string {
+  // FORCE_BODY keeps leading <style> blocks that would otherwise be dropped
+  return DOMPurify.sanitize(html, { FORCE_BODY: true, ADD_ATTR: ['target'] }) as string;
+}
+
+const EXTERNAL_CSS_URL_RE = /url\(\s*(['"]?)\s*https?:\/\/[^)'"\s]+\s*\1\s*\)/gi;
+const EXTERNAL_CSS_IMPORT_RE = /@import\s+(?:url\()?\s*['"]?\s*https?:\/\/[^;]*;?/gi;
+
 export function sanitizeHTMLContent(html: string, blockExternalMedia = true): string {
   const sanitizedString = DOMPurify.sanitize(html, {
     FORBID_TAGS: ['script', 'iframe', 'form', 'object', 'embed'],
@@ -61,15 +70,29 @@ export function sanitizeHTMLContent(html: string, blockExternalMedia = true): st
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = sanitizedString;
 
-  // Block external url() references inside <style> tags to prevent tracking pixels
+
   if (blockExternalMedia) {
     tempDiv.querySelectorAll('style').forEach((styleEl) => {
       if (styleEl.textContent) {
-        styleEl.textContent = styleEl.textContent.replace(
-          /url\(\s*(['"]?)\s*https?:\/\/[^)'"\s]+\s*\1\s*\)/gi,
-          "url('')"
-        );
+        styleEl.textContent = styleEl.textContent
+          .replace(EXTERNAL_CSS_IMPORT_RE, '')
+          .replace(EXTERNAL_CSS_URL_RE, "url('')");
       }
+    });
+    tempDiv.querySelectorAll('[style]').forEach((el) => {
+      const style = el.getAttribute('style') || '';
+      if (/url\(/i.test(style)) {
+        el.setAttribute('style', style.replace(EXTERNAL_CSS_URL_RE, "url('')"));
+      }
+    });
+    tempDiv.querySelectorAll('[background]').forEach((el) => {
+      if (isExternal(el.getAttribute('background') || '')) el.removeAttribute('background');
+    });
+    tempDiv.querySelectorAll('[srcset]').forEach((el) => {
+      if (/https?:/i.test(el.getAttribute('srcset') || '')) el.removeAttribute('srcset');
+    });
+    tempDiv.querySelectorAll('[poster]').forEach((el) => {
+      if (isExternal(el.getAttribute('poster') || '')) el.removeAttribute('poster');
     });
   }
 

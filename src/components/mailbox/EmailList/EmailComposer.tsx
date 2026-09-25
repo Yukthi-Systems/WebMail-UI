@@ -71,6 +71,8 @@ import {
 } from '../../../utils/replyForwardHelper';
 import CustomModal from '../../composer/CustomModal';
 import { parseEmail } from '../../../utils/emailPerser';
+import { escapeHtml } from '../../../utils/emailPrint';
+import { sanitizeEmailHtml } from '../../../utils/sanitizeHTMLContent';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { SEND_DEFAULT } from '../../../constants/constant';
 import { getMessageId, normalizeFieldNames } from '../../../utils/emailUtils';
@@ -475,11 +477,20 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         );
 
         if (mode !== 'draft' && mode !== 'new') {
-          const originalDate = formatEmailDate(email.Date || '');
+          // Header values come from the incoming message, so escape before templating
+          const originalDate = escapeHtml(formatEmailDate(email.Date || ''));
 
-          const originalFrom = parseEmail(email.From) || '';
-          const originalTo = parseEmail(normalizedEmails.to as string) || '';
-          const originalSubject = decodeWords(email.Subject) || '';
+          const parsedFrom = parseEmail(email.From);
+          const parsedTo = parseEmail(normalizedEmails.to as string);
+          const originalFrom = {
+            name: escapeHtml(parsedFrom.name || ''),
+            email: escapeHtml(parsedFrom.email || ''),
+          };
+          const originalTo = {
+            name: escapeHtml(parsedTo.name || ''),
+            email: escapeHtml(parsedTo.email || ''),
+          };
+          const originalSubject = escapeHtml(decodeWords(email.Subject) || '');
 
           const borderColors = {
             reply: '#8b5cf6',
@@ -502,6 +513,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
             const result = processIncomingHtml(parsed.html, allAttachments);
             processedOriginalHtml = result.html;
           }
+          // Quoted HTML is injected into the app document via innerHTML
+          processedOriginalHtml = sanitizeEmailHtml(processedOriginalHtml);
 
           // Quoted part: rendered in an iframe, not fed into Tiptap
           let quotedBlock = '';

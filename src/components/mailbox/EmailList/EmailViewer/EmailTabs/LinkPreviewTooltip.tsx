@@ -50,9 +50,6 @@ const LinkPreviewTooltip = ({ url, rect, onMouseEnter, onMouseLeave }: LinkPrevi
     domain = url;
   }
 
-  const faviconUrl =
-    !isMailto && domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : null;
-
   // Position the card below the link, clamped to viewport
   let left = rect.left;
   let top = rect.bottom + TOOLTIP_MARGIN;
@@ -103,18 +100,6 @@ const LinkPreviewTooltip = ({ url, rect, onMouseEnter, onMouseLeave }: LinkPrevi
       <div className="flex items-center gap-2 mb-2">
         {isMailto ? (
           <FiMail size={14} className="text-[var(--accent-10)] flex-shrink-0" />
-        ) : faviconUrl ? (
-          <img
-            src={faviconUrl}
-            width={15}
-            height={15}
-            className="flex-shrink-0 rounded-sm"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).replaceWith(
-                Object.assign(document.createElement('span'), { textContent: '' })
-              );
-            }}
-          />
         ) : (
           <FiLink size={14} className="text-[var(--gray-10)] flex-shrink-0" />
         )}
