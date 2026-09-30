@@ -27,10 +27,10 @@ import { useUserTimezone } from '../../../../hooks/useTimezone';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../../state/settings';
 import EmailHoverCard from './EmailHoverCard';
-import { useEmailPrefetch } from '../../../../hooks/useEmailRaw';
+import { emailViewCacheKey, useEmailViewPrefetch } from '../../../../hooks/useEmailView';
+import type { EmailViewResponse } from '../../../../api/mailbox';
 import { getMessageId, splitAddressList } from '../../../../utils/emailUtils';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEmailParser } from '../../../../hooks/useEmailParser';
 import { isFolderThreadEnabled, shouldApplyThreading } from '../../../../utils/emailListUtils';
 import type { SimplifiedEmail } from '../../../../utils/email';
 import type { EmailLike } from '../../../../utils/emailThreading';
@@ -119,16 +119,13 @@ const EmailCard = ({
   const hideTooltipTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const { formatEmailDate, formatUserDateNice } = useUserTimezone();
-  const { prefetchEmailContent } = useEmailPrefetch();
+  const { prefetchEmailView } = useEmailViewPrefetch();
   const queryClient = useQueryClient();
 
-  const [prefetchedRawEmail, setPrefetchedRawEmail] = useState<string | undefined>(undefined);
+  const [hoverEmailView, setHoverEmailView] = useState<EmailViewResponse | undefined>(undefined);
   const messageId = getMessageId(email) || '';
-
-  const { parsedEmail: hoverParsedEmail } = useEmailParser({
-    rawEmail: prefetchedRawEmail,
-    key: `hover-${email.id}`,
-  });
+  // Only real attachments — inline body images aren't listed
+  const hoverAttachments = hoverEmailView?.attachments?.filter((a) => !a.is_inline);
 
   const senderEmailString = folder === 'Sent' ? email.To : email.From;
   const { name: senderName, email: senderEmail } = parseEmail(senderEmailString);
@@ -155,7 +152,7 @@ const EmailCard = ({
   // Status Checks
   const emailSeen = email?.FLAGS?.includes('\\Seen') || false;
   const isFlagged = email?.FLAGS?.includes('\\Flagged') || false;
-  const hasAttachments = (email.attachmentCount ?? 0) > 0;
+  const hasAttachments = email.has_attachment === true || (email.attachmentCount ?? 0) > 0;
   const formattedDate = formatEmailDate(email.Date);
   const fullDate = formatUserDateNice(email.Date);
 
@@ -183,23 +180,20 @@ const EmailCard = ({
 
   // Optional: poll for cache data after tooltip is shown (handles first-hover cache miss)
   useEffect(() => {
-    if (!showEmailTooltip || prefetchedRawEmail) return;
+    if (!showEmailTooltip || hoverEmailView) return;
 
     const pollInterval = setInterval(() => {
-      const data = queryClient.getQueryData<string>([
-        'email',
-        'raw',
-        messageId || email.id.toString(),
-        folder,
-      ]);
+      const data = queryClient.getQueryData<EmailViewResponse>(
+        emailViewCacheKey(email.id.toString(), folder || '', messageId)
+      );
       if (data) {
-        setPrefetchedRawEmail(data);
+        setHoverEmailView(data);
         clearInterval(pollInterval);
       }
     }, 300);
 
     return () => clearInterval(pollInterval);
-  }, [showEmailTooltip, prefetchedRawEmail, email.id, folder, messageId, queryClient]);
+  }, [showEmailTooltip, hoverEmailView, email.id, folder, messageId, queryClient]);
 
   // Cleanup all timers on unmount
   useEffect(() => {
@@ -232,7 +226,7 @@ const EmailCard = ({
     }
     hideTooltipTimerRef.current = setTimeout(() => {
       setShowEmailTooltip(false);
-      setPrefetchedRawEmail(undefined);
+      setHoverEmailView(undefined);
       hideTooltipTimerRef.current = null;
     }, 150);
   };
@@ -253,25 +247,22 @@ const EmailCard = ({
     setIsWaitingForTooltip(true);
 
     prefetchTimerRef.current = setTimeout(() => {
-      if (email?.id && folder) prefetchEmailContent(email.id.toString(), folder, messageId);
+      if (email?.id && folder) prefetchEmailView(email.id.toString(), folder, messageId);
     }, 2150);
 
     showTooltipTimerRef.current = setTimeout(() => {
       setIsWaitingForTooltip(false);
-      const cachedData = queryClient.getQueryData<string>([
-        'email',
-        'raw',
-        messageId || email.id.toString(),
-        folder,
-      ]);
-      if (cachedData) setPrefetchedRawEmail(cachedData);
+      const cachedData = queryClient.getQueryData<EmailViewResponse>(
+        emailViewCacheKey(email.id.toString(), folder || '', messageId)
+      );
+      if (cachedData) setHoverEmailView(cachedData);
       setShowEmailTooltip(true);
 
       // Register this card's cleanup as the active one
       activeTooltipCleanup = () => {
         setShowEmailTooltip(false);
         setIsWaitingForTooltip(false);
-        setPrefetchedRawEmail(undefined);
+        setHoverEmailView(undefined);
       };
     }, 3000);
   };
@@ -288,7 +279,7 @@ const EmailCard = ({
     }
     hideTooltipTimerRef.current = setTimeout(() => {
       setShowEmailTooltip(false);
-      setPrefetchedRawEmail(undefined);
+      setHoverEmailView(undefined);
       activeTooltipCleanup = null; // ← clear singleton
       hideTooltipTimerRef.current = null;
     }, 150);
@@ -306,7 +297,7 @@ const EmailCard = ({
   const handleTooltipCardMouseLeave = () => {
     hideTooltipTimerRef.current = setTimeout(() => {
       setShowEmailTooltip(false);
-      setPrefetchedRawEmail(undefined);
+      setHoverEmailView(undefined);
       activeTooltipCleanup = null; // ← clear singleton
       hideTooltipTimerRef.current = null;
     }, 150);
@@ -409,10 +400,8 @@ const EmailCard = ({
   };
 
   const getHoverAttachmentNames = () => {
-    if (hoverParsedEmail?.attachments?.length) {
-      return hoverParsedEmail.attachments
-        .map((a) => a.filename || (a as unknown as { name?: string }).name || 'Unnamed')
-        .join(', ');
+    if (hoverAttachments?.length) {
+      return hoverAttachments.map((a) => a.filename || 'Unnamed').join(', ');
     }
     return getAttachmentNames();
   };
@@ -792,7 +781,7 @@ const EmailCard = ({
                     </p>
                   )}
 
-                  {hasAttachments && (
+                  {(email.attachmentCount ?? 0) > 0 && (
                     <p className="text-[11px] text-[var(--accent-11)] mt-2 opacity-80">
                       📎 {email.attachmentCount} file{(email?.attachmentCount ?? 0) > 1 ? 's' : ''}
                     </p>
@@ -888,7 +877,9 @@ const EmailCard = ({
                       ccRecipients={ccRecipients}
                       bccRecipients={bccRecipients}
                       attachmentCount={
-                        hoverParsedEmail?.attachments?.length ?? email.attachmentCount ?? 0
+                        hoverAttachments?.length ??
+                        email.attachmentCount ??
+                        (email.has_attachment ? 1 : 0)
                       }
                       attachmentNames={getHoverAttachmentNames()}
                       isUnread={!emailSeen}
@@ -938,7 +929,7 @@ const EmailCard = ({
 
                   {hasAttachments && (
                     <div>
-                      {isHovered && !isSelectionMode ? (
+                      {isHovered && !isSelectionMode && (email.attachmentCount ?? 0) > 0 ? (
                         <span
                           className="inline-flex items-center gap-[2px] px-2 py-0.5 text-[9px] bg-[var(--blue-3)] text-[var(--blue-11)] rounded-full"
                           title={getAttachmentNames()}

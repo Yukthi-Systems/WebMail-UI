@@ -43,6 +43,10 @@ interface EmailTabAttachment {
   content?: string;
   contentType?: string;
   data?: string;
+  // Present for attachments listed by /email/view: size in bytes, and a
+  // loader that downloads the part on demand (content is absent until then)
+  size?: number;
+  loadContent?: () => Promise<string>;
 }
 
 interface EmailTabCalendarPart {
@@ -63,7 +67,7 @@ export interface ParsedEmailForTabs {
 
 interface EmailTabsProps {
   parsedEmail: ParsedEmailForTabs;
-  rawEmail: string;
+  rawEmail?: string;
 }
 
 const getIcsData = (parsedEmail: ParsedEmailForTabs): string | null => {

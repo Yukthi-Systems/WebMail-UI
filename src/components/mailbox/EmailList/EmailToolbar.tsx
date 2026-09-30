@@ -57,6 +57,7 @@ import { userSettingsAtom } from '../../../state/settings';
 import type { LayoutType } from '../../common/header/LayoutSetting';
 import { folderQuotaAtom } from '../../../state/folders'; // Import folderQuotaAtom
 import { useToast } from '../../../hooks/useToast';
+import EmailListSortMenu from './EmailListSortMenu';
 
 interface Folder {
   id: string;
@@ -769,6 +770,8 @@ const EmailToolbar = ({
                     </Flex>
                   )}
 
+                  {showBackButton && <EmailListSortMenu />}
+
                   {showBackButton && (
                     <Button
                       variant="soft"
@@ -995,6 +998,7 @@ const EmailToolbar = ({
             </div>
 
             <div className="flex items-center gap-1">
+              <EmailListSortMenu variant="icon" />
               <button
                 onClick={onRefresh}
                 disabled={isRefreshing}
@@ -1143,6 +1147,8 @@ const EmailToolbar = ({
                     </Button>
                   </>
                 )}
+
+                <EmailListSortMenu />
 
                 <Button
                   variant="soft"

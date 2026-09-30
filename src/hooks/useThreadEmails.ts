@@ -20,6 +20,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { emailFetchByIds } from '../api/mailbox';
 import { useMemo } from 'react';
 import type { EmailLike } from '../utils/emailThreading';
+import { parseEmailDate } from '../utils/dateFormat';
 
 // Normalize Message-IDs so "<msg@id>" and "msg@id" compare equal.
 const normalizeId = (id: string = '') => id.replace(/[<>]/g, '').trim();
@@ -181,7 +182,8 @@ export function useThreadMutations(currentFolder: string, messageIds: string[]) 
         const exists = old.some((e) => e.id === email.id);
         if (exists) return old;
         return [...old, email].sort(
-          (a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime()
+          (a, b) =>
+            (parseEmailDate(a.date)?.getTime() ?? 0) - (parseEmailDate(b.date)?.getTime() ?? 0)
         );
       });
     },

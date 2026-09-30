@@ -17,7 +17,18 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import type { EmailLike } from '../utils/emailThreading';
+import { emailFilterAtom, type EmailFilterBy } from '../state/emailListView';
+
+// The flag each server-side list filter depends on
+const FILTER_FLAG: Record<EmailFilterBy, string | null> = {
+  all: null,
+  unread: '\\Seen',
+  read: '\\Seen',
+  flagged: '\\Flagged',
+  unflagged: '\\Flagged',
+};
 
 /**
  * Provides two cache-patching utilities that update the React Query email list
@@ -28,6 +39,7 @@ import type { EmailLike } from '../utils/emailThreading';
  */
 export function useEmailCacheUpdater(folder: string) {
   const queryClient = useQueryClient();
+  const emailFilter = useAtomValue(emailFilterAtom);
 
   /**
    * Add / remove a flag string from every matching email's FLAGS array. Pass
@@ -80,8 +92,15 @@ export function useEmailCacheUpdater(folder: string) {
           return old.map(applyFlagPatch);
         }
       );
+
+      // A filtered list (e.g. Unread) no longer matches once that flag changes —
+      // refetch it so the item drops out and counts/pages stay right.
+      const filterFlag = FILTER_FLAG[emailFilter];
+      if (filterFlag && (flagToAdd === filterFlag || flagToRemove === filterFlag)) {
+        queryClient.invalidateQueries({ queryKey: ['folder', folder] });
+      }
     },
-    [queryClient, folder]
+    [queryClient, folder, emailFilter]
   );
 
   return { patchEmailFlags };

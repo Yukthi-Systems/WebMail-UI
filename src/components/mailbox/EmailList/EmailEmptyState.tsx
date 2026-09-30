@@ -25,14 +25,21 @@ import {
   FaExclamationTriangle, // Import this for error icon
   FaRedo, // Import for retry button
 } from 'react-icons/fa';
+import type { EmailFilterBy } from '../../../state/emailListView';
 
 interface EmailEmptyStateProps {
   folder?: string;
   error?: Error | null; // Add error prop
   onRetry?: () => void; // Add retry callback
+  filter?: EmailFilterBy; // Active server-side list filter
 }
 
-const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStateProps) => {
+const EmailEmptyState = ({
+  folder = 'INBOX',
+  error,
+  onRetry,
+  filter = 'all',
+}: EmailEmptyStateProps) => {
   const getEmptyStateContent = () => {
     // 1. Priority Check: If there is an error, return error content immediately
     if (error) {
@@ -42,6 +49,17 @@ const EmailEmptyState = ({ folder = 'INBOX', error, onRetry }: EmailEmptyStatePr
         description: error.message || "We couldn't fetch your emails at this time.",
         tip: 'Please check your internet connection and try again.',
         isError: true,
+      };
+    }
+
+    // A filtered view being empty says nothing about the folder itself
+    if (filter !== 'all') {
+      return {
+        icon: <FaFolder className="text-5xl text-[var(--gray-9)]" />,
+        title: `No ${filter} emails`,
+        description: `There are no ${filter} emails in ${folder}.`,
+        tip: 'Change the filter in the toolbar to see other emails.',
+        isError: false,
       };
     }
 

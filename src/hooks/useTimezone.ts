@@ -18,6 +18,7 @@
 import { useAtomValue } from 'jotai';
 import moment, { type MomentInput } from 'moment-timezone';
 import { userSettingsAtom } from '../state/settings';
+import { parseEmailDate } from '../utils/dateFormat';
 
 type Nullable<T> = T | null | undefined;
 
@@ -61,14 +62,25 @@ export const useUserTimezone = (): UseUserTimezoneReturn => {
     return m.utc().toISOString();
   };
 
+  /**
+   * Parse any date shape (RFC 2822, ISO, epoch, junk-suffixed headers...) as
+   * UTC.
+   */
+  const toUtcMoment = (date: Nullable<MomentInput>) => {
+    if (!date) return null;
+    if (moment.isMoment(date)) return date.isValid() ? date.clone().utc() : null;
+    const parsed = parseEmailDate(date);
+    return parsed ? moment.utc(parsed) : null;
+  };
+
   /** Format a UTC date into user's timezone. */
   const formatUserDate = (
     date: Nullable<MomentInput>,
     formatString: string = `MMM DD, YYYY ${timeToken}`
   ): string => {
     if (!date) return '';
-    const m = moment.utc(date);
-    if (!m.isValid()) return 'Invalid Date';
+    const m = toUtcMoment(date);
+    if (!m) return typeof date === 'string' ? date : '';
     return m.tz(timezone).format(formatString);
   };
 
@@ -82,9 +94,8 @@ export const useUserTimezone = (): UseUserTimezoneReturn => {
    * - Older: "Jan 15, 2023"
    */
   const formatEmailDate = (date: Nullable<MomentInput>): string => {
-    if (!date) return '';
-    const m = moment.utc(date);
-    if (!m.isValid()) return 'Invalid Date';
+    const m = toUtcMoment(date);
+    if (!m) return '';
 
     const emailDate = m.tz(timezone);
     const now = moment.tz(timezone);

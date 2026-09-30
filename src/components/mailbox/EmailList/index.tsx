@@ -77,7 +77,9 @@ import {
 } from '../../../hooks/useFolders';
 import { useEmailCacheUpdater } from '../../../hooks/useEmailCacheUpdater';
 import type { EmailLike } from '../../../utils/emailThreading';
-import type { Attachment } from 'postal-mime';
+import { emailViewCacheKey, type ViewAttachment } from '../../../hooks/useEmailView';
+import { emailFilterAtom, emailSortAtom } from '../../../state/emailListView';
+import { parseEmailDate } from '../../../utils/dateFormat';
 
 interface EmailListProps {
   onRegisterClearCallback?: (callback: () => void) => void;
@@ -131,13 +133,7 @@ function applyThreading<T extends ThreadableEmail>(
     return matches ? matches.map((v) => normalizeId(v)) : [];
   };
   // const getMessageId = (email: any) => normalizeId(email['Message-Id'] || email['Message-ID']);
-  const getEmailDate = (email: T): number => {
-    try {
-      return new Date(email.Date || 0).getTime();
-    } catch {
-      return 0;
-    }
-  };
+  const getEmailDate = (email: T): number => parseEmailDate(email.Date)?.getTime() ?? 0;
 
   const emailByMessageId = new Map<string, T>();
   const emailConnections = new Map<string, Set<string>>();
@@ -303,10 +299,23 @@ const EmailList = ({
   const [regularPage, setRegularPage] = useState(1);
   const [searchPage, setSearchPage] = useState(1);
   const [prevFolder, setPrevFolder] = useState(folder);
+  // Server-side sort/filter (applied to the whole folder before pagination)
+  const emailSort = useAtomValue(emailSortAtom);
+  const [emailFilter, setEmailFilter] = useAtom(emailFilterAtom);
+  const sortKey = `${emailSort.sortBy}|${emailSort.sortOrder}|${emailFilter}`;
+  const [prevSortKey, setPrevSortKey] = useState(sortKey);
 
   // Reset page numbers when switching folders to prevent requesting old page indices
   if (folder !== prevFolder) {
     setPrevFolder(folder);
+    setRegularPage(1);
+    setSearchPage(1);
+    setEmailFilter('all');
+  }
+
+  // Same when the sort or filter changes: page 1 holds the first results
+  if (sortKey !== prevSortKey) {
+    setPrevSortKey(sortKey);
     setRegularPage(1);
     setSearchPage(1);
   }
@@ -371,7 +380,19 @@ const EmailList = ({
     data: regularData,
     isFetching: isRegularFetching,
     error: regularError,
-  } = useEmails(folder || 'INBOX', regularPage, PER_PAGE);
+  } = useEmails(folder || 'INBOX', regularPage, PER_PAGE, true, {
+    sortBy: emailSort.sortBy,
+    sortOrder: emailSort.sortOrder,
+    filterBy: emailFilter,
+  });
+
+  // The folder shrank under us (deletes, or marking read in the Unread view on
+  // the last page): step back to the last page instead of showing an error.
+  useEffect(() => {
+    if (regularPage > 1 && regularError?.message?.includes('exceeds total pages')) {
+      setRegularPage((page) => Math.max(1, page - 1));
+    }
+  }, [regularError, regularPage]);
 
   const searchRequest: SearchRequest | null = useMemo(() => {
     if (!searchState.isActive || !searchState.filters) return null;
@@ -394,8 +415,19 @@ const EmailList = ({
       date_on: filters.dateRangeOn || undefined,
       limit: PER_PAGE,
       page: searchPage,
+      sort_by: emailSort.sortBy,
+      sort_order: emailSort.sortOrder,
     };
-  }, [searchState.isActive, searchState.filters, searchState.query, folder, searchPage, PER_PAGE]);
+  }, [
+    searchState.isActive,
+    searchState.filters,
+    searchState.query,
+    folder,
+    searchPage,
+    PER_PAGE,
+    emailSort.sortBy,
+    emailSort.sortOrder,
+  ]);
 
   const { mutate: moveMutate } = useMoveMail();
   const { mutate: markUnReadMutate } = useUnseenMail();
@@ -441,7 +473,7 @@ const EmailList = ({
     return layout === 'vertical-split' ? 'down' : 'left';
   });
   const [currentEmailIndex, setCurrentEmailIndex] = useState(0);
-  const [currentAttachments, setCurrentAttachments] = useState<Attachment[]>([]);
+  const [currentAttachments, setCurrentAttachments] = useState<ViewAttachment[]>([]);
   const [, setShowKeyboardHelp] = useState(false);
   const [isKeyboardNavigating, setIsKeyboardNavigating] = useState(false);
   const [composerOpen, setComposerOpen] = useAtom(emailComposerOpenAtom);
@@ -482,7 +514,12 @@ const EmailList = ({
       : regularData?.total_pages || 0;
 
   const isFetching = searchState.isActive ? isSearchFetching : isRegularFetching;
-  const error = searchState.isActive ? searchError : regularError;
+  // A page past the end is recovered above by stepping back, not shown as an error
+  const isPageOverflow =
+    !searchState.isActive &&
+    regularPage > 1 &&
+    !!regularError?.message?.includes('exceeds total pages');
+  const error = searchState.isActive ? searchError : isPageOverflow ? null : regularError;
 
   // CHANGE 6: Update search results when data changes
   useEffect(() => {
@@ -530,6 +567,8 @@ const EmailList = ({
     ? emails
     : (Object.values(emails || {}) as Email[]);
 
+  // The API returns each page already sorted (sort_by/sort_order) across the
+  // whole folder, so these keep the server order instead of re-sorting the page.
   function getFilteredThreadedList(
     threadedEmails: (Email & ThreadFields)[]
   ): (Email & ThreadFields)[] {
@@ -539,22 +578,11 @@ const EmailList = ({
         ...email,
         'Thread-Emails-Count': (email['Thread-Reference'] as string[] | undefined)?.length || 1,
         'Thread-Unread-Count': email['Thread-Unread-Count'] || 0,
-      }))
-      .sort((a, b) => {
-        const dateA = new Date(a.Date || 0).getTime();
-        const dateB = new Date(b.Date || 0).getTime();
-        return dateB - dateA;
-      });
+      }));
   }
 
   function getListOfEmail(threadedEmails: (Email & ThreadFields)[]): (Email & ThreadFields)[] {
-    return (
-      threadedEmails.sort((a, b) => {
-        const dateA = new Date(a.Date || 0).getTime();
-        const dateB = new Date(b.Date || 0).getTime();
-        return dateB - dateA;
-      }) || []
-    );
+    return threadedEmails || [];
   }
 
   const isFolderThread = () => {
@@ -596,11 +624,8 @@ const EmailList = ({
 
   const emailArray = useMemo(() => {
     if (searchState.isActive) {
-      return simpleEmailArray.sort((a, b) => {
-        const dateA = new Date(a.Date || 0).getTime();
-        const dateB = new Date(b.Date || 0).getTime();
-        return dateB - dateA;
-      });
+      // Already sorted by the API (sort_by / sort_order in the search request)
+      return simpleEmailArray;
     }
     const threadedEmails = applyThreading(simpleEmailArray);
     const listOfEmail =
@@ -1445,9 +1470,12 @@ const EmailList = ({
 
     if (!isAlreadySeen) {
       const emailIdNum = Number(email.id);
-      const msgId = getMessageId(email);
-      const rawQueryKey = ['email', 'raw', msgId || email.id.toString(), folder || 'INBOX'];
-      const isCached = !!queryClient.getQueryData(rawQueryKey);
+      // Mirror the stableEmailKey logic in EmailViewer.tsx
+      const stableKey =
+        getMessageId(email) || `${email.id}-${email.Subject || ''}-${email.Date || ''}`;
+      const isCached = !!queryClient.getQueryData(
+        emailViewCacheKey(String(email.id), folder || 'INBOX', stableKey)
+      );
 
       if (isCached) {
         // Email was prefetched with mark_as_read=false — explicitly mark as read now
@@ -1461,7 +1489,7 @@ const EmailList = ({
           }
         );
       }
-      // If not cached, EmailViewer's useEmailRaw will fetch with mark_as_read=true
+      // If not cached, EmailViewer's useEmailView will fetch with mark_as_read=true
       // and handle the folder cache invalidation after the fetch completes
     }
 
@@ -1731,7 +1759,14 @@ const EmailList = ({
   }, [autoRefreshEnabled, composerOpen, folder, isFetching]);
 
   if (!emails || !folder || error) {
-    return <EmailEmptyState folder={folder} error={error} onRetry={handleRefresh} />;
+    return (
+      <EmailEmptyState
+        folder={folder}
+        error={error}
+        onRetry={handleRefresh}
+        filter={searchState.isActive ? 'all' : emailFilter}
+      />
+    );
   }
 
   return (
@@ -1795,7 +1830,12 @@ const EmailList = ({
             <EmailLoadingSkeleton />
           </div>
         ) : emailArray.length === 0 || error ? (
-          <EmailEmptyState folder={folder} error={error} onRetry={handleRefresh} />
+          <EmailEmptyState
+            folder={folder}
+            error={error}
+            onRetry={handleRefresh}
+            filter={searchState.isActive ? 'all' : emailFilter}
+          />
         ) : viewingEmail && isMobile ? (
           renderEmailViewer()
         ) : layout === 'modal' ? (

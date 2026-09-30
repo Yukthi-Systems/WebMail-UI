@@ -77,6 +77,7 @@ import { userDetailsAtom } from '../../../state/userDetails';
 import { SEND_DEFAULT } from '../../../constants/constant';
 import { getMessageId, normalizeFieldNames } from '../../../utils/emailUtils';
 import { getEditorDimensions } from '../../../utils/dimensions';
+import { parseEmailDate } from '../../../utils/dateFormat';
 import { useIsMobile } from '../../../hooks/use-mobile';
 import type { ComposerEmail } from '../../../state/emailComposer';
 import type { EmailAddress as RecipientEmailAddress } from '../../../state/composer';
@@ -260,8 +261,10 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   };
 
   const formatEmailDate = (dateStr: string) => {
+    const parsed = parseEmailDate(dateStr);
+    if (!parsed) return dateStr;
     try {
-      return new Date(dateStr).toLocaleString('en-US', {
+      return parsed.toLocaleString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',

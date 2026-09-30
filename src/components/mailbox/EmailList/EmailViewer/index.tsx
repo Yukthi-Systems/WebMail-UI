@@ -17,7 +17,13 @@
 
 // src/components/email/EmailViewer.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useEmailRaw } from '../../../../hooks/useEmailRaw';
+import {
+  emailViewErrorMessage,
+  isEmailGoneError,
+  useEmailView,
+  useParsedEmailView,
+  type ViewAttachment,
+} from '../../../../hooks/useEmailView';
 import { flagAtom } from '../../../../state/flags';
 import { useAtom, useAtomValue } from 'jotai';
 import { useUserTimezone } from '../../../../hooks/useTimezone';
@@ -28,7 +34,6 @@ import { userSettingsAtom } from '../../../../state/settings';
 import { useParams } from '@tanstack/react-router';
 import { ThreadView } from './ThreadView';
 import { SingleEmailView } from './SingleEmailView';
-import { useEmailParser } from '../../../../hooks/useEmailParser';
 import { extractIds, getMessageId, getReadReceiptRequest } from '../../../../utils/emailUtils';
 import { AlertDialog, Button, Flex, Separator, Text } from '@radix-ui/themes';
 import { FaEnvelope } from 'react-icons/fa';
@@ -42,7 +47,7 @@ import { emailAddress } from '../../../../state/emailAddress';
 import { userDetailsAtom } from '../../../../state/userDetails';
 import { SEND_DEFAULT } from '../../../../constants/constant';
 import type { EmailLike } from '../../../../utils/emailThreading';
-import type { Attachment } from 'postal-mime';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface EmailViewerProps {
   messageId: string;
@@ -56,7 +61,7 @@ interface EmailViewerProps {
   onDraftSend?: (email: EmailLike) => void;
   email?: EmailLike;
   flagged?: string[];
-  onAttachmentsLoaded?: (attachments: Attachment[]) => void;
+  onAttachmentsLoaded?: (attachments: ViewAttachment[]) => void;
   onReply?: (email: EmailLike) => void;
   onEditAsNew?: (email: EmailLike) => void;
   onSaveAsContact?: () => void;
@@ -96,12 +101,20 @@ const EmailViewer = ({
   const stableEmailKey =
     getMessageId(email) || `${messageId}-${email?.Subject || ''}-${email?.Date || ''}`;
 
-  const { data: rawEmail, isLoading } = useEmailRaw(
+  // Body + attachment list only; attachments are downloaded on demand
+  const {
+    data: emailViewData,
+    isLoading,
+    error: viewError,
+  } = useEmailView(messageId, folderPath ?? '', stableEmailKey, true);
+  const parsedEmail = useParsedEmailView(
+    emailViewData,
     messageId,
     folderPath ?? '',
-    stableEmailKey,
-    true
+    stableEmailKey
   );
+  const headers = useMemo(() => parsedEmail?.headers ?? {}, [parsedEmail?.headers]);
+  const queryClient = useQueryClient();
   const [folderDetails] = useAtom(folderDetailsAtom);
   const [isHeaderPopoverOpen, setIsHeaderPopoverOpen] = useState(false);
   const { folder } = useParams({ strict: false });
@@ -116,16 +129,37 @@ const EmailViewer = ({
   const { mutate: moveMutate } = useMoveMail();
   const toast = useToast();
 
-  // When useEmailRaw fetches fresh (not from prefetch cache), invalidate the folder
-  // to update the unread count. isLoading is true only on initial fetch (no cached data).
+  // When useEmailView fetches fresh (not from prefetch cache), the API marked the
+  // email as read — sync the list cache and unread count. isLoading is true only
+  // on initial fetch (no cached data).
   const wasLoadingRef = useRef(false);
   useEffect(() => {
-    if (wasLoadingRef.current && !isLoading && rawEmail && !email?.FLAGS?.includes('\\Seen')) {
+    if (
+      wasLoadingRef.current &&
+      !isLoading &&
+      emailViewData &&
+      !email?.FLAGS?.includes('\\Seen')
+    ) {
       patchEmailFlags([Number(email?.id)], '\\Seen');
       updateFolderUnreadCount(-1);
     }
     wasLoadingRef.current = isLoading;
-  }, [isLoading, rawEmail, email, folderPath, patchEmailFlags, updateFolderUnreadCount]);
+  }, [isLoading, emailViewData, email, folderPath, patchEmailFlags, updateFolderUnreadCount]);
+
+  // Email deleted/moved in another client: the list is stale, refresh it
+  useEffect(() => {
+    if (isEmailGoneError(viewError)) {
+      queryClient.invalidateQueries({ queryKey: ['folder', folderPath || 'INBOX'] });
+    }
+  }, [viewError, folderPath, queryClient]);
+
+  // Feed print / view-in-window with the current body and attachments
+  useEffect(() => {
+    if (!parsedEmail) return;
+    onContentLoaded?.(parsedEmail.html || parsedEmail.text || '');
+    onAttachmentsLoaded?.(parsedEmail.attachments);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedEmail]);
 
   useEffect(() => {
     if (userSettings?.email) {
@@ -133,13 +167,6 @@ const EmailViewer = ({
       setUndoTime(time);
     }
   }, [userSettings]);
-
-  const { parsedEmail, parseError, isParsing, headers } = useEmailParser({
-    rawEmail,
-    key: `${stableEmailKey}-${folderPath}`,
-    onContentLoaded,
-    onAttachmentsLoaded,
-  });
 
   // ------------------------------------------------------------------
   // READ RECEIPT PROMPT
@@ -156,7 +183,7 @@ const EmailViewer = ({
   const readReceiptStorageKey = `webmail-read-receipt-${stableEmailKey}`;
 
   useEffect(() => {
-    if (isLoading || isParsing || !readReceiptRequest) return;
+    if (isLoading || !readReceiptRequest) return;
 
     // Never prompt on an email the current user sent themselves.
     if (
@@ -169,7 +196,7 @@ const EmailViewer = ({
     if (localStorage.getItem(readReceiptStorageKey)) return;
 
     setShowReadReceiptPrompt(true);
-  }, [isLoading, isParsing, readReceiptRequest, currentUser?.address, readReceiptStorageKey]);
+  }, [isLoading, readReceiptRequest, currentUser?.address, readReceiptStorageKey]);
 
   const handleDeclineReadReceipt = () => {
     localStorage.setItem(readReceiptStorageKey, 'declined');
@@ -550,10 +577,8 @@ const EmailViewer = ({
   return (
     <>
     <SingleEmailView
-      rawEmail={rawEmail}
       isLoading={isLoading}
-      isParsing={isParsing}
-      parseError={parseError}
+      error={viewError ? emailViewErrorMessage(viewError) : null}
       parsedEmail={parsedEmail}
       headers={headers}
       subject={subject}
@@ -565,8 +590,6 @@ const EmailViewer = ({
       splitView={splitView}
       onBack={onBack}
       onDraftSend={onDraftSend}
-      onContentLoaded={onContentLoaded}
-      onAttachmentsLoaded={onAttachmentsLoaded}
       messageId={messageId}
       folderPath={folderPath}
       formatUserDateNice={formatUserDateNice}

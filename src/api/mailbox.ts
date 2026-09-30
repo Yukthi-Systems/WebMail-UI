@@ -21,6 +21,7 @@ import { API_URL } from './config.ts';
 import { fetchListWithAuth, fetchWithAuth } from './fetchWrapper.ts';
 import type { FolderQuota } from '../state/folders.ts';
 import type { EmailLike } from '../utils/emailThreading.ts';
+import type { EmailFilterBy, EmailSortBy, EmailSortOrder } from '../state/emailListView.ts';
 
 export type CustomFolders = string[];
 
@@ -35,6 +36,8 @@ interface Email {
   Subject: string;
   id: string;
   folderPath?: string;
+  // Real attachments only — images embedded in the body don't count
+  has_attachment?: boolean;
 }
 
 interface EmailFolder {
@@ -87,6 +90,35 @@ interface EmailResponse {
   total_count: number;
   total_pages: number;
   currentPage: number;
+  sort_by?: EmailSortBy;
+  sort_order?: EmailSortOrder;
+  filter_by?: EmailFilterBy;
+}
+
+interface EmailListOptions {
+  sortBy?: EmailSortBy;
+  sortOrder?: EmailSortOrder;
+  filterBy?: EmailFilterBy;
+}
+
+interface EmailViewAttachment {
+  part_id: string;
+  filename: string;
+  content_type: string;
+  size: number; // bytes (close estimate)
+  content_id: string | null;
+  is_inline: boolean;
+}
+
+interface EmailViewResponse {
+  message: string;
+  id: string;
+  folder_path: string;
+  headers: Record<string, string>;
+  flags: string[];
+  body: { html: string | null; text: string | null };
+  has_attachment: boolean;
+  attachments: EmailViewAttachment[];
 }
 
 const defaultFolders: DefaultFolders = {
@@ -201,13 +233,19 @@ export const emails = async (
   folder: string,
   page: number = 1,
   perPage: number = 10,
-  full_headers: boolean = true
+  full_headers: boolean = true,
+  { sortBy = 'date', sortOrder = 'desc', filterBy = 'all' }: EmailListOptions = {}
 ): Promise<EmailResponse> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
   const sanitizedFolder = sanitizeFolderPath(folder);
   const params = new URLSearchParams();
   params.append('folder_path', sanitizedFolder);
   params.append('full_headers', full_headers.toString());
+  // Always send sort_by: without it the API returns pages in sequence-number
+  // order, which mixes years across pages.
+  params.append('sort_by', sortBy);
+  params.append('sort_order', sortOrder);
+  params.append('filter_by', filterBy);
   const res = await fetchListWithAuth(`${API_URL}/email/fetch/${perPage}/${page}?${params}`, {
     method: 'GET',
     credentials: 'include',
@@ -251,6 +289,61 @@ export const emailRaw = async (
 
   const buffer = await res.arrayBuffer();
   return new TextDecoder('utf-8').decode(buffer);
+};
+
+/**
+ * Body + attachment list only (a few KB), instead of the whole raw message.
+ * Attachments are downloaded separately via emailAttachment().
+ */
+export const emailView = async (
+  messageId: string,
+  folderPath: string,
+  markAsRead: boolean = true
+): Promise<EmailViewResponse> => {
+  const csrfToken = webmailStore.get(csrfTokenAtom);
+  const params = new URLSearchParams();
+  params.append('folder_path', sanitizeFolderPath(folderPath));
+  params.append('mark_as_read', String(markAsRead));
+
+  const res = await fetchWithAuth(`${API_URL}/email/view/${messageId}?${params}`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    },
+  });
+
+  return res.json();
+};
+
+/**
+ * Downloads a single attachment part as a Blob. Needs fetch() (not <a href> /
+ * <img src>) because the request must carry the X-CSRF-Token header.
+ */
+export const emailAttachment = async (
+  messageId: string,
+  partId: string,
+  folderPath: string,
+  inline: boolean = false
+): Promise<Blob> => {
+  const csrfToken = webmailStore.get(csrfTokenAtom);
+  const params = new URLSearchParams();
+  params.append('folder_path', sanitizeFolderPath(folderPath));
+  params.append('inline', String(inline));
+
+  const res = await fetchWithAuth(
+    `${API_URL}/email/attachment/${messageId}/${partId}?${params}`,
+    {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      },
+    }
+  );
+
+  return res.blob();
 };
 
 export const emailFetchByIds = async ({
@@ -549,6 +642,9 @@ export const folderUidValidity = async (
 export {
   type Email,
   type EmailResponse,
+  type EmailListOptions,
+  type EmailViewAttachment,
+  type EmailViewResponse,
   type EmailFolder,
   type EmailFolders,
   type DefaultFolder,

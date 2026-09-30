@@ -20,22 +20,20 @@ import { Popover, Button } from '@radix-ui/themes';
 import { FaCalendarAlt, FaInfoCircle, FaTimes, FaFlag } from 'react-icons/fa';
 import BIMIAvatar from '../../../common/BimiAvatar';
 import EmailLoadingState from './EmailLoadingState';
-import EmailParsingState from './EmailParsingState';
-import EmailErrorState from './EmailErrorState';
 import EmailNoDataState from './EmailNoDataState';
 import EmailTabs, { type ParsedEmailForTabs } from './EmailTabs';
 import { RecipientSection } from './RecipientSection';
 import { parseEmail } from '../../../../utils/emailPerser';
-import { decodeWords, type Email as ParsedPostalEmail, type Attachment } from 'postal-mime';
+import { decodeWords } from 'postal-mime';
+import { FiAlertCircle } from 'react-icons/fi';
+import type { ParsedEmailView } from '../../../../hooks/useEmailView';
 import { parseMultipleEmails, normalizeFieldNames } from '../../../../utils/emailUtils';
 import type { EmailLike } from '../../../../utils/emailThreading';
 
 interface SingleEmailViewProps {
-  rawEmail: string | undefined;
   isLoading: boolean;
-  isParsing: boolean;
-  parseError: string | null;
-  parsedEmail: ParsedPostalEmail | null;
+  error: string | null;
+  parsedEmail: ParsedEmailView | null;
   headers: Record<string, string>;
   subject: string;
   senderEmail: string;
@@ -46,8 +44,6 @@ interface SingleEmailViewProps {
   splitView?: boolean;
   onBack?: () => void;
   onDraftSend?: (email: EmailLike) => void;
-  onContentLoaded?: (content: string) => void;
-  onAttachmentsLoaded?: (attachments: Attachment[]) => void;
   messageId: string;
   folderPath?: string;
   formatUserDateNice: (date: string) => string;
@@ -56,10 +52,8 @@ interface SingleEmailViewProps {
 }
 
 export const SingleEmailView = ({
-  rawEmail,
   isLoading,
-  isParsing,
-  parseError,
+  error,
   parsedEmail,
   headers,
   subject,
@@ -193,14 +187,17 @@ export const SingleEmailView = ({
       <main className="flex-1 overflow-y-auto">
         <div className="px-4 pb-4">
           {isLoading && <EmailLoadingState />}
-          {isParsing && <EmailParsingState />}
-          {parseError && <EmailErrorState error={parseError} rawContent={rawEmail || ''} />}
-          {!isLoading && !isParsing && !parseError && !parsedEmail && <EmailNoDataState />}
-          {!isLoading && !isParsing && !parseError && parsedEmail && (
+          {!isLoading && error && (
+            <div className="flex items-center gap-2 mt-4 p-4 rounded-lg border border-[var(--red-6)] bg-[var(--red-2)] text-sm text-[var(--red-11)]">
+              <FiAlertCircle size={16} className="flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+          {!isLoading && !error && !parsedEmail && <EmailNoDataState />}
+          {!isLoading && !error && parsedEmail && (
             <EmailTabs
               key={`${messageId}-${folderPath}`}
-              parsedEmail={parsedEmail as unknown as ParsedEmailForTabs}
-              rawEmail={rawEmail || ''}
+              parsedEmail={parsedEmail as ParsedEmailForTabs}
             />
           )}
         </div>

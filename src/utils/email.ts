@@ -87,4 +87,6 @@ export interface SimplifiedEmail {
   bodyPreview?: string; // First few lines of content
   attachments?: EmailAttachment[];
   attachmentCount?: number;
+  // From the list/search API; embedded body images don't count
+  has_attachment?: boolean;
 }

@@ -44,14 +44,23 @@ import {
 import { useToast } from '../../../../../hooks/useToast';
 import { sanitizeHTMLContent } from '../../../../../utils/sanitizeHTMLContent';
 import { printAttachment } from '../../../../../utils/emailPrint';
+import { attachmentErrorMessage } from '../../../../../hooks/useEmailView';
 
-/** Loose shape covering both postal-mime attachments and the composer's own attachment payloads. */
+/**
+ * Loose shape covering postal-mime attachments, the composer's own attachment
+ * payloads and /email/view attachments. The latter arrive without `content`;
+ * it is downloaded through `loadContent()` when the user acts on the file.
+ */
 export interface EmailAttachment {
   filename?: string;
   mimeType: string;
-  content: string;
+  content?: string;
   contentId?: string;
+  size?: number; // bytes, when known up front
+  loadContent?: () => Promise<string>;
 }
+
+type LoadedAttachment = EmailAttachment & { content: string };
 
 interface EmailAttachmentsProps {
   attachments: EmailAttachment[];
@@ -584,6 +593,9 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
   const [officeError, setOfficeError] = useState<Map<number, string>>(new Map());
   const [canShare, setCanShare] = useState(false);
+  // Content downloaded on demand, by display index, plus the index being downloaded
+  const [loadedContent, setLoadedContent] = useState<Map<number, string>>(new Map());
+  const [fetchingIndex, setFetchingIndex] = useState<number | null>(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -644,15 +656,56 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
 
   // ─── Size helpers ──────────────────────────────────────────────────────────
 
-  const base64FileSize = (base64String: string): string => {
-    if (!base64String) return '0 B';
-    const cleaned = base64String.replace(/^data:[^;]+;base64,/, '');
-    const bytes =
-      cleaned.length * (3 / 4) - (cleaned.endsWith('==') ? 2 : cleaned.endsWith('=') ? 1 : 0);
+  const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
   };
+
+  const base64FileSize = (base64String?: string): string => {
+    if (!base64String) return '0 B';
+    const cleaned = base64String.replace(/^data:[^;]+;base64,/, '');
+    const bytes =
+      cleaned.length * (3 / 4) - (cleaned.endsWith('==') ? 2 : cleaned.endsWith('=') ? 1 : 0);
+    return formatBytes(bytes);
+  };
+
+  const attachmentSize = (attachment: EmailAttachment): string =>
+    typeof attachment.size === 'number'
+      ? formatBytes(attachment.size)
+      : base64FileSize(attachment.content);
+
+  // ─── On-demand content ─────────────────────────────────────────────────────
+
+  const withLoadedContent = useCallback(
+    (attachment: EmailAttachment, index: number): EmailAttachment =>
+      attachment.content || !loadedContent.has(index)
+        ? attachment
+        : { ...attachment, content: loadedContent.get(index) },
+    [loadedContent]
+  );
+
+  /** Returns the attachment with its content, downloading it first if needed. */
+  const resolveAttachment = useCallback(
+    async (attachment: EmailAttachment, index: number): Promise<LoadedAttachment | null> => {
+      const current = withLoadedContent(attachment, index);
+      if (current.content) return current as LoadedAttachment;
+      if (!current.loadContent) return null;
+
+      setFetchingIndex(index);
+      try {
+        const content = await current.loadContent();
+        setLoadedContent((prev) => new Map(prev).set(index, content));
+        return { ...current, content };
+      } catch (error) {
+        toast.error({ description: attachmentErrorMessage(error) });
+        return null;
+      } finally {
+        setFetchingIndex(null);
+      }
+    },
+    [withLoadedContent, toast]
+  );
 
   // ─── Blob / File helpers ───────────────────────────────────────────────────
 
@@ -670,7 +723,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   }, []);
 
   const base64ToFile = useCallback(
-    (attachment: EmailAttachment): File | null => {
+    (attachment: LoadedAttachment): File | null => {
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
       const blob = base64ToBlob(attachment.content, mime);
       if (!blob) return null;
@@ -682,7 +735,9 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   // ─── Download / Copy / Share ───────────────────────────────────────────────
 
   const handleDownload = useCallback(
-    (attachment: EmailAttachment) => {
+    async (target: EmailAttachment, index: number) => {
+      const attachment = await resolveAttachment(target, index);
+      if (!attachment) return;
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
       const blob = base64ToBlob(attachment.content, mime);
       if (!blob) return;
@@ -695,11 +750,13 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
       a.remove();
       URL.revokeObjectURL(url);
     },
-    [base64ToBlob]
+    [base64ToBlob, resolveAttachment]
   );
 
   const handleCopyToClipboard = useCallback(
-    async (attachment: EmailAttachment) => {
+    async (target: EmailAttachment, index: number) => {
+      const attachment = await resolveAttachment(target, index);
+      if (!attachment) return;
       const file = base64ToFile(attachment);
       if (!file) {
         toast.error({ description: 'Failed to prepare file' });
@@ -712,11 +769,13 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
         toast.error({ description: 'Failed to copy file' });
       }
     },
-    [base64ToFile, toast]
+    [base64ToFile, resolveAttachment, toast]
   );
 
   const handleShare = useCallback(
-    async (attachment: EmailAttachment) => {
+    async (target: EmailAttachment, index: number) => {
+      const attachment = await resolveAttachment(target, index);
+      if (!attachment) return;
       const file = base64ToFile(attachment);
       if (!file) {
         toast.error({ description: 'Failed to prepare file' });
@@ -733,10 +792,10 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
           /* user cancelled */
         }
       }
-      handleDownload(attachment);
+      handleDownload(attachment, index);
       toast.success({ description: `📁 Downloaded "${attachment.filename}"` });
     },
-    [base64ToFile, canShare, handleDownload, toast]
+    [base64ToFile, canShare, handleDownload, resolveAttachment, toast]
   );
 
   // ─── Preview capability ────────────────────────────────────────────────────
@@ -754,7 +813,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   // ─── Blob URL creation ─────────────────────────────────────────────────────
 
   const createBlobUrl = useCallback(
-    (attachment: EmailAttachment, index: number): string | null => {
+    (attachment: LoadedAttachment, index: number): string | null => {
       if (blobUrls.has(index)) return blobUrls.get(index)!;
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
       const blob = base64ToBlob(attachment.content, mime);
@@ -769,7 +828,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   // ─── Office + EML HTML rendering ──────────────────────────────────────────
 
   const processOfficePreview = useCallback(
-    async (attachment: EmailAttachment, index: number): Promise<string | undefined> => {
+    async (attachment: LoadedAttachment, index: number): Promise<string | undefined> => {
       if (officeHtml.has(index)) return officeHtml.get(index);
       const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
 
@@ -817,14 +876,17 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
   );
 
   const handlePrint = useCallback(
-    async (attachment: EmailAttachment, index: number) => {
-      const mime = normalizeMimeType(attachment.mimeType, attachment.filename);
+    async (target: EmailAttachment, index: number) => {
+      const mime = normalizeMimeType(target.mimeType, target.filename);
       if (!canPrint(mime)) {
         toast.error({
           description: `Printing is not supported for ${getFileTypeLabel(mime)} files`,
         });
         return;
       }
+
+      const attachment = await resolveAttachment(target, index);
+      if (!attachment) return;
 
       let html = officeHtml.get(index);
       if ((isWordFile(mime) || isExcelFile(mime) || isEmlFile(mime)) && !html) {
@@ -844,7 +906,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
         renderedHtml: html,
       });
     },
-    [blobUrls, canPrint, createBlobUrl, officeHtml, processOfficePreview, toast]
+    [blobUrls, canPrint, createBlobUrl, officeHtml, processOfficePreview, resolveAttachment, toast]
   );
 
   // ─── Open preview modal ────────────────────────────────────────────────────
@@ -853,7 +915,11 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
     async (index: number, resetFullscreen = false) => {
       setPreviewIndex(index);
       if (resetFullscreen) setIsFullscreen(false);
-      const att = displayAttachments[index];
+      const att = await resolveAttachment(displayAttachments[index], index);
+      if (!att) {
+        setPreviewIndex(null);
+        return;
+      }
       const mime = normalizeMimeType(att.mimeType, att.filename);
 
       if (isEmlFile(mime) || (isOfficeFile(mime) && !isPowerPointFile(mime))) {
@@ -864,7 +930,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
         setTimeout(() => setLoadingIndex(null), 200);
       }
     },
-    [displayAttachments, createBlobUrl, processOfficePreview]
+    [displayAttachments, resolveAttachment, createBlobUrl, processOfficePreview]
   );
 
   const closePreview = useCallback(() => {
@@ -915,7 +981,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
             <FaExclamationTriangle className="text-4xl text-[var(--yellow-9)]" />
             <p className="text-sm text-[var(--gray-11)]">{errMsg}</p>
             <button
-              onClick={() => handleDownload(attachment)}
+              onClick={() => handleDownload(attachment, index)}
               className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-9)] hover:bg-[var(--accent-10)] text-white rounded-lg text-sm font-medium"
             >
               <FaDownload /> Download to View
@@ -995,7 +1061,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
     if (mime.startsWith('text/html')) {
       return (
         <iframe
-          srcDoc={decodeBase64Text(attachment.content)}
+          srcDoc={decodeBase64Text(attachment.content || '')}
           className="w-full h-full border-none bg-white"
           title={attachment.filename}
           sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
@@ -1020,13 +1086,15 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
     return null;
   };
 
-  const currentAttachment = previewIndex !== null ? displayAttachments[previewIndex] : null;
+  const currentAttachment =
+    previewIndex !== null ? withLoadedContent(displayAttachments[previewIndex], previewIndex) : null;
   const currentMimeType = currentAttachment
     ? normalizeMimeType(currentAttachment.mimeType, currentAttachment.filename)
     : '';
   const isPreviewable = currentAttachment && canPreview(currentMimeType);
   const isPrintable = currentAttachment && canPrint(currentMimeType);
-  const isCurrentLoading = previewIndex !== null && loadingIndex === previewIndex;
+  const isCurrentLoading =
+    previewIndex !== null && (loadingIndex === previewIndex || fetchingIndex === previewIndex);
 
   useEffect(() => {
     if (previewIndex === null || !currentAttachment) return;
@@ -1077,7 +1145,8 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
           {displayAttachments.map((attachment, index) => {
             const mimeType = normalizeMimeType(attachment.mimeType, attachment.filename);
             const fileTypeLabel = getFileTypeLabel(mimeType);
-            const fileSize = base64FileSize(attachment.content);
+            const fileSize = attachmentSize(attachment);
+            const isFetching = fetchingIndex === index;
             const previewable = canPreview(mimeType);
 
             return (
@@ -1089,7 +1158,16 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
               >
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0">{getFileIcon(mimeType, 'text-xl')}</div>
+                    <div className="flex-shrink-0">
+                      {isFetching ? (
+                        <FaSpinner
+                          className="animate-spin text-xl text-[var(--accent-9)]"
+                          aria-label="Downloading"
+                        />
+                      ) : (
+                        getFileIcon(mimeType, 'text-xl')
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0 space-y-1">
                       <h4
                         className="text-sm font-medium text-[var(--gray-12)] truncate"
@@ -1110,7 +1188,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleCopyToClipboard(attachment);
+                            handleCopyToClipboard(attachment, index);
                           }}
                           className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-[var(--gray-11)] hover:text-[var(--gray-12)] bg-[var(--gray-3)] hover:bg-[var(--gray-4)] border border-[var(--gray-6)] hover:border-[var(--gray-7)] rounded-md transition-all duration-200"
                           title="Copy to clipboard"
@@ -1122,7 +1200,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleShare(attachment);
+                            handleShare(attachment, index);
                           }}
                           className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-[var(--gray-11)] hover:text-[var(--gray-12)] bg-[var(--gray-3)] hover:bg-[var(--gray-4)] border border-[var(--gray-6)] hover:border-[var(--gray-7)] rounded-md transition-all duration-200"
                           title="Share"
@@ -1146,8 +1224,9 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDownload(attachment);
+                          handleDownload(attachment, index);
                         }}
+                        disabled={isFetching}
                         className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-[var(--gray-11)] hover:text-[var(--gray-12)] bg-[var(--gray-3)] hover:bg-[var(--gray-4)] border border-[var(--gray-6)] hover:border-[var(--gray-7)] rounded-md transition-all duration-200"
                         title="Download"
                       >
@@ -1182,7 +1261,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                   </h3>
                   <p className="text-xs text-[var(--gray-11)]">
                     {getFileTypeLabel(currentMimeType)} •{' '}
-                    {base64FileSize(currentAttachment.content)}
+                    {attachmentSize(currentAttachment)}
                   </p>
                 </div>
               </div>
@@ -1208,7 +1287,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                   </button>
                 )}
                 <button
-                  onClick={() => handleDownload(currentAttachment)}
+                  onClick={() => handleDownload(currentAttachment, previewIndex)}
                   className="p-2 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-4)] rounded-md transition-colors"
                   title="Download Attachment"
                   aria-label="Download Attachment"
@@ -1252,7 +1331,7 @@ const EmailAttachments = ({ attachments, emailHtml = '' }: EmailAttachmentsProps
                     application.
                   </p>
                   <button
-                    onClick={() => handleDownload(currentAttachment)}
+                    onClick={() => handleDownload(currentAttachment, previewIndex)}
                     className="flex items-center gap-2 px-6 py-3 bg-[var(--accent-9)] hover:bg-[var(--accent-10)] text-white rounded-lg font-medium shadow-md transition-all hover:scale-105"
                   >
                     <FaDownload /> Download File

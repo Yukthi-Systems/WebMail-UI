@@ -18,6 +18,7 @@
 // src/utils/emailThreading.ts
 
 import { getMessageId } from './emailUtils';
+import { parseEmailDate } from './dateFormat';
 
 // Raw email/thread objects flowing through this module carry whatever header
 // keys the source (IMAP fetch, postal-mime parse, etc.) provided, plus the
@@ -59,11 +60,7 @@ export const getCleanSubject = (subject = ''): string => {
 };
 
 export const getEmailDate = (email: EmailLike | undefined): number => {
-  try {
-    return new Date(email?.Date || 0).getTime();
-  } catch {
-    return 0;
-  }
+  return parseEmailDate(email?.Date)?.getTime() ?? 0;
 };
 
 // Helper to build thread connections
@@ -289,8 +286,8 @@ export const getFilteredThreadedList = (threadedEmails: ThreadedEmailLike[]): Th
       'Thread-Unread-Count': email['Thread-HasUnread'] ? 1 : 0,
     }))
     .sort((a, b) => {
-      const dateA = new Date(a.Date || 0).getTime();
-      const dateB = new Date(b.Date || 0).getTime();
+      const dateA = getEmailDate(a);
+      const dateB = getEmailDate(b);
       return dateB - dateA; // Newest first
     });
 };
@@ -298,8 +295,8 @@ export const getFilteredThreadedList = (threadedEmails: ThreadedEmailLike[]): Th
 export const getListOfEmail = (threadedEmails: EmailLike[]): EmailLike[] => {
   return (
     threadedEmails.sort((a, b) => {
-      const dateA = new Date(a.Date || 0).getTime();
-      const dateB = new Date(b.Date || 0).getTime();
+      const dateA = getEmailDate(a);
+      const dateB = getEmailDate(b);
       return dateB - dateA; // Newest first
     }) || []
   );

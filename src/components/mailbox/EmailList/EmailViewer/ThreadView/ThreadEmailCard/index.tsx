@@ -16,14 +16,17 @@
  */
 
 import { Separator, Popover, Button } from '@radix-ui/themes';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEmailRaw } from '../../../../../../hooks/useEmailRaw';
+import {
+  emailViewErrorMessage,
+  useEmailView,
+  useParsedEmailView,
+} from '../../../../../../hooks/useEmailView';
 import EmailLoadingState from '../../EmailLoadingState';
-import EmailParsingState from '../../EmailParsingState';
-import EmailErrorState from '../../EmailErrorState';
 import EmailNoDataState from '../../EmailNoDataState';
 import EmailTabs, { type ParsedEmailForTabs } from '../../EmailTabs';
-import PostalMime, { decodeWords } from 'postal-mime';
+import { decodeWords } from 'postal-mime';
 import {
   FaCalendarAlt,
   FaEnvelope,
@@ -40,7 +43,6 @@ import { useUserTimezone } from '../../../../../../hooks/useTimezone';
 import { EmailActions } from './EmailActions';
 import { RecipientSection } from '../../RecipientSection';
 import {
-  extractHeaders,
   getMessageId,
   normalizeFieldNames,
   parseMultipleEmails,
@@ -63,7 +65,6 @@ import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../../../../u
 import { userDetailsAtom } from '../../../../../../state/userDetails';
 import { useCreateEmailTemplate, useTemplateActions } from '../../../../../../hooks/useTempelate';
 import type { EmailLike } from '../../../../../../utils/emailThreading';
-import type { Email as ParsedEmail } from 'postal-mime';
 
 interface Folder {
   id: string;
@@ -138,20 +139,31 @@ const ThreadEmailCard = ({
     }
   }, [isCurrentEmail]);
 
+  // Raw is only fetched on demand (download .eml, view source, forward as attachment)
+  const { data: rawEmail, refetch } = useEmailRaw(
+    String(threadEmail.id),
+    folderPath,
+    getMessageId(threadEmail) || '',
+    false
+  );
+
+  // Opening = body + attachment list only, fetched once the card is expanded
   const {
-    data: rawEmail,
+    data: emailViewData,
     isLoading,
-    refetch,
-  } = useEmailRaw(String(threadEmail.id), folderPath, getMessageId(threadEmail) || '', false);
+    error: viewError,
+  } = useEmailView(String(threadEmail.id), folderPath, getMessageId(threadEmail) || '', isExpanded);
+  const parsedEmail = useParsedEmailView(
+    emailViewData,
+    String(threadEmail.id),
+    folderPath,
+    getMessageId(threadEmail) || ''
+  );
 
   const { patchEmailFlags } = useEmailCacheUpdater(folderPath);
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folderPath);
 
-  const [parsedEmail, setParsedEmail] = useState<ParsedEmail | null>(null);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [isParsing, setIsParsing] = useState(false);
-  const [, setHeaders] = useState<Record<string, string>>({});
-  const lastParsedEmailId = useRef<string>('');
+  const lastSyncedEmailId = useRef<string>('');
   const [isHeaderPopoverOpen, setIsHeaderPopoverOpen] = useState<boolean>(false);
 
   const userDetails = useAtomValue(userDetailsAtom);
@@ -169,30 +181,6 @@ const ThreadEmailCard = ({
   const handleDelete = async (id: string) => {
     handleSingleEmailDelete(id);
   };
-
-  const parseEmailContent = useCallback(
-    async (emailContent: string) => {
-      setIsParsing(true);
-      try {
-        const parsed = await PostalMime.parse(emailContent, {
-          attachmentEncoding: 'base64',
-        });
-        setParsedEmail(parsed);
-        setParseError(null);
-
-        if (onContentLoaded) {
-          const content = parsed.html || parsed.text || '';
-          onContentLoaded(content);
-        }
-      } catch (error) {
-        setParseError(error instanceof Error ? error.message : 'Failed to parse email');
-        setParsedEmail(null);
-      } finally {
-        setIsParsing(false);
-      }
-    },
-    [onContentLoaded]
-  );
 
   const handleSaveAsTemplate = async (email: EmailLike) => {
     try {
@@ -225,30 +213,26 @@ const ThreadEmailCard = ({
   };
 
   useEffect(() => {
-    if (isExpanded && rawEmail && lastParsedEmailId.current !== `${threadEmail.id}-${folderPath}`) {
-      lastParsedEmailId.current = `${threadEmail.id}-${folderPath}`;
-      const headerMap = extractHeaders(rawEmail);
-      setHeaders(headerMap);
-      parseEmailContent(rawEmail);
+    if (!isExpanded || !parsedEmail) return;
+    const emailKey = `${threadEmail.id}-${folderPath}`;
+    if (lastSyncedEmailId.current === emailKey) return;
+    lastSyncedEmailId.current = emailKey;
 
-      // Backend already marked as read via mark_as_read=true on the raw fetch.
-      // Sync frontend: update the email list cache FLAGS and decrement folder unread count.
-      if (!threadEmail.FLAGS?.includes('\\Seen')) {
-        patchEmailFlags([Number(threadEmail.id)], '\\Seen');
-        updateFolderUnreadCount(-1);
-      }
-    } else if (isExpanded && !rawEmail && !isLoading) {
-      refetch();
+    onContentLoaded?.(parsedEmail.html || parsedEmail.text || '');
+
+    // Backend already marked as read via mark_as_read=true on the view fetch.
+    // Sync frontend: update the email list cache FLAGS and decrement folder unread count.
+    if (!threadEmail.FLAGS?.includes('\\Seen')) {
+      patchEmailFlags([Number(threadEmail.id)], '\\Seen');
+      updateFolderUnreadCount(-1);
     }
   }, [
-    rawEmail,
+    parsedEmail,
     threadEmail.id,
     threadEmail.FLAGS,
     folderPath,
     isExpanded,
-    parseEmailContent,
-    refetch,
-    isLoading,
+    onContentLoaded,
     patchEmailFlags,
     updateFolderUnreadCount,
   ]);
@@ -675,14 +659,16 @@ const ThreadEmailCard = ({
             <div className="space-y-4">
               <div>
                 {isLoading && <EmailLoadingState />}
-                {isParsing && <EmailParsingState />}
-                {parseError && <EmailErrorState error={parseError} rawContent={rawEmail || ''} />}
-                {!isLoading && !isParsing && !parseError && !parsedEmail && <EmailNoDataState />}
-                {!isLoading && !isParsing && !parseError && parsedEmail && (
+                {!isLoading && viewError && (
+                  <p className="p-3 rounded-lg border border-[var(--red-6)] bg-[var(--red-2)] text-sm text-[var(--red-11)]">
+                    {emailViewErrorMessage(viewError)}
+                  </p>
+                )}
+                {!isLoading && !viewError && !parsedEmail && <EmailNoDataState />}
+                {!isLoading && !viewError && parsedEmail && (
                   <EmailTabs
                     key={`${threadEmail.id}-${folderPath}`}
-                    parsedEmail={parsedEmail as unknown as ParsedEmailForTabs}
-                    rawEmail={rawEmail || ''}
+                    parsedEmail={parsedEmail as ParsedEmailForTabs}
                   />
                 )}
               </div>

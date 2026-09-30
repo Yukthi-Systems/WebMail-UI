@@ -22,6 +22,7 @@ import { API_URL, authCheck } from './config';
 import { fetchWithAuth } from './fetchWrapper';
 import { sanitizeFolderPath } from './mailbox';
 import type { SimplifiedEmail } from '../utils/email';
+import type { EmailSortBy, EmailSortOrder } from '../state/emailListView';
 
 // export interface SearchRequest {
 //   folder?: string;
@@ -54,6 +55,9 @@ export type SearchRequest = {
   date_since?: string;
   limit: number;
   page: number;
+  // Without sort_by, result pages come back in sequence-number order
+  sort_by?: EmailSortBy;
+  sort_order?: EmailSortOrder;
 };
 
 export interface SearchResult {
@@ -97,6 +101,8 @@ export const searchEmails = async (searchData: SearchRequest): Promise<SearchApi
       ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
     },
     body: JSON.stringify({
+      sort_by: 'date',
+      sort_order: 'desc',
       ...searchData,
       folder: sanitizeFolderPath(searchData.folder),
       full_headers: true,

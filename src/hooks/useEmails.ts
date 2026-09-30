@@ -32,31 +32,42 @@ import {
   type EmailFolderCreate,
   type EmailFolderEdit,
   type EmailFolders,
+  type EmailListOptions,
   type MoveEmailPayload,
   type ReadEmailPayload,
   type UnReadEmailPayload,
 } from '../api/mailbox';
 import { useRef } from 'react';
+import { HttpError } from '../api/fetchWrapper';
+import { DEFAULT_EMAIL_SORT } from '../state/emailListView';
 
 export function useEmails(
   folder: string,
   page: number = 1,
   perPage: number = 50,
-  full_headers = true
+  full_headers = true,
+  {
+    sortBy = DEFAULT_EMAIL_SORT.sortBy,
+    sortOrder = DEFAULT_EMAIL_SORT.sortOrder,
+    filterBy = 'all',
+  }: EmailListOptions = {}
 ) {
-  // Logic to handle folder changes gracefully:
-  // If the folder changes, we should always default back to page 1
-  // to avoid making an API call for a page index that might not exist in the new folder.
-  const lastFolderRef = useRef(folder);
-  const isFolderChanged = lastFolderRef.current !== folder;
+  // Logic to handle folder / sort / filter changes gracefully:
+  // If any of them changes, we should always default back to page 1
+  // to avoid making an API call for a page index that might not exist in the new view.
+  const viewKey = `${folder}|${sortBy}|${sortOrder}|${filterBy}`;
+  const lastViewKeyRef = useRef(viewKey);
+  const isViewChanged = lastViewKeyRef.current !== viewKey;
 
-  if (isFolderChanged) {
-    lastFolderRef.current = folder;
+  if (isViewChanged) {
+    lastViewKeyRef.current = viewKey;
   }
 
-  const effectivePage = isFolderChanged ? 1 : page;
+  const effectivePage = isViewChanged ? 1 : page;
 
   return useQuery({
+    // Sort/filter go after the existing segments so prefix matches on
+    // ['folder', folder, 'page', page, 'perPage', perPage] keep working.
     queryKey: [
       'folder',
       folder,
@@ -67,10 +78,19 @@ export function useEmails(
       'fullHeaders',
       full_headers,
       'status',
+      'sort',
+      sortBy,
+      sortOrder,
+      'filter',
+      filterBy,
     ],
-    queryFn: () => emails(folder, effectivePage, perPage, full_headers),
+    queryFn: () =>
+      emails(folder, effectivePage, perPage, full_headers, { sortBy, sortOrder, filterBy }),
 
-    retry: 5,
+    // 400 (e.g. "Page number exceeds total pages") and 404 won't fix themselves
+    retry: (failureCount, error) =>
+      !(error instanceof HttpError && (error.status === 400 || error.status === 404)) &&
+      failureCount < 5,
     retryDelay: () => 500,
 
     // Keep the previous page on screen while fetching the new one
