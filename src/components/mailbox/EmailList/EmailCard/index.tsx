@@ -744,7 +744,7 @@ const EmailCard = ({
                         </>
                       )}
                       {hasAttachments && (
-                        <FaPaperclip className="text-[10px] text-[var(--gray-9)]" />
+                        <FaPaperclip className="text-[12px] text-[var(--gray-9)]" />
                       )}
                       <p
                         title={fullDate}
@@ -934,11 +934,11 @@ const EmailCard = ({
                           className="inline-flex items-center gap-[2px] px-2 py-0.5 text-[9px] bg-[var(--blue-3)] text-[var(--blue-11)] rounded-full"
                           title={getAttachmentNames()}
                         >
-                          <FaPaperclip className="text-[8px]" />
+                          <FaPaperclip className="text-[10px]" />
                           {email.attachmentCount}
                         </span>
                       ) : (
-                        <FaPaperclip className="text-[8px] text-[var(--gray-9)]" />
+                        <FaPaperclip className="text-[12px] text-[var(--gray-9)]" />
                       )}
                     </div>
                   )}
