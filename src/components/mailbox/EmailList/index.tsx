@@ -70,6 +70,7 @@ import CustomModal from '../../composer/CustomModal';
 import { useIsMobile } from '../../../hooks/use-mobile';
 import { folderDetailsAtom, folderQuotaAtom } from '../../../state/folders';
 import PermanentDeleteConfirm from './PermanentDeleteConfirm';
+import EmptyFolderBanner from './EmptyFolderBanner';
 import {
   useUpdateFolderUnreadCount,
   useUpdateAnyFolderUnreadCount,
@@ -351,7 +352,20 @@ const EmailList = ({
     return folderDetails.find((f) => f.folder_name === (folder || 'INBOX'));
   }, [folderDetails, folder]);
 
-  // On initial load, if UID validity data arrives and differs from stored status, invalidate email cache
+  // Regular emails fetch
+  const {
+    data: regularData,
+    isFetching: isRegularFetching,
+    dataUpdatedAt: regularDataUpdatedAt,
+    error: regularError,
+  } = useEmails(folder || 'INBOX', regularPage, PER_PAGE, true, {
+    sortBy: emailSort.sortBy,
+    sortOrder: emailSort.sortOrder,
+    filterBy: emailFilter,
+  });
+
+  // When the folder's UID status arrives and differs from the stored one, the
+  // cached list may be outdated (new mail, changes elsewhere) — reload it.
   useEffect(() => {
     if (!liveUidValidity) return;
     const stored = currentFolderDetail?.status;
@@ -370,21 +384,19 @@ const EmailList = ({
       );
     }
 
-    if (hasChanged) {
-      queryClient.invalidateQueries({ queryKey: ['folder', folder || 'INBOX'] });
+    // On folder open the list and the status are fetched together: a list that
+    // is loading right now, or was loaded in the last few seconds, is already
+    // current — invalidating it would just send the same request twice.
+    const isListCurrent = isRegularFetching || Date.now() - regularDataUpdatedAt < 10_000;
+    if (hasChanged && !isListCurrent) {
+      // cancelRefetch: false joins an in-flight fetch instead of restarting it
+      queryClient.invalidateQueries(
+        { queryKey: ['folder', folder || 'INBOX'] },
+        { cancelRefetch: false }
+      );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveUidValidity]);
-
-  // Regular emails fetch
-  const {
-    data: regularData,
-    isFetching: isRegularFetching,
-    error: regularError,
-  } = useEmails(folder || 'INBOX', regularPage, PER_PAGE, true, {
-    sortBy: emailSort.sortBy,
-    sortOrder: emailSort.sortOrder,
-    filterBy: emailFilter,
-  });
 
   // The folder shrank under us (deletes, or marking read in the Unread view on
   // the last page): step back to the last page instead of showing an error.
@@ -691,10 +703,7 @@ const EmailList = ({
 
           toast.dismiss(loadingId);
           toast.success({ description: `Moved to ${newFol.name}` });
-
-          queryClient.invalidateQueries({
-            queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
-          });
+          // List reload is done by useMoveMail/useDeleteMail (invalidateFolderLists)
         },
         onError: (error) => {
           toast.dismiss(loadingId);
@@ -760,7 +769,7 @@ const EmailList = ({
       }
     },
     onCompose: () => {},
-    onRefresh: () => handleRefresh(),
+    onRefresh: () => handleManualRefresh(),
     onSearch: () => {
       const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement;
       if (searchInput) {
@@ -902,12 +911,7 @@ const EmailList = ({
           onSuccess: () => {
             toast.dismiss(loadingId);
             handleDeselectAll();
-            queryClient.invalidateQueries({
-              queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
-            });
-            if (searchState.isActive) {
-              queryClient.invalidateQueries({ queryKey: ['search-emails'] });
-            }
+            // List reload is done by useMoveMail/useDeleteMail (invalidateFolderLists)
             pendingDeleteActions.current.delete(actionId);
           },
           onError: (error) => {
@@ -941,12 +945,7 @@ const EmailList = ({
             description:
               (res as unknown as { message?: string })?.message || 'Email permanently deleted.',
           });
-          queryClient.invalidateQueries({
-            queryKey: ['folder', folder, 'page', currentPage, 'perPage', PER_PAGE],
-          });
-          if (searchState.isActive) {
-            queryClient.invalidateQueries({ queryKey: ['search-emails'] });
-          }
+          // List reload is done by useMoveMail/useDeleteMail (invalidateFolderLists)
         },
         onError: (error) => {
           toast.dismiss(loadingId);
@@ -1199,6 +1198,26 @@ const EmailList = ({
     }
   };
 
+  
+  const handleManualRefresh = async () => {
+    const loadingId = toast.loading({ description: 'Refreshing…' });
+    try {
+      await Promise.all([
+        // Refetches the visible view; the folder's other filters/sorts/pages are
+        // marked stale and reload when shown
+        queryClient.invalidateQueries({ queryKey: ['folder', folder || 'INBOX'] }),
+        searchState.isActive
+          ? queryClient.invalidateQueries({ queryKey: ['search-emails'] })
+          : Promise.resolve(),
+        // Folder unread counts (GET /folder/path)
+        queryClient.invalidateQueries({ queryKey: ['foldersFullPath'] }),
+      ]);
+    } finally {
+      toast.dismiss(loadingId);
+    }
+  };
+
+  // Auto-refresh (every minute, after sending): cheap check for new mail first
   const handleRefresh = async () => {
     const loadingId = toast.loading({ description: 'Checking for new mail…' });
     try {
@@ -1229,12 +1248,15 @@ const EmailList = ({
       console.warn('Status check failed, falling back to full refresh', err);
     }
 
-    await queryClient.invalidateQueries({
-      queryKey: ['folder', folder || 'INBOX'],
-    });
+    // cancelRefetch: false — the UID-status effect above may already be
+    // reloading the list for the same change; join that request, don't restart it
+    await queryClient.invalidateQueries(
+      { queryKey: ['folder', folder || 'INBOX'] },
+      { cancelRefetch: false }
+    );
 
     if (searchState.isActive) {
-      await queryClient.invalidateQueries({ queryKey: ['search-emails'] });
+      await queryClient.invalidateQueries({ queryKey: ['search-emails'] }, { cancelRefetch: false });
     }
 
     toast.dismiss(loadingId);
@@ -1641,6 +1663,23 @@ const EmailList = ({
   //   }
   // }, [emailArray, folder, prefetchEmailContent]);
 
+  // "Empty Trash/Spam now" bar (renders nothing for other folders)
+  const renderEmptyFolderBanner = () =>
+    !searchState.isActive && (
+      <EmptyFolderBanner
+        folder={folder || 'INBOX'}
+        folderDetail={currentFolderDetail}
+        emailCount={
+          currentFolderDetail?.status?.MESSAGES ?? (emailFilter === 'all' ? total_count : undefined)
+        }
+        onEmptied={() => {
+          if (viewingEmail) handleBackToList();
+          handleDeselectAll();
+          setRegularPage(1);
+        }}
+      />
+    );
+
   const renderEmailList = () => (
     <div
       ref={(node) => {
@@ -1649,6 +1688,7 @@ const EmailList = ({
       }}
       className={`h-full overflow-x-hidden bg-[var(--gray-1)] transition-opacity duration-200 ${isFetching ? 'opacity-80' : 'opacity-100'}`}
     >
+      {renderEmptyFolderBanner()}
       <div className="flex flex-col gap-0">
         {emailArray.map((email, index) => (
           <EmailCard
@@ -1763,7 +1803,7 @@ const EmailList = ({
       <EmailEmptyState
         folder={folder}
         error={error}
-        onRetry={handleRefresh}
+        onRetry={handleManualRefresh}
         filter={searchState.isActive ? 'all' : emailFilter}
       />
     );
@@ -1780,7 +1820,7 @@ const EmailList = ({
         onDeselectAll={handleDeselectAll}
         onDelete={handleDelete}
         onMarkAsRead={handleMarkAsRead}
-        onRefresh={handleRefresh}
+        onRefresh={handleManualRefresh}
         isRefreshing={isFetching}
         showBackButton={!!viewingEmail}
         onBack={handleBackToList}
@@ -1833,7 +1873,7 @@ const EmailList = ({
           <EmailEmptyState
             folder={folder}
             error={error}
-            onRetry={handleRefresh}
+            onRetry={handleManualRefresh}
             filter={searchState.isActive ? 'all' : emailFilter}
           />
         ) : viewingEmail && isMobile ? (
@@ -1897,6 +1937,7 @@ const EmailList = ({
             }}
             className="overflow-x-hidden w-full h-full"
           >
+            {renderEmptyFolderBanner()}
             {emailArray.map((email, index) => (
               <EmailCard
                 index={index}

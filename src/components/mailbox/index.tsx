@@ -131,8 +131,7 @@ const Mailbox = () => {
             toast.success({
               description: `${count} email${count > 1 ? 's' : ''} moved to ${folderDisplayName}`,
             });
-
-            queryClient.invalidateQueries({ queryKey: ['folder', folder] });
+            // Source and destination lists are reloaded by useMoveMail
           },
           onError: (error) => {
             toast.dismiss(loadingId);

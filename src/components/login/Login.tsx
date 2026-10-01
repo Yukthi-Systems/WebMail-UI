@@ -221,7 +221,8 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
 
           toast.error({
             description: error.message || 'Failed to submit form. Please try again.',
-            duration: 3000,
+            // API messages are full sentences (e.g. "contact your administrator")
+            duration: 6000,
           });
         },
       }

@@ -15,7 +15,13 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import {
   copyEmail,
   createEmailFolder,
@@ -23,6 +29,8 @@ import {
   deleteEmailFolder,
   editEmailFolder,
   emails,
+  emptyFolder,
+  markFolderRead,
   markFlaggedEmail,
   markReadEmail,
   markUnFlaggedEmail,
@@ -40,6 +48,29 @@ import {
 import { useRef } from 'react';
 import { HttpError } from '../api/fetchWrapper';
 import { DEFAULT_EMAIL_SORT } from '../state/emailListView';
+
+/**
+ * After any change to a folder, every cached list view of it (all filters,
+ * sorts and pages) may be wrong. Marks them stale so each reloads when shown;
+ * the visible one reloads right away unless `refetchActive` is false (used for
+ * flag changes, which are already patched into the visible list).
+ */
+export function invalidateFolderLists(
+  queryClient: QueryClient,
+  folders: (string | undefined)[],
+  { refetchActive = true }: { refetchActive?: boolean } = {}
+) {
+  const refetchType = refetchActive ? 'active' : 'none';
+  new Set(folders.filter(Boolean)).forEach((folder) => {
+    queryClient.invalidateQueries({ queryKey: ['folder', folder], refetchType });
+    // Message count changed (move/delete/empty): refresh the stored UID status
+    // too, or the next "new mail?" check sees a difference and reloads again
+    if (refetchActive) {
+      queryClient.invalidateQueries({ queryKey: ['folderUidValidity', folder] });
+    }
+  });
+  queryClient.invalidateQueries({ queryKey: ['search-emails'], refetchType });
+}
 
 export function useEmails(
   folder: string,
@@ -105,66 +136,86 @@ export function useEmails(
 }
 
 export function useMoveMail() {
+  const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, MoveEmailPayload>({
     mutationKey: ['move_mails'],
     mutationFn: (payload: MoveEmailPayload) =>
       moveEmail(payload.path, payload.sourceFolder, payload.destFolder, payload.body),
+    onSuccess: (_data, payload) =>
+      invalidateFolderLists(queryClient, [payload.sourceFolder, payload.destFolder]),
     retry: 5,
     retryDelay: 500,
   });
 }
 
 export function useCopyMail() {
+  const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, MoveEmailPayload>({
     mutationKey: ['copy_mails'],
     mutationFn: (payload: MoveEmailPayload) =>
       copyEmail(payload.path, payload.sourceFolder, payload.destFolder, payload.body),
+    onSuccess: (_data, payload) =>
+      invalidateFolderLists(queryClient, [payload.sourceFolder, payload.destFolder]),
     retry: 5,
     retryDelay: 500,
   });
 }
 
 export function useDeleteMail() {
+  const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, DeleteEmailPayload>({
     mutationKey: ['delete_mails'],
     mutationFn: (payload: DeleteEmailPayload) => deleteEmail(payload.path, payload.body),
+    onSuccess: (_data, payload) => invalidateFolderLists(queryClient, [payload.path]),
     retry: 5,
     retryDelay: 500,
   });
 }
 
 export function useSeenMail() {
+  const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, ReadEmailPayload>({
     mutationKey: ['mark_read_mails'],
     mutationFn: (payload: ReadEmailPayload) => markReadEmail(payload.path, payload.body),
     // Idempotent — safe to retry once on transient IMAP failure
+    onSuccess: (_data, payload) =>
+      invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
     retry: 5,
     retryDelay: 500,
   });
 }
 
 export function useUnseenMail() {
+  const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, UnReadEmailPayload>({
     mutationKey: ['mark_unread_mails'],
     mutationFn: (payload: UnReadEmailPayload) => unmarkReadEmail(payload.path, payload.body),
+    onSuccess: (_data, payload) =>
+      invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
     retry: 5,
     retryDelay: 500,
   });
 }
 
 export function useFlaggedMail() {
+  const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, ReadEmailPayload>({
     mutationKey: ['mark_flagged_mails'],
     mutationFn: (payload: ReadEmailPayload) => markFlaggedEmail(payload.path, payload.body),
+    onSuccess: (_data, payload) =>
+      invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
     retry: 5,
     retryDelay: 500,
   });
 }
 
 export function useUnFlaggedMail() {
+  const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, UnReadEmailPayload>({
     mutationKey: ['mark_unflagged_mails'],
     mutationFn: (payload: UnReadEmailPayload) => markUnFlaggedEmail(payload.path, payload.body),
+    onSuccess: (_data, payload) =>
+      invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
     retry: 5,
     retryDelay: 500,
   });
@@ -195,5 +246,23 @@ export function useDeleteEmailFolder() {
     mutationFn: (payload: EmailFolderCreate) => deleteEmailFolder(payload.path || ''),
     retry: 5,
     retryDelay: 500,
+  });
+}
+
+export function useMarkFolderRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['mark_folder_read'],
+    mutationFn: (folderPath: string) => markFolderRead(folderPath),
+    onSuccess: (_data, folderPath) => invalidateFolderLists(queryClient, [folderPath]),
+  });
+}
+
+export function useEmptyFolder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['empty_folder'],
+    mutationFn: (folderPath: string) => emptyFolder(folderPath),
+    onSuccess: (_data, folderPath) => invalidateFolderLists(queryClient, [folderPath]),
   });
 }

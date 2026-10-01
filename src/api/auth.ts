@@ -48,8 +48,14 @@ export const login = async (credentials: {
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    const err = new LoginError(error.message || 'Login failed');
+    // Show the API's message as-is (401/403/503...). A proxy can answer a 503
+    // with a non-JSON page, so only fall back when there is no message at all.
+    const error = await res.json().catch(() => ({}));
+    const fallback =
+      res.status === 503
+        ? "We couldn't reach your mail server. Please try again in a few minutes."
+        : 'Login failed. Please try again.';
+    const err = new LoginError(error.message || fallback);
     err.status = res.status;
     throw err;
   }

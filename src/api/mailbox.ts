@@ -548,6 +548,41 @@ export const markUnFlaggedEmail = async (path: string, body: number[]): Promise<
   return data;
 };
 
+
+/** Marks every unread email in the folder as read, including ones not loaded in the UI. */
+export const markFolderRead = async (
+  folderPath: string
+): Promise<{ message: string; folder_path: string; marked_count: number }> => {
+  const csrfToken = webmailStore.get(csrfTokenAtom);
+  const params = new URLSearchParams({ folder_path: folderPath });
+  const res = await fetchWithAuth(`${API_URL}/folder/mark-read?${params}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    },
+  });
+  return res.json();
+};
+
+/** Permanently deletes every email in a Trash or Spam folder (the API refuses other folders). */
+export const emptyFolder = async (
+  folderPath: string
+): Promise<{ message: string; folder_path: string; deleted_count: number }> => {
+  const csrfToken = webmailStore.get(csrfTokenAtom);
+  const params = new URLSearchParams({ folder_path: folderPath });
+  const res = await fetchWithAuth(`${API_URL}/folder/empty?${params}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    },
+  });
+  return res.json();
+};
+
 export const createEmailFolder = async (path: string): Promise<EmailFolders> => {
   const csrfToken = webmailStore.get(csrfTokenAtom);
 

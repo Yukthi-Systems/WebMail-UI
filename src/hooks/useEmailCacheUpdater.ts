@@ -20,6 +20,7 @@ import { useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import type { EmailLike } from '../utils/emailThreading';
 import { emailFilterAtom, type EmailFilterBy } from '../state/emailListView';
+import { invalidateFolderLists } from './useEmails';
 
 // The flag each server-side list filter depends on
 const FILTER_FLAG: Record<EmailFilterBy, string | null> = {
@@ -92,6 +93,10 @@ export function useEmailCacheUpdater(folder: string) {
           return old.map(applyFlagPatch);
         }
       );
+
+      // Other cached views of this folder (other filters / sorts / pages) may no
+      // longer match: mark them stale so they reload when shown.
+      invalidateFolderLists(queryClient, [folder], { refetchActive: false });
 
       // A filtered list (e.g. Unread) no longer matches once that flag changes —
       // refetch it so the item drops out and counts/pages stay right.

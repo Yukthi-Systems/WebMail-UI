@@ -65,7 +65,18 @@ export function useFoldersFullPath() {
   useEffect(() => {
     const data = query.data;
     if (query.isSuccess && data) {
-      setFolderDetails(data.folders || []);
+      // /folder/path has no UID status — keep the stored one, or the "new mail?"
+      // check sees no status, reports a change and reloads the list needlessly
+      setFolderDetails((prev) => {
+        const statusByFolder = new Map(
+          (Array.isArray(prev) ? prev : []).map((f) => [f.folder_name, f.status])
+        );
+        return (data.folders || []).map((f) =>
+          f.status || !statusByFolder.get(f.folder_name)
+            ? f
+            : { ...f, status: statusByFolder.get(f.folder_name) }
+        );
+      });
     } else if (query.isError || (query.isSuccess && !data)) {
       setFolderDetails([]);
     }

@@ -81,3 +81,38 @@ export const sortFoldersAscending = <T extends { name?: string; displayName?: st
     return nameA.localeCompare(nameB);
   });
 };
+
+// Same rule as the API's DELETE /folder/empty (it refuses other folders with 400)
+const TRASH_FOLDER_NAMES = new Set([
+  'trash',
+  'deleted',
+  'deleted items',
+  'deleted messages',
+  'bin',
+]);
+const SPAM_FOLDER_NAMES = new Set(['junk', 'spam', 'junk e-mail', 'junk email', 'bulk mail']);
+
+/**
+ * 'trash' / 'spam' when the folder can be emptied, otherwise null. A folder
+ * qualifies by the server's special-use flag (\Trash, \Junk — returned without
+ * the backslash), or by name when it is top level or directly under INBOX (a
+ * user's own "Projects/Trash" is not the Trash).
+ */
+export const getEmptiableFolderKind = (
+  folderName: string,
+  detail?: { flags?: string[]; delimiter?: string | null }
+): 'trash' | 'spam' | null => {
+  const flags = (detail?.flags ?? []).map((flag) => flag.replace(/^\\/, '').toLowerCase());
+  if (flags.includes('trash')) return 'trash';
+  if (flags.includes('junk')) return 'spam';
+
+  const delimiter = detail?.delimiter;
+  let parts = delimiter ? folderName.split(delimiter) : [folderName];
+  if (parts.length === 2 && parts[0].toUpperCase() === 'INBOX') parts = parts.slice(1);
+  if (parts.length !== 1) return null;
+
+  const name = parts[0].trim().toLowerCase();
+  if (TRASH_FOLDER_NAMES.has(name)) return 'trash';
+  if (SPAM_FOLDER_NAMES.has(name)) return 'spam';
+  return null;
+};

@@ -46,7 +46,6 @@ import { RiSpam2Line } from 'react-icons/ri';
 import FolderDialog from './MoveEmail';
 import { useCopyMail, useMoveMail } from '../../../hooks/useEmails';
 import { useParams } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
 import { useUpdateAnyFolderUnreadCount } from '../../../hooks/useFolders';
 import type { Email } from '../../../api/mailbox';
 import { FaEllipsisH, FaExternalLinkAlt } from 'react-icons/fa';
@@ -58,6 +57,7 @@ import type { LayoutType } from '../../common/header/LayoutSetting';
 import { folderQuotaAtom } from '../../../state/folders'; // Import folderQuotaAtom
 import { useToast } from '../../../hooks/useToast';
 import EmailListSortMenu from './EmailListSortMenu';
+import MarkAllReadButton from './MarkAllReadButton';
 
 interface Folder {
   id: string;
@@ -157,7 +157,6 @@ const EmailToolbar = ({
   const hasSelection = selectedCount > 0 || showBackButton;
   const { mutate: moveMutate } = useMoveMail();
   const { mutate: copyMutate } = useCopyMail();
-  const queryClient = useQueryClient();
   const updateAnyFolderUnreadCount = useUpdateAnyFolderUnreadCount();
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [disableButton, setDisableButton] = useState(false);
@@ -240,9 +239,7 @@ const EmailToolbar = ({
               action === 'move' ? `Moved to ${folder?.name}` : `Copied to ${folder?.name}`,
           });
 
-          // Invalidate directly rather than going through onRefresh() so we skip
-          // the UID-validity check (which can bail early and skip the invalidation).
-          queryClient.invalidateQueries({ queryKey: ['folder', folderName] });
+          // Source and destination lists are reloaded by useMoveMail/useCopyMail
 
           if (showBackButton && onBack) {
             onBack();
@@ -998,6 +995,7 @@ const EmailToolbar = ({
             </div>
 
             <div className="flex items-center gap-1">
+              {!hasSelection && <MarkAllReadButton variant="icon" />}
               <EmailListSortMenu variant="icon" />
               <button
                 onClick={onRefresh}
@@ -1147,6 +1145,8 @@ const EmailToolbar = ({
                     </Button>
                   </>
                 )}
+
+                {!hasSelection && <MarkAllReadButton />}
 
                 <EmailListSortMenu />
 
