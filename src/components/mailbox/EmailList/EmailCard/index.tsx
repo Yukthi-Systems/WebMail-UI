@@ -24,6 +24,7 @@ import { Checkbox, ContextMenu } from '@radix-ui/themes';
 import { parseEmail } from '../../../../utils/emailPerser';
 import { escapeHtml } from '../../../../utils/emailPrint';
 import { useUserTimezone } from '../../../../hooks/useTimezone';
+import { useSpecialFolderPaths } from '../../../../hooks/useFolders';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../../state/settings';
 import EmailHoverCard from './EmailHoverCard';
@@ -127,7 +128,10 @@ const EmailCard = ({
   // Only real attachments — inline body images aren't listed
   const hoverAttachments = hoverEmailView?.attachments?.filter((a) => !a.is_inline);
 
-  const senderEmailString = folder === 'Sent' ? email.To : email.From;
+  // The resolved Sent folder (e.g. "INBOX/Sent"), not just a folder named "Sent"
+  const { sent: sentFolderPath } = useSpecialFolderPaths();
+  const isSentFolder = folder === sentFolderPath || folder === 'Sent';
+  const senderEmailString = isSentFolder ? email.To : email.From;
   const { name: senderName, email: senderEmail } = parseEmail(senderEmailString);
 
   // Parse recipients for display
@@ -316,7 +320,7 @@ const EmailCard = ({
   const getRecipientDisplay = () => {
     const allRecipients = [...toRecipients, ...ccRecipients];
 
-    if (folder === 'Sent') {
+    if (isSentFolder) {
       if (allRecipients.length === 0) return null;
       const recipientsWithoutMe = allRecipients.filter((r) => !r.isMe);
       if (recipientsWithoutMe.length === 0) return { text: 'me', hasCc: false, fullText: 'To: me' };
@@ -702,7 +706,7 @@ const EmailCard = ({
                     <p
                       className={`text-[14px] truncate ${emailSeen ? 'text-[var(--gray-11)] font-medium' : 'text-[var(--gray-12)] font-bold'}`}
                     >
-                      {folder === 'Sent' && recipientDisplay
+                      {isSentFolder && recipientDisplay
                         ? `To: ${recipientDisplay.text}`
                         : getDisplayName(senderName)}
                     </p>
@@ -848,7 +852,7 @@ const EmailCard = ({
                     isLoading={isWaitingForTooltip}
                   />
                   <div className="flex flex-col min-w-0 flex-1">
-                    {folder === 'Sent' ? (
+                    {isSentFolder ? (
                       <>
                         {recipientDisplay && (
                           <p

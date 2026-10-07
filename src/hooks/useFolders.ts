@@ -21,8 +21,9 @@ import { buildFolderTree } from '../utils/folderUtils';
 
 import { type EmailFolders, defaultFolders } from '../api/mailbox';
 import { useEffect, useMemo, useCallback } from 'react';
-import { useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { folderDetailsAtom, type FolderDetail, type FolderQuota } from '../state/folders';
+import { getSentFolderPath, resolveSpecialFolder } from '../utils/folderUtils';
 
 const FOLDER_RETRY_DELAY = () => 500;
 
@@ -187,4 +188,21 @@ export function useFolderQuota(folderPath: string = 'User quota') {
     retryDelay: 500,
     refetchOnWindowFocus: false,
   });
+}
+
+/**
+ * Paths of the special folders for this mailbox (e.g. "INBOX/Sent" on servers
+ * that keep every folder under INBOX), with the usual names as fallback.
+ */
+export function useSpecialFolderPaths() {
+  const folders = useAtomValue(folderDetailsAtom);
+  return useMemo(
+    () => ({
+      sent: getSentFolderPath(folders),
+      drafts: resolveSpecialFolder(folders, 'drafts')?.folder_name || 'Drafts',
+      trash: resolveSpecialFolder(folders, 'trash')?.folder_name || 'Trash',
+      spam: resolveSpecialFolder(folders, 'spam')?.folder_name || 'Spam',
+    }),
+    [folders]
+  );
 }

@@ -28,7 +28,7 @@ import { emailAddress } from '../../../../../state/emailAddress';
 import { useSendMail } from '../../../../../hooks/useComposer';
 import { generateMessageId, type ComposerRequest } from '../../../../../api/composer';
 import { useToast } from '../../../../../hooks/useToast';
-import { SEND_DEFAULT } from '../../../../../constants/constant';
+import { useSpecialFolderPaths } from '../../../../../hooks/useFolders';
 import { formatComposedEmailData } from '../../../../../utils/replyForwardHelper';
 
 // Loose shape covering both postal-mime attachments and the composer's local
@@ -103,6 +103,7 @@ const EmailTabs = ({ parsedEmail }: EmailTabsProps) => {
   const currentEmail = useAtomValue(emailAddress);
   const { mutate: sendMutate } = useSendMail();
   const toast = useToast();
+  const specialFolders = useSpecialFolderPaths();
 
   const displayAttachments = parsedEmail.attachments.filter((att) => {
     if (!att.contentId) return true;
@@ -153,7 +154,7 @@ const EmailTabs = ({ parsedEmail }: EmailTabsProps) => {
         ],
       },
       {
-        folder_path: SEND_DEFAULT || 'Sent',
+        folder_path: specialFolders.sent,
         priority: 'normal',
         isDraft: false,
       }

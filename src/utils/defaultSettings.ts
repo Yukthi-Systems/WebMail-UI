@@ -17,20 +17,14 @@
 
 import type { UserSettings } from '../api/user';
 import type { FolderDetail } from '../state/folders';
+import { resolveSpecialFolder } from './folderUtils';
 
 export const getDefaultUserSettings = (folderData?: FolderDetail[]): UserSettings => {
-  // Helper to find folder by flag
-  const findFolder = (flag: string, fallback: string) => {
-    if (!folderData) return fallback;
-    const folder = folderData.find((f) => f.flags?.includes(flag));
-    return folder?.folder_name || fallback;
-  };
-
   const inboxName = folderData?.find((f) => f.folder_name === 'INBOX')?.folder_name || 'INBOX';
-  const sentName = findFolder('Sent', 'Sent');
-  const draftsName = findFolder('Drafts', 'Drafts');
-  const spamName = findFolder('Junk', 'Spam');
-  const trashName = findFolder('Trash', 'Trash');
+  const sentName = resolveSpecialFolder(folderData, 'sent')?.folder_name || 'Sent';
+  const draftsName = resolveSpecialFolder(folderData, 'drafts')?.folder_name || 'Drafts';
+  const spamName = resolveSpecialFolder(folderData, 'spam')?.folder_name || 'Spam';
+  const trashName = resolveSpecialFolder(folderData, 'trash')?.folder_name || 'Trash';
 
   return {
     general: {

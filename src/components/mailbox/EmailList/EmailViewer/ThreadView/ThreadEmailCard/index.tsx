@@ -59,7 +59,10 @@ import {
 import { useAtomValue } from 'jotai';
 import { folderQuotaAtom } from '../../../../../../state/folders';
 import { useEmailCacheUpdater } from '../../../../../../hooks/useEmailCacheUpdater';
-import { useUpdateFolderUnreadCount } from '../../../../../../hooks/useFolders';
+import {
+  useSpecialFolderPaths,
+  useUpdateFolderUnreadCount,
+} from '../../../../../../hooks/useFolders';
 import FolderDialog from '../../../MoveEmail';
 import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../../../../utils/emailPrint';
 import { userDetailsAtom } from '../../../../../../state/userDetails';
@@ -161,6 +164,7 @@ const ThreadEmailCard = ({
   );
 
   const { patchEmailFlags } = useEmailCacheUpdater(folderPath);
+  const { sent: sentFolderPath } = useSpecialFolderPaths();
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folderPath);
 
   const lastSyncedEmailId = useRef<string>('');
@@ -375,7 +379,11 @@ const ThreadEmailCard = ({
   const isFlagged = threadEmail?.FLAGS?.includes('\\Flagged');
   const readStatus = threadEmail?.FLAGS?.includes('\\Seen');
 
-  const isSent = folderPath.toLowerCase() === 'sent' || foundedIn?.toLowerCase() === 'sent';
+  const isSent =
+    folderPath === sentFolderPath ||
+    foundedIn === sentFolderPath ||
+    folderPath.toLowerCase() === 'sent' ||
+    foundedIn?.toLowerCase() === 'sent';
   const isTrash = folderPath.toLowerCase() === 'trash' || foundedIn?.toLowerCase() === 'trash';
 
   // Local handlers that use this email's actual folderPath — prevents the parent's

@@ -29,6 +29,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useUserTimezone } from '../../../../hooks/useTimezone';
 import { folderDetailsAtom } from '../../../../state/folders';
 import { useUpdateFolderUnreadCount } from '../../../../hooks/useFolders';
+import { getSentFolderPath } from '../../../../utils/folderUtils';
 import { useEmailCacheUpdater } from '../../../../hooks/useEmailCacheUpdater';
 import { userSettingsAtom } from '../../../../state/settings';
 import { useParams } from '@tanstack/react-router';
@@ -45,7 +46,6 @@ import { useSendMail } from '../../../../hooks/useComposer';
 import { generateMessageId, type ComposerRequest } from '../../../../api/composer';
 import { emailAddress } from '../../../../state/emailAddress';
 import { userDetailsAtom } from '../../../../state/userDetails';
-import { SEND_DEFAULT } from '../../../../constants/constant';
 import type { EmailLike } from '../../../../utils/emailThreading';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -219,7 +219,7 @@ const EmailViewer = ({
       body_html: `<p>${bodyText.replace(/\n\n/g, '</p><p>')}</p>`,
       attachments: [],
       in_line_attachments: [],
-      folder_path: SEND_DEFAULT || 'Sent',
+      folder_path: getSentFolderPath(folderDetails),
       headers: {},
       priority: 'normal',
       read_receipt: false,
@@ -310,13 +310,8 @@ const EmailViewer = ({
   }, [email]);
 
   // 2. Resolve Sent and Inbox folder names from IMAP flags — handles Gmail-style
-  //    folders like [Gmail]/Sent Mail without any hardcoded name checks.
-  const sentFolderName = useMemo(() => {
-    if (!Array.isArray(folderDetails)) return 'Sent';
-    const sentFolders = folderDetails.filter((f) => f.flags?.includes('Sent'));
-    const exactSent = sentFolders.find((f) => f.folder_name === 'Sent');
-    return exactSent?.folder_name || sentFolders[0]?.folder_name || 'Sent';
-  }, [folderDetails]);
+  //    folders like [Gmail]/Sent Mail, several \Sent folders and INBOX/ namespaces.
+  const sentFolderName = useMemo(() => getSentFolderPath(folderDetails), [folderDetails]);
 
   const inboxFolderName = useMemo(() => {
     if (!Array.isArray(folderDetails)) return 'INBOX';

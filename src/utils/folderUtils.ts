@@ -116,3 +116,75 @@ export const getEmptiableFolderKind = (
   if (SPAM_FOLDER_NAMES.has(name)) return 'spam';
   return null;
 };
+
+export type SpecialFolderKind = 'sent' | 'drafts' | 'trash' | 'spam';
+
+interface SpecialFolderCandidate {
+  folder_name: string;
+  flags?: string[];
+  delimiter?: string | null;
+}
+
+// Server special-use flags (returned without the backslash) and conventional
+// names, most preferred first
+const SPECIAL_FOLDERS: Record<SpecialFolderKind, { flags: string[]; names: string[] }> = {
+  sent: { flags: ['sent'], names: ['sent', 'sent items', 'sent mail', 'sent messages'] },
+  drafts: { flags: ['drafts'], names: ['drafts', 'draft'] },
+  trash: {
+    flags: ['trash'],
+    names: ['trash', 'deleted items', 'deleted messages', 'deleted', 'bin'],
+  },
+  spam: {
+    flags: ['junk', 'spam'],
+    names: ['junk', 'spam', 'junk e-mail', 'junk email', 'bulk mail'],
+  },
+};
+
+/**
+ * Folder path parts without a leading "INBOX" namespace (e.g. "INBOX/Sent" →
+ * ["Sent"]).
+ */
+const folderPathParts = (folder: SpecialFolderCandidate): string[] => {
+  const delimiter = folder.delimiter;
+  let parts = delimiter ? folder.folder_name.split(delimiter) : [folder.folder_name];
+  if (parts.length > 1 && parts[0].toUpperCase() === 'INBOX') parts = parts.slice(1);
+  return parts;
+};
+
+/**
+ * Picks the folder that plays a special role (Sent, Drafts, Trash, Spam).
+ *
+ * Servers often flag more than one folder — Dovecot's default config marks both
+ * "Sent" and "Sent Messages" as \Sent — and some keep every folder under an
+ * "INBOX/" namespace ("INBOX/Sent"), so a plain `name === 'Sent'` check fails.
+ * Among flagged folders the conventional name wins, compared without the INBOX
+ * prefix; without flags, a top-level (or INBOX child) folder is matched by
+ * name.
+ */
+export const resolveSpecialFolder = <T extends SpecialFolderCandidate>(
+  folders: T[] | undefined | null,
+  kind: SpecialFolderKind
+): T | undefined => {
+  if (!Array.isArray(folders) || folders.length === 0) return undefined;
+  const { flags, names } = SPECIAL_FOLDERS[kind];
+
+  const nameRank = (folder: T) => {
+    const parts = folderPathParts(folder);
+    const index = names.indexOf(parts[parts.length - 1].trim().toLowerCase());
+    return index === -1 ? names.length : index;
+  };
+  const depth = (folder: T) => folderPathParts(folder).length;
+  const hasFlag = (folder: T) =>
+    (folder.flags ?? []).some((flag) => flags.includes(flag.replace(/^\\/, '').toLowerCase()));
+
+  const flagged = folders.filter(hasFlag);
+  const candidates = flagged.length
+    ? flagged
+    : folders.filter((folder) => depth(folder) === 1 && nameRank(folder) < names.length);
+
+  return [...candidates].sort((a, b) => nameRank(a) - nameRank(b) || depth(a) - depth(b))[0];
+};
+
+/** Path of the Sent folder (where sent copies are saved), 'Sent' when unknown. */
+export const getSentFolderPath = (folders: SpecialFolderCandidate[] | undefined | null): string =>
+  resolveSpecialFolder(folders, 'sent')?.folder_name || 'Sent';

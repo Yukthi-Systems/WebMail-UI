@@ -44,7 +44,7 @@ import { folderDetailsAtom, folderQuotaAtom } from '../../../state/folders';
 import StorageQuota from '../../common/StorageQuota';
 import { userSettingsAtom } from '../../../state/settings';
 import ComposeButton, { type ComposeButtonStyle } from './ComposeButton';
-import { sortFoldersAscending } from '../../../utils/folderUtils';
+import { resolveSpecialFolder, sortFoldersAscending } from '../../../utils/folderUtils';
 
 interface FoldersProps {
   onFolderClick?: () => void;
@@ -249,23 +249,13 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
           return true;
         };
 
-        const resolveFolderWithFlag = (flag: string, preferredName: string) => {
-          const withFlag = folders.filter((f) => f.flags?.includes(flag));
-          if (withFlag.length === 1) return withFlag[0];
-          if (withFlag.length > 1) {
-            return withFlag.find((f) => f.folder_name === preferredName) || withFlag[0];
-          }
-          return folders.find((f) => f.folder_name === preferredName);
-        };
-
+        // Handles servers that flag several folders (e.g. Sent + Sent Messages)
+        // and servers that keep every folder under "INBOX/"
         const inboxFolder = folders.find((f) => f.folder_name === 'INBOX');
-        const sentFolder = resolveFolderWithFlag('Sent', 'Sent');
-        const draftsFolder = resolveFolderWithFlag('Drafts', 'Drafts');
-        const spamFolder =
-          resolveFolderWithFlag('Junk', 'spam') ||
-          resolveFolderWithFlag('Spam', 'Spam') ||
-          folders.find((f) => f.folder_name.toLowerCase() === 'spam');
-        const trashFolder = resolveFolderWithFlag('Trash', 'Trash');
+        const sentFolder = resolveSpecialFolder(folders, 'sent');
+        const draftsFolder = resolveSpecialFolder(folders, 'drafts');
+        const spamFolder = resolveSpecialFolder(folders, 'spam');
+        const trashFolder = resolveSpecialFolder(folders, 'trash');
 
         const updatedDefaults = {
           inbox: {

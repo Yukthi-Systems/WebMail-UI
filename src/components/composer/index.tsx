@@ -52,7 +52,7 @@ import { userDetailsAtom } from '../../state/userDetails';
 import { folderQuotaAtom } from '../../state/folders';
 import { FaExclamationTriangle } from 'react-icons/fa';
 import CustomModal from './CustomModal';
-import { SEND_DEFAULT } from '../../constants/constant';
+import { useSpecialFolderPaths } from '../../hooks/useFolders';
 import { useIsMobile } from '../../hooks/use-mobile';
 import { getEditorDimensions } from '../../utils/dimensions';
 import { mightHaveForgottenAttachment as mightHaveForgottenAttachmentCheck } from '../../utils/attachmentReminder';
@@ -126,8 +126,10 @@ const Composer = () => {
   const [messageId, setMessageId] = useState<string>('');
   const [, setSentMessageId] = useState<string>('');
   const [undoTime, setUndoTime] = useState<number>(5000);
-  const [saveDraft, setSaveDraft] = useState<string>('Drafts');
-  const [folder, setFolder] = useState<string>('Sent');
+  // Resolved per mailbox (e.g. "INBOX/Sent" on servers that nest folders under INBOX)
+  const specialFolders = useSpecialFolderPaths();
+  const [saveDraft, setSaveDraft] = useState<string>(specialFolders.drafts);
+  const [folder, setFolder] = useState<string>(specialFolders.sent);
   const isMobile = useIsMobile();
   // Refs for recipient fields to access flush method
   const toRef = useRef<RecipientFieldHandle>(null);
@@ -138,10 +140,10 @@ const Composer = () => {
     if (userSettings?.email) {
       const time = Number(userSettings?.email?.undo_send || 5) * 1000;
       setUndoTime(time);
-      setSaveDraft('Drafts');
-      setFolder(SEND_DEFAULT || 'Sent');
+      setSaveDraft(specialFolders.drafts);
+      setFolder(specialFolders.sent);
     }
-  }, [userSettings]);
+  }, [userSettings, specialFolders.drafts, specialFolders.sent]);
 
   // Add state for empty message confirmation modal
   const [showEmptyMessageConfirm, setShowEmptyMessageConfirm] = useState(false);

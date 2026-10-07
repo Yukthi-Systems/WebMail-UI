@@ -74,7 +74,7 @@ import { parseEmail } from '../../../utils/emailPerser';
 import { escapeHtml } from '../../../utils/emailPrint';
 import { sanitizeEmailHtml } from '../../../utils/sanitizeHTMLContent';
 import { userDetailsAtom } from '../../../state/userDetails';
-import { SEND_DEFAULT } from '../../../constants/constant';
+import { useSpecialFolderPaths } from '../../../hooks/useFolders';
 import { getMessageId, normalizeFieldNames } from '../../../utils/emailUtils';
 import { getEditorDimensions } from '../../../utils/dimensions';
 import { parseEmailDate } from '../../../utils/dateFormat';
@@ -162,9 +162,11 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   });
   const [priority, setPriority] = useState<EmailPriority>('normal');
   const [readReceipt, setReadReceipt] = useState(false);
-  const [folder_path, setFolderPath] = useState<string>(folder || SEND_DEFAULT || 'Sent');
-  const [sendPath, setSendPath] = useState<string>('Sent');
-  const [saveDraft, setSaveDraft] = useState<string>('Drafts');
+  // Resolved per mailbox (e.g. "INBOX/Sent" on servers that nest folders under INBOX)
+  const specialFolders = useSpecialFolderPaths();
+  const [folder_path, setFolderPath] = useState<string>(folder || specialFolders.sent);
+  const [sendPath, setSendPath] = useState<string>(specialFolders.sent);
+  const [saveDraft, setSaveDraft] = useState<string>(specialFolders.drafts);
 
   // Refs for recipient fields to access flush method
   const toRef = useRef<RecipientFieldHandle>(null);
@@ -196,18 +198,18 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     if (userSettings?.email) {
       const time = Number(userSettings?.email?.undo_send || 5) * 1000;
       setUndoTime(time);
-      setSaveDraft('Drafts');
-      setSendPath(SEND_DEFAULT || 'Sent');
+      setSaveDraft(specialFolders.drafts);
+      setSendPath(specialFolders.sent);
     }
-  }, [userSettings]);
+  }, [userSettings, specialFolders.drafts, specialFolders.sent]);
 
   useEffect(() => {
     if (folder) {
       setFolderPath(folder);
     } else if (userSettings?.email) {
-      setFolderPath(SEND_DEFAULT || 'Sent');
+      setFolderPath(specialFolders.sent);
     }
-  }, [folder, userSettings]);
+  }, [folder, userSettings, specialFolders.sent]);
 
   const isQuotaExceeded = useMemo(() => {
     return folderQuota?.used_percent !== undefined && folderQuota.used_percent > 98;
