@@ -37,6 +37,11 @@ import { NotFound } from './components/common/NotFound.tsx';
 import { MinimizedModalsProvider } from './components/common/MinimizedModalContext.tsx';
 import { getCompanySlugFromPath } from './utils/routeUtils.ts';
 
+
+(window as Window & { recaptchaOptions?: { useRecaptchaNet?: boolean } }).recaptchaOptions = {
+  useRecaptchaNet: true,
+};
+
 // beforeinstallprompt isn't in the standard DOM lib yet.
 interface BeforeInstallPromptEvent extends Event {
   readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
