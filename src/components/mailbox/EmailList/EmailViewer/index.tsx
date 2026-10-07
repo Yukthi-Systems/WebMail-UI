@@ -28,7 +28,10 @@ import { flagAtom } from '../../../../state/flags';
 import { useAtom, useAtomValue } from 'jotai';
 import { useUserTimezone } from '../../../../hooks/useTimezone';
 import { folderDetailsAtom } from '../../../../state/folders';
-import { useUpdateFolderUnreadCount } from '../../../../hooks/useFolders';
+import {
+  useSpecialFolderPaths,
+  useUpdateFolderUnreadCount,
+} from '../../../../hooks/useFolders';
 import { getSentFolderPath } from '../../../../utils/folderUtils';
 import { useEmailCacheUpdater } from '../../../../hooks/useEmailCacheUpdater';
 import { userSettingsAtom } from '../../../../state/settings';
@@ -123,6 +126,8 @@ const EmailViewer = ({
   const { patchEmailFlags } = useEmailCacheUpdater(folderPath || 'INBOX');
 
   const userSettings = useAtomValue(userSettingsAtom);
+  // Resolved Sent/Drafts/Trash/Spam (e.g. "INBOX/Trash" on servers nesting folders under INBOX)
+  const specialFolders = useSpecialFolderPaths();
   const [undoTime, setUndoTime] = useState<number>(5000);
   const { formatUserDateNice } = useUserTimezone();
   const { mutate: deleteMutate } = useDeleteMail();
@@ -283,10 +288,10 @@ const EmailViewer = ({
   // custom folders, etc.
   const isFolderThread = useMemo(() => {
     const folderThreadView = userSettings?.folders || {};
-    const folderKey = folder?.toLowerCase() || '';
+    const folderKey = specialFolders.settingsKey(folder);
     const value = folderThreadView?.[folderKey]?.list_thread_view ?? 'threads';
     return value === 'threads';
-  }, [folder, userSettings]);
+  }, [folder, userSettings, specialFolders]);
 
   // ------------------------------------------------------------------
   // FLAWLESS THREAD LOGIC
@@ -380,7 +385,7 @@ const EmailViewer = ({
     const emailToDelete = listofThreadEmails.find((e) => Number(e.id) === emailIdNum);
     const actualFolderPath = emailToDelete?.folderPath || folderPath || folder || 'INBOX';
 
-    if (actualFolderPath.toLowerCase() === 'trash') {
+    if (specialFolders.isFolder(actualFolderPath, 'trash')) {
       // Permanent delete - optimistically remove immediately
       optimisticallyRemove(emailIdNum);
 
@@ -410,8 +415,10 @@ const EmailViewer = ({
         }
       );
     } else {
-      // Move to Trash - with undo support
+      // Move to Trash - with undo support. The move is delayed by undoTime, so
+      // Undo normally just cancels it (the email never left its folder).
       let undoTimeoutId: NodeJS.Timeout | null = null;
+      let hasMoved = false;
 
       // Optimistically remove from UI
       optimisticallyRemove(emailIdNum);
@@ -421,32 +428,18 @@ const EmailViewer = ({
         undo: {
           label: 'Undo',
           onClick: () => {
-            // Cancel the delayed move
+            // Too late: the email is already in Trash under a new id there, so it
+            // can't be moved back by this id (that would move a different email)
+            if (hasMoved) {
+              toast.error({ description: 'The email was already moved to Trash.' });
+              invalidateThread();
+              return;
+            }
+
+            // Cancel the delayed move and restore the UI
             if (undoTimeoutId) clearTimeout(undoTimeoutId);
-
-            // Restore to UI immediately
             if (emailToDelete) optimisticallyRestore(emailToDelete);
-
-            // Actually move it back
-            moveMutate(
-              {
-                path: 'Trash',
-                sourceFolder: 'Trash',
-                destFolder: actualFolderPath,
-                body: [emailIdNum],
-              },
-              {
-                onSuccess: () => {
-                  toast.success({ description: 'Undo successful' });
-                  invalidateThread();
-                },
-                onError: (error) => {
-                  // Remove again if undo failed
-                  optimisticallyRemove(emailIdNum);
-                  toast.error({ description: error?.message || 'Failed to undo.' });
-                },
-              }
-            );
+            toast.success({ description: 'Undo successful' });
           },
           duration: undoTime,
         },
@@ -454,11 +447,12 @@ const EmailViewer = ({
 
       // Delay the actual move to allow undo
       undoTimeoutId = setTimeout(() => {
+        hasMoved = true;
         moveMutate(
           {
             path: actualFolderPath,
             sourceFolder: actualFolderPath,
-            destFolder: 'Trash',
+            destFolder: specialFolders.trash,
             body: [emailIdNum],
           },
           {

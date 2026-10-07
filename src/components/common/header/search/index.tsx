@@ -21,6 +21,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useParams } from '@tanstack/react-router';
 import { searchStateAtom } from '../../../../state/search';
 import { useSearchEmails } from '../../../../hooks/useSearch';
+import { useSpecialFolderPaths } from '../../../../hooks/useFolders';
 import { userSettingsAtom } from '../../../../state/settings';
 import type { SearchRequest } from '../../../../api/search';
 import FilterBadgeComponent from './FilterBadge';
@@ -76,8 +77,10 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
   const [searchRequestPayload, setSearchRequestPayload] = useState<SearchRequest | null>(null);
   const [resetKey, setResetKey] = useState(0);
 
-  const isSent = currentFolder?.toLowerCase() === 'sent';
-  const isDrafts = currentFolder?.toLowerCase() === 'drafts';
+  // Resolved folders (e.g. "INBOX/Sent"), plus the plain names as before
+  const specialFolders = useSpecialFolderPaths();
+  const isSent = specialFolders.isFolder(currentFolder, 'sent');
+  const isDrafts = specialFolders.isFolder(currentFolder, 'drafts');
   const isSentOrDrafts = isSent || isDrafts;
   const [isEmailFocused, setIsEmailFocused] = useState(false);
 

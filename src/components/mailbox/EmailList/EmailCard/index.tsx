@@ -129,8 +129,8 @@ const EmailCard = ({
   const hoverAttachments = hoverEmailView?.attachments?.filter((a) => !a.is_inline);
 
   // The resolved Sent folder (e.g. "INBOX/Sent"), not just a folder named "Sent"
-  const { sent: sentFolderPath } = useSpecialFolderPaths();
-  const isSentFolder = folder === sentFolderPath || folder === 'Sent';
+  const specialFolders = useSpecialFolderPaths();
+  const isSentFolder = specialFolders.isFolder(folder, 'sent');
   const senderEmailString = isSentFolder ? email.To : email.From;
   const { name: senderName, email: senderEmail } = parseEmail(senderEmailString);
 
@@ -163,8 +163,10 @@ const EmailCard = ({
   // Thread indicators — only shown when threading is active in settings
   const threadedView = userSettings?.email?.mail_thead_view || 'all threads';
   const folderThreadView = userSettings?.folders;
-  const isFolderThread = isFolderThreadEnabled(folderThreadView, folder, folder);
-  const threadingActive = shouldApplyThreading(threadedView, isFolderThread, folder);
+  // Folder settings are stored by role ('sent'), not path ("INBOX/Sent")
+  const folderSettingsKey = specialFolders.settingsKey(folder);
+  const isFolderThread = isFolderThreadEnabled(folderThreadView, folderSettingsKey, folderSettingsKey);
+  const threadingActive = shouldApplyThreading(threadedView, isFolderThread, folderSettingsKey);
 
   const emailWithThreadFields = email as unknown as EmailLike;
   const isThread = !!emailWithThreadFields['Thread-View'];
@@ -650,7 +652,7 @@ const EmailCard = ({
               <button
                 onClick={handleDeleteClick}
                 className="p-1.5 bg-[var(--gray-1)] hover:bg-[var(--red-3)] border border-[var(--gray-5)] rounded-md shadow-sm transition-all duration-150 hover:scale-105 group/delete"
-                title={folder === 'Trash' ? 'Delete Permanently' : 'Move to Trash'}
+                title={specialFolders.isFolder(folder, 'trash') ? 'Delete Permanently' : 'Move to Trash'}
               >
                 <FaTrash className="w-3 h-3 text-[var(--gray-11)] group-hover/delete:text-[var(--red-11)]" />
               </button>
@@ -741,7 +743,7 @@ const EmailCard = ({
                           <button
                             onClick={handleDeleteClick}
                             className="p-1 hover:bg-[var(--red-3)] rounded transition-colors group/mobile-delete"
-                            title={folder === 'Trash' ? 'Delete Permanently' : 'Move to Trash'}
+                            title={specialFolders.isFolder(folder, 'trash') ? 'Delete Permanently' : 'Move to Trash'}
                           >
                             <FaTrash className="w-3 h-3 text-[var(--gray-10)] group-hover/mobile-delete:text-[var(--red-11)]" />
                           </button>
@@ -980,7 +982,7 @@ const EmailCard = ({
 
         <ContextMenu.Item color="red" onSelect={() => onDelete?.(email.id.toString())}>
           <FaTrash size={12} />
-          {folder === 'Trash' ? 'Delete Permanently' : 'Move to Trash'}
+          {specialFolders.isFolder(folder, 'trash') ? 'Delete Permanently' : 'Move to Trash'}
         </ContextMenu.Item>
       </ContextMenu.Content>
     </ContextMenu.Root>

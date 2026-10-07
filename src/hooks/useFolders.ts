@@ -23,7 +23,11 @@ import { type EmailFolders, defaultFolders } from '../api/mailbox';
 import { useEffect, useMemo, useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { folderDetailsAtom, type FolderDetail, type FolderQuota } from '../state/folders';
-import { getSentFolderPath, resolveSpecialFolder } from '../utils/folderUtils';
+import {
+  getSentFolderPath,
+  resolveSpecialFolder,
+  type SpecialFolderKind,
+} from '../utils/folderUtils';
 
 const FOLDER_RETRY_DELAY = () => 500;
 
@@ -190,19 +194,42 @@ export function useFolderQuota(folderPath: string = 'User quota') {
   });
 }
 
+// Plain names that always counted as these folders (kept so standard servers
+// behave exactly as before, even while the folder list is still loading)
+const LEGACY_SPECIAL_NAMES: Record<SpecialFolderKind, string[]> = {
+  sent: ['sent'],
+  drafts: ['drafts', 'draft'],
+  trash: ['trash'],
+  spam: ['spam', 'junk'],
+};
+
 /**
  * Paths of the special folders for this mailbox (e.g. "INBOX/Sent" on servers
- * that keep every folder under INBOX), with the usual names as fallback.
+ * that keep every folder under INBOX), with the usual names as fallback, plus:
+ * - isFolder(folder, kind): is this folder the Sent / Drafts / Trash / Spam one
+ * - settingsKey(folder): key of the folder in userSettings.folders ('inbox',
+ *   'sent', ...), which are stored by role, not by path
  */
 export function useSpecialFolderPaths() {
   const folders = useAtomValue(folderDetailsAtom);
-  return useMemo(
-    () => ({
+  return useMemo(() => {
+    const paths: Record<SpecialFolderKind, string> = {
       sent: getSentFolderPath(folders),
       drafts: resolveSpecialFolder(folders, 'drafts')?.folder_name || 'Drafts',
       trash: resolveSpecialFolder(folders, 'trash')?.folder_name || 'Trash',
       spam: resolveSpecialFolder(folders, 'spam')?.folder_name || 'Spam',
-    }),
-    [folders]
-  );
+    };
+
+    const isFolder = (folder: string | undefined | null, kind: SpecialFolderKind) =>
+      !!folder &&
+      (folder === paths[kind] || LEGACY_SPECIAL_NAMES[kind].includes(folder.toLowerCase()));
+
+    const settingsKey = (folder: string | undefined | null): string => {
+      if (!folder || folder.toUpperCase() === 'INBOX') return 'inbox';
+      const kind = (Object.keys(paths) as SpecialFolderKind[]).find((k) => isFolder(folder, k));
+      return kind ?? folder.toLowerCase();
+    };
+
+    return { ...paths, isFolder, settingsKey };
+  }, [folders]);
 }

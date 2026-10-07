@@ -29,6 +29,7 @@ import { FiAlertCircle } from 'react-icons/fi';
 import type { ParsedEmailView } from '../../../../hooks/useEmailView';
 import { parseMultipleEmails, normalizeFieldNames } from '../../../../utils/emailUtils';
 import type { EmailLike } from '../../../../utils/emailThreading';
+import { useSpecialFolderPaths } from '../../../../hooks/useFolders';
 
 interface SingleEmailViewProps {
   isLoading: boolean;
@@ -72,6 +73,8 @@ export const SingleEmailView = ({
   renderHeaderInfo,
 }: SingleEmailViewProps) => {
   const normalizedHeaders = normalizeFieldNames(headers);
+  // Resolved Drafts folder (e.g. "INBOX/Drafts"), not just one named "Drafts"
+  const isDraftsFolder = useSpecialFolderPaths().isFolder(folder, 'drafts');
 
   const toRecipients = parseMultipleEmails((normalizedHeaders.to as string) || '');
   const ccRecipients = parseMultipleEmails((normalizedHeaders.cc as string) || '');
@@ -79,7 +82,7 @@ export const SingleEmailView = ({
   const { name: senderName, email: senderEmailParsed } = parseEmail(senderEmail);
 
   const handleEditDraft = () => {
-    if (onDraftSend && folder === 'Drafts') {
+    if (onDraftSend && isDraftsFolder) {
       onDraftSend({
         id: messageId,
         Subject: subject,
@@ -93,7 +96,7 @@ export const SingleEmailView = ({
 
   return (
     <div className="h-full overflow-y-auto bg-[var(--color-surface)] relative text-[var(--gray-12)]">
-      {folder === 'Drafts' && (
+      {isDraftsFolder && (
         <div className="absolute top-3 right-16 z-10">
           <Button
             title="Edit draft"

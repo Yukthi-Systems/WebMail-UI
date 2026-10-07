@@ -46,7 +46,7 @@ import { RiSpam2Line } from 'react-icons/ri';
 import FolderDialog from './MoveEmail';
 import { useCopyMail, useMoveMail } from '../../../hooks/useEmails';
 import { useParams } from '@tanstack/react-router';
-import { useUpdateAnyFolderUnreadCount } from '../../../hooks/useFolders';
+import { useSpecialFolderPaths, useUpdateAnyFolderUnreadCount } from '../../../hooks/useFolders';
 import type { Email } from '../../../api/mailbox';
 import { FaEllipsisH, FaExternalLinkAlt } from 'react-icons/fa';
 import DropdownWrapper, { type DropdownItem } from '../../common/DropdownWrapper';
@@ -145,6 +145,8 @@ const EmailToolbar = ({
 }: EmailToolbarProps) => {
   const { folder: folderNameParam } = useParams({ strict: false });
   const folderName = folderNameParam ?? '';
+  // Resolved Spam folder (e.g. "INBOX/spam"), plus the plain Junk/Spam names
+  const isSpamFolder = useSpecialFolderPaths().isFolder(folderName, 'spam');
   const toast = useToast(); // Add toast
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<Folder | string | undefined | null>(
@@ -353,7 +355,7 @@ const EmailToolbar = ({
 
     {
       key: 'spam',
-      label: folderName === 'Junk' || folderName === 'Spam' ? 'Mark as Not Spam' : 'Mark as Spam',
+      label: isSpamFolder ? 'Mark as Not Spam' : 'Mark as Spam',
       icon: RiSpam2Line,
       onSelect: () => {},
       disabled: !hasSelection,
@@ -443,7 +445,7 @@ const EmailToolbar = ({
       : []),
     {
       key: 'spam',
-      label: folderName === 'Junk' || folderName === 'Spam' ? 'Not Spam' : 'Spam',
+      label: isSpamFolder ? 'Not Spam' : 'Spam',
       icon: RiSpam2Line,
       onSelect: () => {},
     },
@@ -680,12 +682,12 @@ const EmailToolbar = ({
                               size="2"
                               onClick={() => {}}
                               title={
-                                folderName === 'Junk' || folderName === 'Spam'
+                                isSpamFolder
                                   ? 'Mark as Not Spam'
                                   : 'Mark as Spam'
                               }
                             >
-                              {folderName === 'Junk' || folderName === 'Spam' ? (
+                              {isSpamFolder ? (
                                 'Not Spam'
                               ) : (
                                 <RiSpam2Line size={16} />
@@ -849,12 +851,12 @@ const EmailToolbar = ({
                       size="2"
                       onClick={() => {}}
                       title={
-                        folderName === 'Junk' || folderName === 'Spam'
+                        isSpamFolder
                           ? 'Mark as Not Spam'
                           : 'Mark as Spam'
                       }
                     >
-                      {folderName === 'Junk' || folderName === 'Spam' ? (
+                      {isSpamFolder ? (
                         'Not Spam'
                       ) : (
                         <RiSpam2Line size={16} />
@@ -1101,12 +1103,12 @@ const EmailToolbar = ({
                       size="2"
                       onClick={() => {}}
                       title={
-                        folderName === 'Junk' || folderName === 'Spam'
+                        isSpamFolder
                           ? 'Mark as Not Spam'
                           : 'Mark as Spam'
                       }
                     >
-                      {folderName === 'Junk' || folderName === 'Spam' ? (
+                      {isSpamFolder ? (
                         'Not Spam'
                       ) : (
                         <RiSpam2Line size={16} />

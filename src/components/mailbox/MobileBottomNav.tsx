@@ -21,6 +21,7 @@ import { composerOpenAtom } from '../../state/composer';
 import { useNavigate, useRouterState, useParams } from '@tanstack/react-router';
 import { userSettingsAtom } from '../../state/settings';
 import { folderDetailsAtom } from '../../state/folders';
+import { useSpecialFolderPaths } from '../../hooks/useFolders';
 import { useEffect, useState } from 'react';
 
 interface MobileBottomNavProps {
@@ -57,10 +58,12 @@ const MobileBottomNav = ({ onFolderClick }: MobileBottomNavProps) => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [lastScrollY]);
 
-  const { slug } = useParams({ strict: false });
-  // Get current folder from URL
+  const { slug, folder: folderParam } = useParams({ strict: false });
+  // Get current folder from the route (decoded, e.g. "INBOX/Sent"), falling back to the URL
   const currentPath = routerState.location.pathname;
-  const currentFolder = currentPath.split('/').pop() || 'INBOX';
+  const currentFolder = folderParam || currentPath.split('/').pop() || 'INBOX';
+  // Resolved Sent/Drafts/Trash (e.g. "INBOX/Sent" on servers nesting folders under INBOX)
+  const specialFolders = useSpecialFolderPaths();
 
   // Get unread counts
   const getUnreadCount = (folderName: string) => {
@@ -70,9 +73,9 @@ const MobileBottomNav = ({ onFolderClick }: MobileBottomNavProps) => {
   };
 
   const inboxCount = getUnreadCount('INBOX');
-  const sentCount = getUnreadCount('Sent');
-  const draftsCount = getUnreadCount('Draft');
-  const trashCount = getUnreadCount('Trash');
+  const sentCount = getUnreadCount(specialFolders.sent);
+  const draftsCount = getUnreadCount(specialFolders.drafts);
+  const trashCount = getUnreadCount(specialFolders.trash);
 
   const handleNavClick = (folderPath: string) => {
     if (slug) {
@@ -143,11 +146,11 @@ const MobileBottomNav = ({ onFolderClick }: MobileBottomNavProps) => {
           {/* Sent */}
           {showSent && (
             <button
-              onClick={() => handleNavClick('Sent')}
+              onClick={() => handleNavClick(specialFolders.sent)}
               className={`
                   flex flex-col items-center gap-1 min-w-[56px] py-2 px-3 rounded-2xl transition-all duration-200 relative
                   ${
-                    isActive('Sent')
+                    isActive(specialFolders.sent)
                       ? 'text-[var(--accent-11)] bg-[var(--accent-3)] scale-105'
                       : 'text-[var(--gray-11)]'
                   }
@@ -197,11 +200,11 @@ const MobileBottomNav = ({ onFolderClick }: MobileBottomNavProps) => {
           {/* Drafts */}
           {showDrafts && (
             <button
-              onClick={() => handleNavClick('Draft')}
+              onClick={() => handleNavClick(specialFolders.drafts)}
               className={`
                   flex flex-col items-center gap-1 min-w-[56px] py-2 px-3 rounded-2xl transition-all duration-200 relative
                   ${
-                    isActive('Draft')
+                    isActive(specialFolders.drafts)
                       ? 'text-[var(--accent-11)] bg-[var(--accent-3)] scale-105'
                       : 'text-[var(--gray-11)]'
                   }
@@ -224,11 +227,11 @@ const MobileBottomNav = ({ onFolderClick }: MobileBottomNavProps) => {
           {/* Trash */}
           {showTrash && (
             <button
-              onClick={() => handleNavClick('Trash')}
+              onClick={() => handleNavClick(specialFolders.trash)}
               className={`
                   flex flex-col items-center gap-1 min-w-[56px] py-2 px-3 rounded-2xl transition-all duration-200 relative
                   ${
-                    isActive('Trash')
+                    isActive(specialFolders.trash)
                       ? 'text-[var(--accent-11)] bg-[var(--accent-3)] scale-105'
                       : 'text-[var(--gray-11)]'
                   }

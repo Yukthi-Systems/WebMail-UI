@@ -164,7 +164,7 @@ const ThreadEmailCard = ({
   );
 
   const { patchEmailFlags } = useEmailCacheUpdater(folderPath);
-  const { sent: sentFolderPath } = useSpecialFolderPaths();
+  const specialFolders = useSpecialFolderPaths();
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folderPath);
 
   const lastSyncedEmailId = useRef<string>('');
@@ -379,12 +379,11 @@ const ThreadEmailCard = ({
   const isFlagged = threadEmail?.FLAGS?.includes('\\Flagged');
   const readStatus = threadEmail?.FLAGS?.includes('\\Seen');
 
+  // Resolved folders (e.g. "INBOX/Sent"), plus the plain names as before
   const isSent =
-    folderPath === sentFolderPath ||
-    foundedIn === sentFolderPath ||
-    folderPath.toLowerCase() === 'sent' ||
-    foundedIn?.toLowerCase() === 'sent';
-  const isTrash = folderPath.toLowerCase() === 'trash' || foundedIn?.toLowerCase() === 'trash';
+    specialFolders.isFolder(folderPath, 'sent') || specialFolders.isFolder(foundedIn, 'sent');
+  const isTrash =
+    specialFolders.isFolder(folderPath, 'trash') || specialFolders.isFolder(foundedIn, 'trash');
 
   // Local handlers that use this email's actual folderPath — prevents the parent's
   // handler from using the URL folder param (e.g. INBOX) for Sent emails in a thread.

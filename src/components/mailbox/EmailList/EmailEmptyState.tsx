@@ -26,6 +26,7 @@ import {
   FaRedo, // Import for retry button
 } from 'react-icons/fa';
 import type { EmailFilterBy } from '../../../state/emailListView';
+import { useSpecialFolderPaths } from '../../../hooks/useFolders';
 
 interface EmailEmptyStateProps {
   folder?: string;
@@ -40,6 +41,7 @@ const EmailEmptyState = ({
   onRetry,
   filter = 'all',
 }: EmailEmptyStateProps) => {
+  const specialFolders = useSpecialFolderPaths();
   const getEmptyStateContent = () => {
     // 1. Priority Check: If there is an error, return error content immediately
     if (error) {
@@ -63,7 +65,8 @@ const EmailEmptyState = ({
       };
     }
 
-    const folderLower = folder.toLowerCase();
+    // Role key ('sent', 'trash', ...) so "INBOX/Sent" gets the Sent message
+    const folderLower = specialFolders.settingsKey(folder);
 
     if (folderLower === 'inbox') {
       return {

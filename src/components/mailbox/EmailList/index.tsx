@@ -74,6 +74,7 @@ import EmptyFolderBanner from './EmptyFolderBanner';
 import {
   useUpdateFolderUnreadCount,
   useUpdateAnyFolderUnreadCount,
+  useSpecialFolderPaths,
   useFolderUidValidity,
 } from '../../../hooks/useFolders';
 import { useEmailCacheUpdater } from '../../../hooks/useEmailCacheUpdater';
@@ -342,6 +343,9 @@ const EmailList = ({
   const setFolderDetails = useSetAtom(folderDetailsAtom);
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folder || 'INBOX');
   const updateAnyFolderUnreadCount = useUpdateAnyFolderUnreadCount();
+  // Resolved Sent/Drafts/Trash/Spam (e.g. "INBOX/Trash" on servers nesting folders under INBOX)
+  const specialFolders = useSpecialFolderPaths();
+  const isTrashFolder = specialFolders.isFolder(folder, 'trash');
   const { patchEmailFlags } = useEmailCacheUpdater(folder || 'INBOX');
   const { refetch: refetchUidValidity, data: liveUidValidity } = useFolderUidValidity(
     folder || 'INBOX'
@@ -599,7 +603,7 @@ const EmailList = ({
 
   const isFolderThread = () => {
     const folders = { ...folderThreadView };
-    const folderKey = folder?.toLocaleLowerCase() || 'inbox';
+    const folderKey = specialFolders.settingsKey(folder);
     const value = folders?.[folderKey]?.list_thread_view ?? 'threads';
     return value == 'list' ? true : false;
   };
@@ -642,8 +646,7 @@ const EmailList = ({
     const threadedEmails = applyThreading(simpleEmailArray);
     const listOfEmail =
       threadedView === 'never' ||
-      (isFolderThread() &&
-        (folder?.toLocaleLowerCase() == 'inbox' || folder?.toLocaleLowerCase() == 'sent'))
+      (isFolderThread() && ['inbox', 'sent'].includes(specialFolders.settingsKey(folder)))
         ? getListOfEmail(threadedEmails)
         : getFilteredThreadedList(threadedEmails);
     return listOfEmail || simpleEmailArray;
@@ -904,7 +907,7 @@ const EmailList = ({
         {
           path: folder || 'INBOX',
           sourceFolder: folder || 'INBOX',
-          destFolder: 'Trash',
+          destFolder: specialFolders.trash,
           body: emailsToActOn,
         },
         {
@@ -960,13 +963,13 @@ const EmailList = ({
   const handleDelete = () => {
     const emailsToActOn = getEmailsToActOn();
 
-    if (isQuotaNearFull && folder !== 'Trash') {
+    if (isQuotaNearFull && !isTrashFolder) {
       setPermanentDeleteEmails(emailsToActOn);
       setIsPermanentDeleteDialogOpen(true);
       return;
     }
 
-    if (folder === 'Trash') {
+    if (isTrashFolder) {
       doPermanentDelete(emailsToActOn);
     } else {
       doMoveToTrash(emailsToActOn);
@@ -976,13 +979,13 @@ const EmailList = ({
   const handleSingleEmailDelete = (emailId: string) => {
     const emailIdNum = Number(emailId);
 
-    if (isQuotaNearFull && folder !== 'Trash') {
+    if (isQuotaNearFull && !isTrashFolder) {
       setPermanentDeleteEmails([emailIdNum]);
       setIsPermanentDeleteDialogOpen(true);
       return;
     }
 
-    if (folder === 'Trash') {
+    if (isTrashFolder) {
       doPermanentDelete([emailIdNum]);
     } else {
       doMoveToTrash([emailIdNum]);
