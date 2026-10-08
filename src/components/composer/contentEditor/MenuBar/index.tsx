@@ -28,9 +28,13 @@ import LinkMenu from './LinkMenu';
 import FontFamilySelect from './FontFamilySelect';
 import { userSettingsAtom } from '../../../../state/settings';
 
-type MenuBarProps = { editor: Editor | null };
+type MenuBarProps = {
+  editor: Editor | null;
+  /** Extra controls at the far right (e.g. the spelling & grammar check). */
+  trailing?: React.ReactNode;
+};
 
-const MenuBar = ({ editor }: MenuBarProps) => {
+const MenuBar = ({ editor, trailing }: MenuBarProps) => {
   const userSettings = useAtomValue(userSettingsAtom);
   const { show_insert_table_button = false } = userSettings?.compose ?? {};
 
@@ -57,6 +61,12 @@ const MenuBar = ({ editor }: MenuBarProps) => {
         {/* Advanced options live at the far right, separated visually */}
         <Separator orientation="vertical" className="hidden sm:block" />
         <AdvancedMenu editor={editor} />
+        {trailing && (
+          <>
+            <Separator orientation="vertical" className="hidden sm:block" />
+            {trailing}
+          </>
+        )}
       </Flex>
     </div>
   );
