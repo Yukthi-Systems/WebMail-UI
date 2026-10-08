@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { getInboxNamespacePrefix } from '../../../utils/folderUtils';
 import React, { useState, useEffect } from 'react';
 import { useFoldersFullPath } from '../../../hooks/useFolders';
 import {
@@ -90,11 +91,16 @@ const FolderManager: React.FC = () => {
       nodeMap.set(folder.folder_name, node);
     });
 
+    // Folders directly under a shared "INBOX/" namespace are shown at the top level
+    const namespacePrefix = getInboxNamespacePrefix(folders);
+
     folders.forEach((folder) => {
       const node = nodeMap.get(folder.folder_name)!;
       const parts = folder.folder_name.split(folder.delimiter);
+      const isNamespaceTopLevel =
+        !!namespacePrefix && folder.folder_name.startsWith(namespacePrefix) && parts.length === 2;
 
-      if (parts.length === 1) {
+      if (parts.length === 1 || isNamespaceTopLevel) {
         // Root level node
         rootNodes.push(node);
       } else {

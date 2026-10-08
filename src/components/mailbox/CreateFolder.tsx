@@ -16,9 +16,11 @@
  */
 
 import { Button, Dialog, Flex } from '@radix-ui/themes';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { FaXmark } from 'react-icons/fa6';
 import { createFolderOpenAtom } from '../../state/composer';
+import { folderDetailsAtom } from '../../state/folders';
+import { toTopLevelFolderPath } from '../../utils/folderUtils';
 import { Input } from '../ui/InputComponents';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -45,6 +47,7 @@ function CreateFolder() {
     },
   });
   const queryClient = useQueryClient();
+  const folderDetails = useAtomValue(folderDetailsAtom);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -54,7 +57,8 @@ function CreateFolder() {
   const onSubmit = (data: FormData) => {
     const loadingId = toast.loading({ description: 'Creating folder…' });
     mutate(
-      { path: data.folder_path },
+      // e.g. "INBOX/Reports" on servers that keep every folder under INBOX
+      { path: toTopLevelFolderPath(data.folder_path.trim(), folderDetails) },
       {
         onSuccess: () => {
           toast.dismiss(loadingId);

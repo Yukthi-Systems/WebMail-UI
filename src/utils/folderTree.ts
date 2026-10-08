@@ -16,6 +16,7 @@
  */
 
 // utils/folderTree.ts
+import { getInboxNamespacePrefix } from './folderUtils';
 export interface FolderNode {
   name: string;
   path: string;
@@ -38,6 +39,9 @@ interface RawFolder {
 export const buildFolderTree = (folders: RawFolder[]): FolderNode[] => {
   const root: FolderNode[] = [];
   const map = new Map<string, FolderNode>();
+  // Servers that keep every folder under "INBOX/": show those at the top level
+  // (like Roundcube) instead of nesting everything under Inbox. Paths stay full.
+  const namespacePrefix = getInboxNamespacePrefix(folders);
 
   folders.forEach((folder) => {
     const node: FolderNode = {
@@ -57,7 +61,13 @@ export const buildFolderTree = (folders: RawFolder[]): FolderNode[] => {
     const node = map.get(folder.folder_name)!;
     const lastDelimiterIndex = folder.folder_name.lastIndexOf(folder.delimiter || '.');
 
-    if (lastDelimiterIndex > -1) {
+    // Direct child of the INBOX namespace → top level
+    const isNamespaceTopLevel =
+      !!namespacePrefix &&
+      folder.folder_name.startsWith(namespacePrefix) &&
+      lastDelimiterIndex === namespacePrefix.length - 1;
+
+    if (lastDelimiterIndex > -1 && !isNamespaceTopLevel) {
       const parentPath = folder.folder_name.substring(0, lastDelimiterIndex);
       const parentNode = map.get(parentPath);
 
@@ -75,6 +85,12 @@ export const buildFolderTree = (folders: RawFolder[]): FolderNode[] => {
       root.push(node);
     }
   });
+
+  if (namespacePrefix) {
+    // INBOX's "HasChildren" flag refers to the namespace folders shown at the top level now
+    const inbox = root.find((node) => node.path.toUpperCase() === 'INBOX');
+    if (inbox) inbox.hasChildren = inbox.children.length > 0;
+  }
 
   return root;
 };
