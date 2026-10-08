@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { toTopLevelFolderPath } from '../../../utils/folderUtils';
 import React, { useState, useEffect } from 'react';
 import { FaPen, FaPlus, FaShield, FaTrash } from 'react-icons/fa6';
 import { useFoldersFullPath } from '../../../hooks/useFolders';
@@ -123,7 +124,8 @@ const Folders = () => {
 
     const folderPath = data.parent_folder
       ? `${data.parent_folder}${delimiter}${data.folder_name}`
-      : data.folder_name;
+      : // e.g. "INBOX/Reports" on servers that keep every folder under INBOX
+        toTopLevelFolderPath(data.folder_name, folders);
 
     createFolder(
       { path: folderPath },

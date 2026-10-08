@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { getInboxNamespacePrefix } from '../../../utils/folderUtils';
 import React, { useState, useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -95,12 +96,17 @@ const buildFolderTree = (folders: FolderFromAPI[]): FolderNode[] => {
     });
   });
 
+  // Folders directly under a shared "INBOX/" namespace are shown at the top level
+  const namespacePrefix = getInboxNamespacePrefix(folders);
+
   // Pass 2: Build hierarchy
   folders.forEach((folder) => {
     const node = folderMap.get(folder.folder_name)!;
     const parts = folder.folder_name.split(folder.delimiter);
+    const isNamespaceTopLevel =
+      !!namespacePrefix && folder.folder_name.startsWith(namespacePrefix) && parts.length === 2;
 
-    if (parts.length > 1) {
+    if (parts.length > 1 && !isNamespaceTopLevel) {
       // It's a subfolder
       const parentPath = parts.slice(0, -1).join(folder.delimiter);
       const parent = folderMap.get(parentPath);

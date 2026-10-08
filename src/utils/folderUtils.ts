@@ -25,6 +25,36 @@ export interface FolderNode {
   unread_count: number;
 }
 
+/**
+ * Some servers keep every folder under "INBOX/" (INBOX/Sent, INBOX/Trash,
+ * INBOX/AIRTEL...). Like Roundcube, show those at the top level instead of
+ * nesting everything under Inbox. Returns that prefix (e.g. "INBOX/") when
+ * every folder other than INBOX is under it and the special folders live there
+ * too, otherwise ''. Only the display changes — paths stay the full IMAP
+ * names.
+ */
+export const getInboxNamespacePrefix = (
+  folders: Array<{ folder_name: string; delimiter?: string | null; flags?: string[] }>
+): string => {
+  const inbox = folders.find((f) => f.folder_name.toUpperCase() === 'INBOX');
+  const delimiter = inbox?.delimiter || folders.find((f) => f.delimiter)?.delimiter;
+  if (!delimiter) return '';
+
+  const prefix = `INBOX${delimiter}`;
+  const others = folders.filter((f) => f !== inbox);
+  const isUnderPrefix = (name: string) => name.toUpperCase().startsWith(prefix.toUpperCase());
+  if (!others.length || !others.every((f) => isUnderPrefix(f.folder_name))) return '';
+
+  // Only when the special folders are there too (i.e. INBOX/ is the namespace,
+  // not just a user who filed their folders under Inbox)
+  const hasSpecialFolder = (['sent', 'drafts', 'trash', 'spam'] as const).some(
+    (kind) => resolveSpecialFolder(others, kind) !== undefined
+  );
+  return hasSpecialFolder
+    ? folders.find((f) => isUnderPrefix(f.folder_name))!.folder_name.slice(0, prefix.length)
+    : '';
+};
+
 export const buildFolderTree = (
   folders: Array<{
     flags: string[];
@@ -35,10 +65,16 @@ export const buildFolderTree = (
 ): FolderNode[] => {
   const root: FolderNode[] = [];
   const map = new Map<string, FolderNode>();
+  const namespacePrefix = getInboxNamespacePrefix(folders);
+  // Name without the shared "INBOX/" namespace (INBOX itself is kept as is)
+  const displayName = (folderName: string) =>
+    namespacePrefix && folderName.startsWith(namespacePrefix)
+      ? folderName.slice(namespacePrefix.length)
+      : folderName;
 
   folders.forEach((folder) => {
     const node: FolderNode = {
-      name: folder.folder_name.split(folder.delimiter).pop() || folder.folder_name,
+      name: displayName(folder.folder_name).split(folder.delimiter).pop() || folder.folder_name,
       path: folder.folder_name,
       flags: folder.flags,
       delimiter: folder.delimiter,
@@ -50,11 +86,13 @@ export const buildFolderTree = (
 
   folders.forEach((folder) => {
     const node = map.get(folder.folder_name)!;
-    const parts = folder.folder_name.split(folder.delimiter);
+    const parts = displayName(folder.folder_name).split(folder.delimiter);
 
     if (parts.length > 1) {
       // This is a child folder
-      const parentPath = parts.slice(0, -1).join(folder.delimiter);
+      const parentPath =
+        (folder.folder_name === displayName(folder.folder_name) ? '' : namespacePrefix) +
+        parts.slice(0, -1).join(folder.delimiter);
       const parent = map.get(parentPath);
 
       if (parent) {
@@ -123,6 +161,7 @@ interface SpecialFolderCandidate {
   folder_name: string;
   flags?: string[];
   delimiter?: string | null;
+  status?: { MESSAGES?: number };
 }
 
 // Server special-use flags (returned without the backslash) and conventional
@@ -182,9 +221,29 @@ export const resolveSpecialFolder = <T extends SpecialFolderCandidate>(
     ? flagged
     : folders.filter((folder) => depth(folder) === 1 && nameRank(folder) < names.length);
 
+  // Several candidates (e.g. "Sent" and "Sent Messages" both flagged): the one
+  // that actually holds mail wins — servers differ in which one their clients
+  // used. Otherwise (none or several with mail, or no counts) the name decides.
+  const withMail = candidates.filter((folder) => (folder.status?.MESSAGES ?? 0) > 0);
+  if (candidates.length > 1 && withMail.length === 1) return withMail[0];
+
   return [...candidates].sort((a, b) => nameRank(a) - nameRank(b) || depth(a) - depth(b))[0];
 };
 
 /** Path of the Sent folder (where sent copies are saved), 'Sent' when unknown. */
 export const getSentFolderPath = (folders: SpecialFolderCandidate[] | undefined | null): string =>
   resolveSpecialFolder(folders, 'sent')?.folder_name || 'Sent';
+
+/**
+ * IMAP path for a new top-level folder. On servers that keep every folder under
+ * "INBOX/" (see getInboxNamespacePrefix) a bare name would be outside the
+ * namespace and rejected, so it is created as "INBOX/<name>" (still shown at the
+ * top level). Elsewhere the name is used as is.
+ */
+export const toTopLevelFolderPath = (
+  name: string,
+  folders: Array<{ folder_name: string; delimiter?: string | null; flags?: string[] }>
+): string => {
+  const prefix = getInboxNamespacePrefix(folders);
+  return prefix && !name.toUpperCase().startsWith(prefix.toUpperCase()) ? prefix + name : name;
+};
