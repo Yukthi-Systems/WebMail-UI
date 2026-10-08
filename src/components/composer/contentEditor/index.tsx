@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { Card, Flex } from '@radix-ui/themes';
+import { Button, Card, Flex } from '@radix-ui/themes';
 import { useEditor, Editor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import MenuBar from './MenuBar';
@@ -40,6 +40,10 @@ import { ListItem } from '@tiptap/extension-list-item';
 import { FaCode, FaEye, FaPencilAlt } from 'react-icons/fa';
 import { InfoTooltip } from './InfoTooltip';
 import { SlashCommands } from './SlashCommands';
+import { MdSpellcheck } from 'react-icons/md';
+import { GrammarCheckExtension } from './grammar/GrammarCheckExtension';
+import { useGrammarCheck } from './grammar/useGrammarCheck';
+import GrammarPanel from './grammar/GrammarPanel';
 
 export type ContentEditorProps = {
   onChange: (value: { html: string; text: string }) => void;
@@ -531,6 +535,7 @@ const ContentEditor = ({
       CustomBlockquote,
       Underline,
       SlashCommands,
+      GrammarCheckExtension,
       CustomTextStyle,
       Color,
       Div,
@@ -591,8 +596,13 @@ const ContentEditor = ({
     }
   }, [editor, value, mode]);
 
+  // Server spelling & grammar check (on demand — it can take a few seconds)
+  const grammar = useGrammarCheck(editor);
+
   // When switching TO richtext from code, apply the edited HTML back into the editor
   const handleModeSwitch = (newMode: EditorMode) => {
+    // Check results point into the rich-text document, which code mode replaces
+    if (newMode !== 'richtext') grammar.clear();
     if (newMode === 'richtext' && mode === 'code' && editor) {
       editor.commands.setContent(htmlCode);
       onChange({ html: htmlCode, text: editor.getText() });
@@ -706,7 +716,23 @@ const ContentEditor = ({
         {mode === 'richtext' && (
           <>
             <EditorContent editor={editor} />
-            <MenuBar editor={editor} />
+            <GrammarPanel check={grammar} />
+            <MenuBar
+              editor={editor}
+              trailing={
+                <Button
+                  size="1"
+                  variant="soft"
+                  onClick={grammar.run}
+                  disabled={grammar.status === 'checking'}
+                  title="Check spelling & grammar"
+                  aria-label="Check spelling and grammar"
+                  type="button"
+                >
+                  <MdSpellcheck size={14} />
+                </Button>
+              }
+            />
             {editor && show_insert_table_button && <TableContextMenu editor={editor} />}
           </>
         )}
@@ -757,7 +783,16 @@ const ContentEditor = ({
         )}
       </Card>
       <style>
-        {`.editor-content {
+        {`.grammar-issue {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.grammar-issue--spelling { text-decoration-color: var(--red-9); }
+.grammar-issue--grammar { text-decoration-color: var(--blue-9); }
+.editor-content {
   padding: 0.75rem;
   height: ${height};
   min-height: 150px;
