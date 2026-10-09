@@ -35,6 +35,9 @@ interface GrammarPanelProps {
 
 const NO_ISSUES_HIDE_MS = 4000;
 
+const PRIVACY_NOTE =
+  "Your text is checked on our own servers and isn't shared with anyone else. Suggestions may not always be right, so please review them.";
+
 const iconButton =
   'w-6 h-6 inline-flex items-center justify-center rounded-md text-[var(--gray-10)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-a3)] transition-colors';
 
@@ -215,35 +218,44 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
           isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'
         }`}
       >
-        <div className="flex items-center gap-2 pl-3 pr-1.5 h-9 border-b border-[var(--gray-a4)] flex-shrink-0">
-          <MdSpellcheck size={16} className="text-[var(--accent-11)]" />
-          <span className="font-medium text-[var(--gray-12)]">
+        {/* @container: the header shortens its texts based on the panel's own width
+            (the composer can be narrow even on a large screen), never wrapping */}
+        <div className="@container flex items-center gap-2 pl-3 pr-1.5 h-9 border-b border-[var(--gray-a4)] flex-shrink-0 whitespace-nowrap">
+          <MdSpellcheck size={16} className="flex-shrink-0 text-[var(--accent-11)]" />
+          <span className="flex-shrink-0 font-medium text-[var(--gray-12)]">
             {issues.length} issue{issues.length === 1 ? '' : 's'}
           </span>
-          <span className="flex items-center gap-2 text-xs text-[var(--gray-10)]">
+          <span className="flex items-center gap-2 min-w-0 text-xs text-[var(--gray-10)]">
             {spellingCount > 0 && (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1" title={`${spellingCount} spelling`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--red-9)]" />
-                {spellingCount} spelling
+                {spellingCount}
+                <span className="hidden @2xl:inline">spelling</span>
               </span>
             )}
             {issues.length - spellingCount > 0 && (
-              <span className="inline-flex items-center gap-1">
+              <span
+                className="inline-flex items-center gap-1"
+                title={`${issues.length - spellingCount} grammar`}
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--blue-9)]" />
-                {issues.length - spellingCount} grammar
+                {issues.length - spellingCount}
+                <span className="hidden @2xl:inline">grammar</span>
               </span>
             )}
           </span>
-          <Tooltip content="AI suggestions may be wrong. Please review.">
+          {/* Privacy note: the check runs on our servers, nothing goes to a third party */}
+          <Tooltip content={PRIVACY_NOTE}>
             <span
               tabIndex={0}
-              className="inline-flex text-[var(--gray-9)] hover:text-[var(--gray-11)] cursor-help outline-none focus-visible:text-[var(--gray-12)]"
-              aria-label="AI suggestions may be wrong. Please review."
+              className="inline-flex items-center gap-1 text-[11px] text-[var(--gray-10)] hover:text-[var(--gray-11)] cursor-help outline-none focus-visible:text-[var(--gray-12)]"
+              aria-label={PRIVACY_NOTE}
             >
-              <MdInfoOutline size={14} />
+              <span className="hidden @2xl:inline">Checked privately</span>
+              <MdInfoOutline size={12} />
             </span>
           </Tooltip>
-          <span className="ml-auto flex items-center gap-0.5">
+          <span className="ml-auto flex flex-shrink-0 items-center gap-0.5">
             {fixableCount > 0 && (
               <button
                 type="button"
@@ -251,7 +263,8 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
                 className="h-6 px-2 mr-1 rounded-md text-xs font-medium text-[var(--accent-11)] bg-[var(--accent-a3)] hover:bg-[var(--accent-a4)] transition-colors"
                 title="Apply the suggestions (Ctrl+Z to undo)"
               >
-                Fix current issues ({fixableCount})
+                <span className="hidden @md:inline">Fix current issues</span>
+                <span className="@md:hidden">Fix</span> ({fixableCount})
               </button>
             )}
             <button

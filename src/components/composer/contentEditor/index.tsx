@@ -732,7 +732,7 @@ const ContentEditor = ({
             </div>
             <MenuBar
               editor={editor}
-              trailing={
+              afterFont={
                 <GrammarCheckButton
                   onClick={grammar.run}
                   isChecking={grammar.status === 'checking'}
