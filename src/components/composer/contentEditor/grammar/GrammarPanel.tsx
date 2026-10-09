@@ -16,8 +16,8 @@
  */
 
 // GrammarPanel.tsx
-import { Spinner, Tooltip } from '@radix-ui/themes';
-import { useEffect, useRef, useState } from 'react';
+import { Tooltip } from '@radix-ui/themes';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   FaCheckCircle,
   FaChevronDown,
@@ -34,6 +34,74 @@ interface GrammarPanelProps {
 
 const NO_ISSUES_HIDE_MS = 4000;
 
+// "AI is working" visuals for the checking state. Theme colors only, so they
+// follow light/dark mode; static for users who prefer reduced motion.
+const AI_STYLES = `
+@keyframes gc-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+@keyframes gc-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@keyframes gc-twinkle {
+  0%, 100% { transform: scale(0.55) rotate(0deg); opacity: 0.55; }
+  50% { transform: scale(1) rotate(90deg); opacity: 1; }
+}
+@keyframes gc-scan { from { transform: translateY(-110%); } to { transform: translateY(260%); } }
+@keyframes gc-rise { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes gc-glow {
+  0%, 100% { box-shadow: 0 -4px 14px -6px var(--accent-a7); }
+  50% { box-shadow: 0 -6px 18px -4px var(--purple-a7); }
+}
+.gc-ai-border {
+  background: linear-gradient(90deg, var(--accent-9), var(--purple-9), var(--pink-9), var(--blue-9), var(--accent-9));
+  background-size: 300% 100%;
+  animation: gc-flow 3s linear infinite, gc-glow 2.4s ease-in-out infinite, gc-rise 0.25s ease-out;
+}
+.gc-ai-text {
+  background-image: linear-gradient(90deg, var(--gray-11) 0%, var(--gray-11) 38%, var(--purple-11) 46%, var(--accent-11) 50%, var(--pink-11) 54%, var(--gray-11) 62%, var(--gray-11) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gc-shimmer 2s linear infinite;
+}
+.gc-star { transform-origin: center; transform-box: fill-box; animation: gc-twinkle 1.6s ease-in-out infinite; }
+g:nth-of-type(2) > .gc-star { animation-delay: 0.5s; }
+g:nth-of-type(3) > .gc-star { animation-delay: 1s; }
+.gc-scan {
+  height: 45%;
+  background: linear-gradient(180deg, transparent, var(--accent-a2) 35%, var(--purple-a3) 55%, var(--pink-a2) 70%, transparent);
+  animation: gc-scan 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-ai-border, .gc-ai-text, .gc-star { animation: none; }
+  .gc-scan { display: none; }
+}
+`;
+
+/** Three twinkling sparkles with the AI gradient. */
+const AiSparkles = () => {
+  const gradientId = `gc-sparkle-${useId().replace(/:/g, '')}`;
+  const star = 'M12 0 L13.9 10.1 L24 12 L13.9 13.9 L12 24 L10.1 13.9 L0 12 L10.1 10.1 Z';
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" className="flex-shrink-0">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="var(--accent-9)" />
+          <stop offset="55%" stopColor="var(--purple-9)" />
+          <stop offset="100%" stopColor="var(--pink-9)" />
+        </linearGradient>
+      </defs>
+      <g transform="translate(4 4) scale(0.66)">
+        <path className="gc-star" d={star} fill={`url(#${gradientId})`} />
+      </g>
+      <g transform="translate(0 0) scale(0.3)">
+        <path className="gc-star" d={star} fill={`url(#${gradientId})`} />
+      </g>
+      <g transform="translate(16.5 15.5) scale(0.3)">
+        <path className="gc-star" d={star} fill={`url(#${gradientId})`} />
+      </g>
+    </svg>
+  );
+};
+
 const iconButton =
   'w-6 h-6 inline-flex items-center justify-center rounded-md text-[var(--gray-10)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-a3)] transition-colors';
 
@@ -44,7 +112,7 @@ const iconButton =
  * relative; overflow: hidden` wrapper.
  */
 const GrammarPanel = ({ check }: GrammarPanelProps) => {
-  const { status, error, issues, totalFound, activeId } = check;
+  const { status, error, issues, totalFound, activeId, issueClickCount } = check;
   const [minimized, setMinimized] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -57,14 +125,23 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
     if (status === 'done') setMinimized(false);
   }, [status, totalFound]);
 
-  // Clicking an underlined word opens the panel on its suggestion
+  // Clicking an underlined word opens the panel on its suggestion. Only the
+  // list itself is scrolled — scrollIntoView would also scroll the editor's
+  // clipping wrapper and push the docked panel out of place.
   useEffect(() => {
     if (!activeId) return;
     setMinimized(false);
-    listRef.current
-      ?.querySelector(`[data-issue-id="${activeId}"]`)
-      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [activeId]);
+    const list = listRef.current;
+    const item = list?.querySelector<HTMLElement>(`[data-issue-id="${activeId}"]`);
+    if (!list || !item) return;
+    const top = item.offsetTop;
+    const bottom = top + item.offsetHeight;
+    if (top < list.scrollTop) {
+      list.scrollTo({ top, behavior: 'smooth' });
+    } else if (bottom > list.scrollTop + list.clientHeight) {
+      list.scrollTo({ top: bottom - list.clientHeight, behavior: 'smooth' });
+    }
+  }, [activeId, issueClickCount]);
 
   // "No issues" is just a confirmation — let it go away on its own
   useEffect(() => {
@@ -99,17 +176,6 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
 
   // ── Small pill: checking / result summary / minimized ─────────────────────
   const pill = (() => {
-    if (status === 'checking') {
-      return (
-        <>
-          <Spinner size="1" />
-          <span>Checking spelling…</span>
-          <button type="button" onClick={check.cancel} className={iconButton} title="Cancel">
-            <FaTimes size={10} />
-          </button>
-        </>
-      );
-    }
     if (status === 'error') {
       return (
         <>
@@ -151,15 +217,52 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
 
   return (
     <>
+      <style>{AI_STYLES}</style>
+
+      {status === 'checking' && (
+        <>
+          {/* A soft band gliding over the text while it is being analysed */}
+          <div
+            className="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
+            aria-hidden="true"
+          >
+            <div className="gc-scan" />
+          </div>
+
+          {/* Tab on the toolbar edge with a flowing gradient border */}
+          <div
+            className="gc-ai-border absolute bottom-0 right-3 z-10 rounded-t-lg pt-px px-px"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-2 h-7 pl-2.5 pr-1.5 rounded-t-[7px] text-xs bg-[var(--color-panel-solid)]">
+              <AiSparkles />
+              <span className="gc-ai-text font-medium">Analyzing your writing…</span>
+              <button
+                type="button"
+                onClick={check.cancel}
+                className={iconButton}
+                title="Cancel"
+                aria-label="Cancel spelling check"
+              >
+                <FaTimes size={10} />
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Tab on the toolbar edge — shown whenever the full panel isn't */}
-      <div
-        className={`absolute bottom-0 right-3 z-10 flex items-center gap-2 h-7 pl-3 pr-2 rounded-t-lg text-xs text-[var(--gray-11)] bg-[var(--color-panel-solid)] border border-b-0 border-[var(--gray-a5)] shadow-[0_-4px_10px_-6px_var(--gray-a6)] transition-transform duration-200 ease-out ${
-          isOpen ? 'translate-y-full pointer-events-none' : 'translate-y-0'
-        }`}
-        role="status"
-      >
-        {pill}
-      </div>
+      {status !== 'checking' && (
+        <div
+          className={`absolute bottom-0 right-3 z-10 flex items-center gap-2 h-7 pl-3 pr-2 rounded-t-lg text-xs text-[var(--gray-11)] bg-[var(--color-panel-solid)] border border-b-0 border-[var(--gray-a5)] shadow-[0_-4px_10px_-6px_var(--gray-a6)] transition-transform duration-200 ease-out ${
+            isOpen ? 'translate-y-full pointer-events-none' : 'translate-y-0'
+          }`}
+          role="status"
+        >
+          {pill}
+        </div>
+      )}
 
       {/* Drawer docked on the toolbar — slides down into it when minimized */}
       <div
@@ -229,7 +332,7 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
           </span>
         </div>
 
-        <div ref={listRef} className="overflow-y-auto overscroll-contain py-1">
+        <div ref={listRef} className="relative overflow-y-auto overscroll-contain py-1">
           {issues.map((issue) => (
             <div
               key={issue.id}

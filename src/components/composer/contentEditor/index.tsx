@@ -716,7 +716,17 @@ const ContentEditor = ({
         {mode === 'richtext' && (
           <>
             {/* Spelling results float over the text instead of taking layout space */}
-            <div className="relative overflow-hidden">
+            {/* overflow: clip (not just hidden): scrollIntoView can still scroll an
+                overflow-hidden box, which would shift the docked panel out of place */}
+            <div
+              className="relative overflow-hidden"
+              style={{ overflow: 'clip' }}
+              onScroll={(e) => {
+                // Fallback for browsers without overflow: clip
+                e.currentTarget.scrollTop = 0;
+                e.currentTarget.scrollLeft = 0;
+              }}
+            >
               <EditorContent editor={editor} />
               <GrammarPanel check={grammar} />
             </div>

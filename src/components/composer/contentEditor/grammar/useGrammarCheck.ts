@@ -60,6 +60,9 @@ export function useGrammarCheck(editor: Editor | null) {
   // Issues still underlined in the document (fixed/ignored/edited ones drop out)
   const [openIds, setOpenIds] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Bumped on every click on an underline (even the same one twice), so the
+  // panel can reopen after being minimized
+  const [issueClickCount, setIssueClickCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   // Keep the list in sync with the underlines while the user edits
@@ -70,7 +73,10 @@ export function useGrammarCheck(editor: Editor | null) {
       setOpenIds((prev) => (prev.join('|') === ids.join('|') ? prev : ids));
     };
     editor.on('transaction', sync);
-    getStorage(editor).onIssueClick = setActiveId;
+    getStorage(editor).onIssueClick = (id) => {
+      setActiveId(id);
+      setIssueClickCount((count) => count + 1);
+    };
     return () => {
       editor.off('transaction', sync);
       if (!editor.isDestroyed) getStorage(editor).onIssueClick = null;
@@ -240,6 +246,7 @@ export function useGrammarCheck(editor: Editor | null) {
     issues: openIssues,
     totalFound: issues.length,
     activeId,
+    issueClickCount,
     run,
     cancel,
     clear,
