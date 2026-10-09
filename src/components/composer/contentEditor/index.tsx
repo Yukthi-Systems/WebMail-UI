@@ -715,8 +715,11 @@ const ContentEditor = ({
         {/* ── rich text ── */}
         {mode === 'richtext' && (
           <>
-            <EditorContent editor={editor} />
-            <GrammarPanel check={grammar} />
+            {/* Spelling results float over the text instead of taking layout space */}
+            <div className="relative overflow-hidden">
+              <EditorContent editor={editor} />
+              <GrammarPanel check={grammar} />
+            </div>
             <MenuBar
               editor={editor}
               trailing={
@@ -801,6 +804,11 @@ const ContentEditor = ({
   overflow-y: auto;
   box-sizing: border-box;
   outline: none;
+}
+.editor-content {
+  /* Room under the text while the spelling panel is open (set by GrammarPanel) */
+  padding-bottom: calc(0.75rem + var(--grammar-panel-space, 0px));
+  transition: padding-bottom 0.3s ease-out;
 }
 .editor-content:focus{
   outline: none;
