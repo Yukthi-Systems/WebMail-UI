@@ -19,7 +19,7 @@
 import type { Editor } from '@tiptap/core';
 import { Mapping } from '@tiptap/pm/transform';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { checkSpellGrammar } from '../../../../api/grammar';
+import { checkSpellGrammar, type GrammarMatch } from '../../../../api/grammar';
 import {
   buildCheckableText,
   codePointOffsetConverter,
@@ -39,9 +39,31 @@ export interface GrammarIssue {
   /** The flagged text as it was when checked. */
   original: string;
   replacements: string[];
+  /**
+   * Found only by the re-check after "Fix all" (e.g. grammar a misspelling was
+   * hiding).
+   */
+  isNew?: boolean;
 }
 
 export type GrammarCheckStatus = 'idle' | 'checking' | 'done' | 'error';
+
+/**
+ * Outcome of "Fix current issues", shown at the top of the panel. There is no
+ * automatic re-check (server load); `rechecked` is set once the user checks
+ * again.
+ */
+export interface FixAllSummary {
+  fixed: number;
+  rechecked: boolean;
+  /** Issues that appeared only after the fixes. */
+  newCount: number;
+  /** Issues left that the checker has no suggestion for. */
+  noSuggestionCount: number;
+}
+
+// Identifies "the same issue" across checks: same rule on the same text
+const issueKey = (ruleId: string, original: string) => `${ruleId}|${original}`;
 
 const MAX_REPLACEMENTS = 5;
 
@@ -63,7 +85,16 @@ export function useGrammarCheck(editor: Editor | null) {
   // Bumped on every click on an underline (even the same one twice), so the
   // panel can reopen after being minimized
   const [issueClickCount, setIssueClickCount] = useState(0);
+  const [checkReason, setCheckReason] = useState<'manual' | 'afterFixAll'>('manual');
+  const [fixSummary, setFixSummary] = useState<FixAllSummary | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Issues the user ignored stay ignored on later checks (this composer only)
+  const ignoredKeysRef = useRef(new Set<string>());
+  const keyById = useRef(new Map<string, string>());
+  // Last server result: checking the very same text again reuses it (no request)
+  const lastResultRef = useRef<{ text: string; matches: GrammarMatch[] } | null>(null);
+  // Set by "Fix current issues": the next check marks what the fixes uncovered
+  const pendingFixAllRef = useRef<{ fixed: number; carriedKeys: Set<string> } | null>(null);
 
   // Keep the list in sync with the underlines while the user edits
   useEffect(() => {
@@ -91,12 +122,18 @@ export function useGrammarCheck(editor: Editor | null) {
     setError(null);
     setIssues([]);
     setActiveId(null);
+    setFixSummary(null);
     if (editor && !editor.isDestroyed) {
       editor.view.dispatch(setGrammarIssues(editor.state.tr, []));
     }
   }, [editor]);
 
-  const run = useCallback(async () => {
+  /**
+   * Checks the editor text. If it is exactly the text of the last check, that
+   * result is reused instead of sending another request. A check following "Fix
+   * current issues" marks issues the fixes uncovered as new.
+   */
+  const runCheck = useCallback(async () => {
     if (!editor || editor.isDestroyed) return;
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -110,6 +147,10 @@ export function useGrammarCheck(editor: Editor | null) {
       return;
     }
 
+    const cachedMatches =
+      lastResultRef.current?.text === checkable.text ? lastResultRef.current.matches : null;
+    const afterFixAll = cachedMatches ? null : pendingFixAllRef.current;
+
     // The check takes seconds and the user may keep typing: collect the edits
     // made meanwhile so the results can be placed on the current text.
     const mapping = new Mapping();
@@ -122,14 +163,22 @@ export function useGrammarCheck(editor: Editor | null) {
     };
     editor.on('transaction', collect);
 
-    setStatus('checking');
+    if (!cachedMatches) setStatus('checking');
+    setCheckReason(afterFixAll ? 'afterFixAll' : 'manual');
+    setFixSummary(null);
     setError(null);
     setActiveId(null);
     editor.view.dispatch(setGrammarIssues(editor.state.tr, []));
 
     try {
-      const response = await checkSpellGrammar(checkable.text, controller.signal);
+      // Unchanged since the last check: reuse its result, no server request
+      const matches =
+        cachedMatches ?? (await checkSpellGrammar(checkable.text, controller.signal)).matches ?? [];
       if (controller.signal.aborted || editor.isDestroyed) return;
+      if (!cachedMatches) {
+        lastResultRef.current = { text: checkable.text, matches };
+        pendingFixAllRef.current = null;
+      }
 
       const toUtf16 = codePointOffsetConverter(checkable.text);
       const doc = editor.state.doc;
@@ -137,7 +186,7 @@ export function useGrammarCheck(editor: Editor | null) {
       const ranges: GrammarIssueRange[] = [];
       const found: GrammarIssue[] = [];
 
-      (response.matches ?? []).forEach((match, index) => {
+      matches.forEach((match, index) => {
         const start = toUtf16(match.offset);
         const end = toUtf16(match.offset + match.error_length);
         const original = checkable.text.slice(start, end);
@@ -149,23 +198,36 @@ export function useGrammarCheck(editor: Editor | null) {
         // Skip issues whose text was edited while the check was running
         if (from >= to || doc.textBetween(from, to) !== original) return;
 
+        const key = issueKey(match.rule_id, original);
+        if (ignoredKeysRef.current.has(key)) return;
+
         const id = `${runId}-${index}`;
         const kind: GrammarIssueKind =
           match.rule_issue_type === 'misspelling' || match.category === 'TYPOS'
             ? 'spelling'
             : 'grammar';
         ranges.push({ id, from, to, kind, original });
+        keyById.current.set(id, key);
         found.push({
           id,
           kind,
           message: match.message,
           original,
           replacements: (match.replacements ?? []).slice(0, MAX_REPLACEMENTS),
+          isNew: afterFixAll ? !afterFixAll.carriedKeys.has(key) : undefined,
         });
       });
 
       editor.view.dispatch(setGrammarIssues(editor.state.tr, ranges));
       setIssues(found);
+      if (afterFixAll) {
+        setFixSummary({
+          fixed: afterFixAll.fixed,
+          rechecked: true,
+          newCount: found.filter((issue) => issue.isNew).length,
+          noSuggestionCount: found.filter((issue) => !issue.replacements.length).length,
+        });
+      }
       setStatus('done');
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -175,6 +237,11 @@ export function useGrammarCheck(editor: Editor | null) {
       editor.off('transaction', collect);
     }
   }, [editor]);
+
+  /** Check button: a fresh check (also safe as an onClick handler). */
+  const run = useCallback(() => {
+    void runCheck();
+  }, [runCheck]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -208,20 +275,38 @@ export function useGrammarCheck(editor: Editor | null) {
       .sort((a, b) => b.range.from - a.range.from);
     if (!fixes.length) return;
 
+    // Issues left after this (no suggestion): remembered so the re-check can
+    // tell them apart from issues the fixes uncovered
+    const fixedIds = new Set(fixes.map(({ issue }) => issue.id));
+    const carriedKeys = new Set(
+      issues
+        .filter((issue) => ranges.has(issue.id) && !fixedIds.has(issue.id))
+        .map((issue) => keyById.current.get(issue.id))
+        .filter((key): key is string => !!key)
+    );
+
     const tr = editor.state.tr;
     fixes.forEach(({ issue, range }) => tr.insertText(issue.replacements[0], range.from, range.to));
-    editor.view.dispatch(
-      removeGrammarIssues(
-        tr,
-        fixes.map(({ issue }) => issue.id)
-      )
-    );
+    editor.view.dispatch(removeGrammarIssues(tr, [...fixedIds]));
     editor.commands.focus();
+
+    // No automatic re-check (server load). Fixes can uncover new issues (e.g.
+    // "employes has" → "employees has"), so the panel suggests checking again,
+    // and that check marks what is new.
+    pendingFixAllRef.current = { fixed: fixes.length, carriedKeys };
+    setFixSummary({
+      fixed: fixes.length,
+      rechecked: false,
+      newCount: 0,
+      noSuggestionCount: carriedKeys.size,
+    });
   }, [editor, issues]);
 
   const ignore = useCallback(
     (id: string) => {
       if (!editor || editor.isDestroyed) return;
+      const key = keyById.current.get(id);
+      if (key) ignoredKeysRef.current.add(key);
       editor.view.dispatch(removeGrammarIssues(editor.state.tr, [id]));
     },
     [editor]
@@ -247,6 +332,8 @@ export function useGrammarCheck(editor: Editor | null) {
     totalFound: issues.length,
     activeId,
     issueClickCount,
+    checkReason,
+    fixSummary,
     run,
     cancel,
     clear,

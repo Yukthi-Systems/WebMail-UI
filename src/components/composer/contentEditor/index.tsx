@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { Button, Card, Flex } from '@radix-ui/themes';
+import { Card, Flex } from '@radix-ui/themes';
 import { useEditor, Editor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import MenuBar from './MenuBar';
@@ -40,10 +40,10 @@ import { ListItem } from '@tiptap/extension-list-item';
 import { FaCode, FaEye, FaPencilAlt } from 'react-icons/fa';
 import { InfoTooltip } from './InfoTooltip';
 import { SlashCommands } from './SlashCommands';
-import { MdSpellcheck } from 'react-icons/md';
 import { GrammarCheckExtension } from './grammar/GrammarCheckExtension';
 import { useGrammarCheck } from './grammar/useGrammarCheck';
 import GrammarPanel from './grammar/GrammarPanel';
+import GrammarCheckButton from './grammar/GrammarCheckButton';
 
 export type ContentEditorProps = {
   onChange: (value: { html: string; text: string }) => void;
@@ -733,17 +733,10 @@ const ContentEditor = ({
             <MenuBar
               editor={editor}
               trailing={
-                <Button
-                  size="1"
-                  variant="soft"
+                <GrammarCheckButton
                   onClick={grammar.run}
-                  disabled={grammar.status === 'checking'}
-                  title="Check spelling & grammar"
-                  aria-label="Check spelling and grammar"
-                  type="button"
-                >
-                  <MdSpellcheck size={14} />
-                </Button>
+                  isChecking={grammar.status === 'checking'}
+                />
               }
             />
             {editor && show_insert_table_button && <TableContextMenu editor={editor} />}

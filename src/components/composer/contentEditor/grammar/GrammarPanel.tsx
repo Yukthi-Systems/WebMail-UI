@@ -17,7 +17,8 @@
 
 // GrammarPanel.tsx
 import { Tooltip } from '@radix-ui/themes';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AI_STYLES, AiSparkles } from './aiVisuals';
 import {
   FaCheckCircle,
   FaChevronDown,
@@ -34,74 +35,6 @@ interface GrammarPanelProps {
 
 const NO_ISSUES_HIDE_MS = 4000;
 
-// "AI is working" visuals for the checking state. Theme colors only, so they
-// follow light/dark mode; static for users who prefer reduced motion.
-const AI_STYLES = `
-@keyframes gc-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
-@keyframes gc-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
-@keyframes gc-twinkle {
-  0%, 100% { transform: scale(0.55) rotate(0deg); opacity: 0.55; }
-  50% { transform: scale(1) rotate(90deg); opacity: 1; }
-}
-@keyframes gc-scan { from { transform: translateY(-110%); } to { transform: translateY(260%); } }
-@keyframes gc-rise { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-@keyframes gc-glow {
-  0%, 100% { box-shadow: 0 -4px 14px -6px var(--accent-a7); }
-  50% { box-shadow: 0 -6px 18px -4px var(--purple-a7); }
-}
-.gc-ai-border {
-  background: linear-gradient(90deg, var(--accent-9), var(--purple-9), var(--pink-9), var(--blue-9), var(--accent-9));
-  background-size: 300% 100%;
-  animation: gc-flow 3s linear infinite, gc-glow 2.4s ease-in-out infinite, gc-rise 0.25s ease-out;
-}
-.gc-ai-text {
-  background-image: linear-gradient(90deg, var(--gray-11) 0%, var(--gray-11) 38%, var(--purple-11) 46%, var(--accent-11) 50%, var(--pink-11) 54%, var(--gray-11) 62%, var(--gray-11) 100%);
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: gc-shimmer 2s linear infinite;
-}
-.gc-star { transform-origin: center; transform-box: fill-box; animation: gc-twinkle 1.6s ease-in-out infinite; }
-g:nth-of-type(2) > .gc-star { animation-delay: 0.5s; }
-g:nth-of-type(3) > .gc-star { animation-delay: 1s; }
-.gc-scan {
-  height: 45%;
-  background: linear-gradient(180deg, transparent, var(--accent-a2) 35%, var(--purple-a3) 55%, var(--pink-a2) 70%, transparent);
-  animation: gc-scan 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .gc-ai-border, .gc-ai-text, .gc-star { animation: none; }
-  .gc-scan { display: none; }
-}
-`;
-
-/** Three twinkling sparkles with the AI gradient. */
-const AiSparkles = () => {
-  const gradientId = `gc-sparkle-${useId().replace(/:/g, '')}`;
-  const star = 'M12 0 L13.9 10.1 L24 12 L13.9 13.9 L12 24 L10.1 13.9 L0 12 L10.1 10.1 Z';
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" className="flex-shrink-0">
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--accent-9)" />
-          <stop offset="55%" stopColor="var(--purple-9)" />
-          <stop offset="100%" stopColor="var(--pink-9)" />
-        </linearGradient>
-      </defs>
-      <g transform="translate(4 4) scale(0.66)">
-        <path className="gc-star" d={star} fill={`url(#${gradientId})`} />
-      </g>
-      <g transform="translate(0 0) scale(0.3)">
-        <path className="gc-star" d={star} fill={`url(#${gradientId})`} />
-      </g>
-      <g transform="translate(16.5 15.5) scale(0.3)">
-        <path className="gc-star" d={star} fill={`url(#${gradientId})`} />
-      </g>
-    </svg>
-  );
-};
-
 const iconButton =
   'w-6 h-6 inline-flex items-center justify-center rounded-md text-[var(--gray-10)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-a3)] transition-colors';
 
@@ -112,7 +45,7 @@ const iconButton =
  * relative; overflow: hidden` wrapper.
  */
 const GrammarPanel = ({ check }: GrammarPanelProps) => {
-  const { status, error, issues, totalFound, activeId, issueClickCount } = check;
+  const { status, error, issues, totalFound, activeId, issueClickCount, fixSummary } = check;
   const [minimized, setMinimized] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -193,7 +126,13 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
       return (
         <>
           <FaCheckCircle className="text-[var(--green-10)]" size={12} />
-          <span>{totalFound ? 'All issues resolved' : 'No spelling or grammar issues'}</span>
+          <span>
+            {fixSummary
+              ? `Fixed ${fixSummary.fixed} issue${fixSummary.fixed === 1 ? '' : 's'}`
+              : totalFound
+                ? 'All issues resolved'
+                : 'No issues found'}
+          </span>
         </>
       );
     }
@@ -202,7 +141,7 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
         type="button"
         onClick={() => setMinimized(false)}
         className="inline-flex items-center gap-1.5"
-        title="Show spelling suggestions"
+        title="Show suggestions"
       >
         <span
           className={`w-2 h-2 rounded-full ${spellingCount ? 'bg-[var(--red-9)]' : 'bg-[var(--blue-9)]'}`}
@@ -237,7 +176,11 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
           >
             <div className="flex items-center gap-2 h-7 pl-2.5 pr-1.5 rounded-t-[7px] text-xs bg-[var(--color-panel-solid)]">
               <AiSparkles />
-              <span className="gc-ai-text font-medium">Analyzing your writing…</span>
+              <span className="gc-ai-text font-medium">
+                {check.checkReason === 'afterFixAll'
+                  ? 'Re-checking after fixes…'
+                  : 'Analyzing your writing…'}
+              </span>
               <button
                 type="button"
                 onClick={check.cancel}
@@ -291,24 +234,24 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
               </span>
             )}
           </span>
-          <Tooltip content="Suggestions are generated by AI and may not always be correct. Review each change before sending.">
+          <Tooltip content="AI suggestions may be wrong. Please review.">
             <span
               tabIndex={0}
               className="inline-flex text-[var(--gray-9)] hover:text-[var(--gray-11)] cursor-help outline-none focus-visible:text-[var(--gray-12)]"
-              aria-label="Suggestions are generated by AI and may not always be correct. Review each change before sending."
+              aria-label="AI suggestions may be wrong. Please review."
             >
               <MdInfoOutline size={14} />
             </span>
           </Tooltip>
           <span className="ml-auto flex items-center gap-0.5">
-            {fixableCount > 1 && (
+            {fixableCount > 0 && (
               <button
                 type="button"
                 onClick={check.applyAll}
                 className="h-6 px-2 mr-1 rounded-md text-xs font-medium text-[var(--accent-11)] bg-[var(--accent-a3)] hover:bg-[var(--accent-a4)] transition-colors"
-                title="Apply the first suggestion to every issue — review the result, AI suggestions can be wrong (Ctrl+Z to undo)"
+                title="Apply the suggestions (Ctrl+Z to undo)"
               >
-                Fix all
+                Fix current issues ({fixableCount})
               </button>
             )}
             <button
@@ -324,7 +267,7 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
               type="button"
               onClick={check.clear}
               className={iconButton}
-              title="Close and remove underlines"
+              title="Close"
               aria-label="Close spelling check"
             >
               <FaTimes size={10} />
@@ -333,6 +276,17 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
         </div>
 
         <div ref={listRef} className="relative overflow-y-auto overscroll-contain py-1">
+          {fixSummary && (
+            <div className="mx-2 mt-1 mb-1 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--gray-11)] bg-[var(--green-a2)]">
+              <FaCheckCircle className="flex-shrink-0 text-[var(--green-10)]" size={11} />
+              <span>
+                Fixed {fixSummary.fixed} issue{fixSummary.fixed === 1 ? '' : 's'}
+                {fixSummary.newCount > 0 && ` · ${fixSummary.newCount} new`}
+                {fixSummary.noSuggestionCount > 0 &&
+                  ` · ${fixSummary.noSuggestionCount} to review manually`}
+              </span>
+            </div>
+          )}
           {issues.map((issue) => (
             <div
               key={issue.id}
@@ -352,11 +306,24 @@ const GrammarPanel = ({ check }: GrammarPanelProps) => {
                 >
                   {issue.original}
                 </span>
+                {issue.isNew && (
+                  <span
+                    className="flex-shrink-0 self-center px-1.5 rounded text-[10px] font-medium leading-4 text-[var(--accent-11)] bg-[var(--accent-a4)]"
+                    title="Found after fixing"
+                  >
+                    New
+                  </span>
+                )}
                 <span className="text-xs text-[var(--gray-10)] truncate" title={issue.message}>
                   {issue.message}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-1 mt-1">
+                {issue.replacements.length === 0 && (
+                  <span className="h-6 inline-flex items-center px-1 text-xs italic text-[var(--gray-10)]">
+                    No suggestion
+                  </span>
+                )}
                 {issue.replacements.map((replacement) => (
                   <button
                     key={replacement}
