@@ -20,7 +20,8 @@ import { Link, useLocation } from '@tanstack/react-router';
 import { FaMailBulk } from 'react-icons/fa';
 import {
   HiOutlineUsers,
-  HiOutlineVideoCamera,
+  HiOutlineChatBubbleLeftRight,
+  HiOutlineFolder,
   HiOutlineCog6Tooth,
   HiOutlineQuestionMarkCircle,
   HiChevronLeft,
@@ -37,6 +38,7 @@ import { leftNavHoverAtom, leftNavTourSeenAtom, leftNavVisibleAtom } from '../..
 import { useToast } from '../../hooks/useToast';
 import { TourTip } from './TourTips';
 import { getCompanySlugFromPath } from '../../utils/routeUtils';
+import { API_CONFIG } from '../../constants/config';
 
 interface NavigationItem {
   id: string;
@@ -45,6 +47,7 @@ interface NavigationItem {
   path: string;
   badge?: number;
   matchPattern?: string;
+  external?: boolean;
 }
 
 const LeftNavigation = () => {
@@ -116,7 +119,20 @@ const LeftNavigation = () => {
       badge: unreadCountEmails,
     },
     { id: 'contacts', label: 'Contacts', icon: HiOutlineUsers, path: `${p}/contacts` },
-    { id: 'video', label: 'Video', icon: HiOutlineVideoCamera, path: `${p}/video` },
+    {
+      id: 'chat',
+      label: 'Chat',
+      icon: HiOutlineChatBubbleLeftRight,
+      path: API_CONFIG.CHAT_URL,
+      external: true,
+    },
+    {
+      id: 'files',
+      label: 'Files',
+      icon: HiOutlineFolder,
+      path: API_CONFIG.FILES_URL,
+      external: true,
+    },
     { id: 'settings', label: 'Settings', icon: HiOutlineCog6Tooth, path: `${p}/settings` },
     { id: 'help', label: 'Help', icon: HiOutlineQuestionMarkCircle, path: `${p}/help` },
   ];
@@ -314,22 +330,17 @@ const LeftNavigation = () => {
               {navigationItems.map((item) => {
                 const Icon = item.icon;
                 const matchPath = item.matchPattern || item.path;
-                const isActive = currentPath.startsWith(matchPath);
-
-                return (
-                  <Link
-                    key={item.id}
-                    to={item.path}
-                    className={`
+                const isActive = !item.external && currentPath.startsWith(matchPath);
+                const itemClassName = `
                       block w-full py-2 px-1 ml-1 mr-1 transition-all duration-200 group relative
                       ${
                         isActive
                           ? 'bg-[var(--gray-1)] text-[var(--accent-11)] rounded-l-[200px] border-r-0 mr-[-1px] z-10'
                           : 'text-[var(--gray-11)] hover:bg-[var(--gray-4)] hover:text-[var(--gray-12)] rounded-l-[200px]'
                       }
-                    `}
-                    title={item.label}
-                  >
+                    `;
+                const itemContent = (
+                  <>
                     <Icon className="w-5 h-5 mx-auto" />
                     {item.badge !== undefined && item.badge > 0 && (
                       <div className="absolute top-1 right-3 w-2 h-2 bg-[var(--red-9)] rounded-full z-20" />
@@ -347,6 +358,23 @@ const LeftNavigation = () => {
                         <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent-3)] to-transparent rounded-l-full opacity-30 -z-10" />
                       </>
                     )}
+                  </>
+                );
+
+                return item.external ? (
+                  <a
+                    key={item.id}
+                    href={item.path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={itemClassName}
+                    title={item.label}
+                  >
+                    {itemContent}
+                  </a>
+                ) : (
+                  <Link key={item.id} to={item.path} className={itemClassName} title={item.label}>
+                    {itemContent}
                   </Link>
                 );
               })}

@@ -33,6 +33,8 @@ echo "  VITE_DNS_API_KEY: \"${VITE_DNS_API_KEY}\"," >> ./dist/env-config.js
 echo "  VITE_APP_VERSION: \"${VITE_APP_VERSION}\"," >> ./dist/env-config.js
 echo "  VITE_RECAPTCHA_KEY: \"${VITE_RECAPTCHA_KEY}\"," >> ./dist/env-config.js
 echo "  VITE_DNS_API_URL: \"${VITE_DNS_API_URL}\"," >> ./dist/env-config.js
+echo "  VITE_CHAT_URL: \"${VITE_CHAT_URL}\"," >> ./dist/env-config.js
+echo "  VITE_FILES_URL: \"${VITE_FILES_URL}\"," >> ./dist/env-config.js
 
 echo "}" >> ./dist/env-config.js
 

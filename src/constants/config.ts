@@ -24,6 +24,8 @@ declare global {
       VITE_APP_VERSION?: string;
       VITE_RECAPTCHA_KEY?: string;
       VITE_DNS_API_URL?: string;
+      VITE_CHAT_URL?: string;
+      VITE_FILES_URL?: string;
     };
   }
 }
@@ -36,9 +38,8 @@ export const API_CONFIG = {
 
   timeout: 30000,
   version: window._env_?.VITE_APP_VERSION || import.meta.env.VITE_APP_VERSION || '1.5.7-beta',
-  recaptch_key:
-    window._env_?.VITE_RECAPTCHA_KEY ||
-    import.meta.env.VITE_RECAPTCHA_KEY ||
-    '',
+  recaptch_key: window._env_?.VITE_RECAPTCHA_KEY || import.meta.env.VITE_RECAPTCHA_KEY || '',
   DNS_API_URL: window._env_?.VITE_DNS_API_URL || import.meta.env.VITE_DNS_API_URL,
+  CHAT_URL: window._env_?.VITE_CHAT_URL || import.meta.env.VITE_CHAT_URL,
+  FILES_URL: window._env_?.VITE_FILES_URL || import.meta.env.VITE_FILES_URL,
 } as const;
