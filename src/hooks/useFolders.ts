@@ -24,6 +24,7 @@ import { useEffect, useMemo, useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { folderDetailsAtom, type FolderDetail, type FolderQuota } from '../state/folders';
 import {
+  getAllSpecialFolderPaths,
   getSentFolderPath,
   resolveSpecialFolder,
   type SpecialFolderKind,
@@ -209,6 +210,9 @@ const LEGACY_SPECIAL_NAMES: Record<SpecialFolderKind, string[]> = {
  * - isFolder(folder, kind): is this folder the Sent / Drafts / Trash / Spam one
  * - settingsKey(folder): key of the folder in userSettings.folders ('inbox',
  *   'sent', ...), which are stored by role, not by path
+ *
+ * For Sent, isFolder accepts every sent folder ("INBOX/Sent Messages" next to
+ * "INBOX/Sent"), so they all list recipients and search by To like Sent does.
  */
 export function useSpecialFolderPaths() {
   const folders = useAtomValue(folderDetailsAtom);
@@ -220,9 +224,13 @@ export function useSpecialFolderPaths() {
       spam: resolveSpecialFolder(folders, 'spam')?.folder_name || 'Spam',
     };
 
+    const otherSentFolders = new Set(getAllSpecialFolderPaths(folders, 'sent'));
+
     const isFolder = (folder: string | undefined | null, kind: SpecialFolderKind) =>
       !!folder &&
-      (folder === paths[kind] || LEGACY_SPECIAL_NAMES[kind].includes(folder.toLowerCase()));
+      (folder === paths[kind] ||
+        LEGACY_SPECIAL_NAMES[kind].includes(folder.toLowerCase()) ||
+        (kind === 'sent' && otherSentFolders.has(folder)));
 
     const settingsKey = (folder: string | undefined | null): string => {
       if (!folder || folder.toUpperCase() === 'INBOX') return 'inbox';

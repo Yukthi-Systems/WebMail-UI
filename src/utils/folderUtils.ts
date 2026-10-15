@@ -230,6 +230,32 @@ export const resolveSpecialFolder = <T extends SpecialFolderCandidate>(
   return [...candidates].sort((a, b) => nameRank(a) - nameRank(b) || depth(a) - depth(b))[0];
 };
 
+/**
+ * Every folder that holds sent mail, not just the one resolveSpecialFolder
+ * picks: migrated mailboxes often keep a second one ("Sent Items", "Sent
+ * Messages") next to "Sent". Matches the \Sent flag, or a conventional Sent
+ * name at the top level (or directly under INBOX), so a "Sent Items" subfolder
+ * of a project folder is left alone.
+ */
+export const getAllSpecialFolderPaths = (
+  folders: SpecialFolderCandidate[] | undefined | null,
+  kind: SpecialFolderKind
+): string[] => {
+  if (!Array.isArray(folders)) return [];
+  const { flags, names } = SPECIAL_FOLDERS[kind];
+  return folders
+    .filter((folder) => {
+      const parts = folderPathParts(folder);
+      return (
+        (folder.flags ?? []).some((flag) =>
+          flags.includes(flag.replace(/^\\/, '').toLowerCase())
+        ) ||
+        (parts.length === 1 && names.includes(parts[0].trim().toLowerCase()))
+      );
+    })
+    .map((folder) => folder.folder_name);
+};
+
 /** Path of the Sent folder (where sent copies are saved), 'Sent' when unknown. */
 export const getSentFolderPath = (folders: SpecialFolderCandidate[] | undefined | null): string =>
   resolveSpecialFolder(folders, 'sent')?.folder_name || 'Sent';
