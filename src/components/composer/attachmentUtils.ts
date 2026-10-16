@@ -28,8 +28,8 @@ export const toBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const MAX_INDIVIDUAL_FILE_SIZE = 20 * 1024 * 1024;
-export const MAX_TOTAL_SIZE = 20 * 1024 * 1024;
+export const MAX_INDIVIDUAL_FILE_SIZE = 25 * 1024 * 1024;
+export const MAX_TOTAL_SIZE = 25 * 1024 * 1024;
 
 export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';

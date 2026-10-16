@@ -16,24 +16,17 @@
  */
 
 import { useDropzone, type FileRejection, type DropEvent } from 'react-dropzone';
-import { useCallback, useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import {
-  FaPaperclip,
-  FaX,
-  FaFilePdf,
-  FaFileWord,
-  FaFileExcel,
-  FaFilePowerpoint,
-  FaFileZipper,
-  FaFileCode,
-  FaFileAudio,
-  FaFileVideo,
-  FaFile,
-  FaEye,
-  FaImage,
-} from 'react-icons/fa6';
+import { useCallback, useState, useEffect, useMemo } from 'react';
+import { FaPaperclip, FaX, FaEye, FaPen } from 'react-icons/fa6';
 import { useToast } from '../../hooks/useToast';
+import AttachmentPreviewModal from '../common/attachmentPreview/AttachmentPreviewModal';
+import RenameFileDialog from '../common/attachmentPreview/RenameFileDialog';
+import { getAttachmentIcon } from '../common/attachmentPreview/fileIcon';
+import {
+  getFileTypeLabel,
+  normalizeMimeType,
+  type PreviewAttachment,
+} from '../common/attachmentPreview/previewUtils';
 import { FaExclamationTriangle } from 'react-icons/fa';
 import type { EmailAttachment } from '../../state/composer';
 import {
@@ -51,29 +44,6 @@ interface AttachmentUploaderProps {
   disableDrop?: boolean;
 }
 
-const getFileIcon = (mimeType: string) => {
-  if (mimeType.startsWith('image/')) return <FaImage className="w-5 h-5 text-[var(--blue-9)]" />;
-  if (mimeType.includes('pdf')) return <FaFilePdf className="w-5 h-5 text-[var(--red-9)]" />;
-  if (mimeType.includes('word') || mimeType.includes('document'))
-    return <FaFileWord className="w-5 h-5 text-[var(--blue-9)]" />;
-  if (mimeType.includes('sheet') || mimeType.includes('excel'))
-    return <FaFileExcel className="w-5 h-5 text-[var(--green-9)]" />;
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint'))
-    return <FaFilePowerpoint className="w-5 h-5 text-[var(--orange-9)]" />;
-  if (mimeType.includes('zip') || mimeType.includes('compressed'))
-    return <FaFileZipper className="w-5 h-5 text-[var(--gray-11)]" />;
-  if (mimeType.includes('audio')) return <FaFileAudio className="w-5 h-5 text-[var(--purple-9)]" />;
-  if (mimeType.includes('video')) return <FaFileVideo className="w-5 h-5 text-[var(--pink-9)]" />;
-  if (
-    mimeType.includes('javascript') ||
-    mimeType.includes('json') ||
-    mimeType.includes('html') ||
-    mimeType.includes('css')
-  )
-    return <FaFileCode className="w-5 h-5 text-[var(--cyan-9)]" />;
-  return <FaFile className="w-5 h-5 text-[var(--gray-11)]" />;
-};
-
 const isImageFile = (mimeType: string) => {
   return mimeType.startsWith('image/');
 };
@@ -87,8 +57,21 @@ const AttachmentUploader = ({
   const [, setRejectedFiles] = useState<File[]>([]);
   const [sizeWarning, setSizeWarning] = useState<string | null>(null);
   const [totalSizeWarning, setTotalSizeWarning] = useState<string | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [renamingIndex, setRenamingIndex] = useState<number | null>(null);
   const toast = useToast();
+
+  // Same shape the email viewer previews; forwarded files carry `content`, uploads `data`
+  const previewAttachments = useMemo<PreviewAttachment[]>(
+    () =>
+      attachments.map((file) => ({
+        filename: file.filename,
+        mimeType: file.mime_type || '',
+        content: file.data ?? file.content,
+        size: file.size,
+      })),
+    [attachments]
+  );
 
   const totalAttachmentSize = attachments.reduce(
     (total, attachment) => total + (attachment.size || 0),
@@ -107,16 +90,6 @@ const AttachmentUploader = ({
       return () => clearTimeout(timer);
     }
   }, [sizeWarning, totalSizeWarning]);
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && previewImage) {
-        setPreviewImage(null);
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [previewImage]);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[], rejectedFiles: FileRejection[], event?: DropEvent) => {
@@ -153,8 +126,8 @@ const AttachmentUploader = ({
           .join(', ');
         const warningMsg =
           oversizedFiles.length === 1
-            ? `File "${oversizedFiles[0].name}" (${formatFileSize(oversizedFiles[0].size)}) exceeds the 20MB limit`
-            : `${oversizedFiles.length} files exceed the 20MB limit: ${fileList}`;
+            ? `File "${oversizedFiles[0].name}" (${formatFileSize(oversizedFiles[0].size)}) exceeds the ${formatFileSize(MAX_INDIVIDUAL_FILE_SIZE)} limit`
+            : `${oversizedFiles.length} files exceed the ${formatFileSize(MAX_INDIVIDUAL_FILE_SIZE)} limit: ${fileList}`;
         setSizeWarning(warningMsg);
         toast.error({
           description: warningMsg,
@@ -207,16 +180,20 @@ const AttachmentUploader = ({
     updated.splice(index, 1);
     onAttachmentsChange(updated);
     setTotalSizeWarning(null);
+    setPreviewIndex(null);
+    setRenamingIndex((current) =>
+      current === null || current === index ? null : current > index ? current - 1 : current
+    );
     toast.error({
       description: `Removed "${removedFile.filename}"`,
       duration: 3000,
     });
   };
 
-  const handlePreviewClick = (attachment: EmailAttachment) => {
-    if (isImageFile(attachment.mime_type ?? '')) {
-      setPreviewImage(`data:${attachment.mime_type};base64,${attachment.data}`);
-    }
+  const renameAttachment = (index: number, filename: string) => {
+    onAttachmentsChange(attachments.map((file, i) => (i === index ? { ...file, filename } : file)));
+    setRenamingIndex(null);
+    toast.success({ description: `Renamed to "${filename}"`, duration: 3000 });
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -234,8 +211,8 @@ const AttachmentUploader = ({
           .join(', ');
         const warningMsg =
           oversizedRejects.length === 1
-            ? `File "${oversizedRejects[0].file.name}" (${formatFileSize(oversizedRejects[0].file.size)}) exceeds the 20MB limit`
-            : `${oversizedRejects.length} files exceed the 20MB limit: ${fileList}`;
+            ? `File "${oversizedRejects[0].file.name}" (${formatFileSize(oversizedRejects[0].file.size)}) exceeds the ${formatFileSize(MAX_INDIVIDUAL_FILE_SIZE)} limit`
+            : `${oversizedRejects.length} files exceed the ${formatFileSize(MAX_INDIVIDUAL_FILE_SIZE)} limit: ${fileList}`;
         setSizeWarning(warningMsg);
         toast.error({
           description: warningMsg,
@@ -329,64 +306,107 @@ const AttachmentUploader = ({
               {/* Scrollable List */}
               <div className="max-h-[175px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
                 {attachments.map((file, idx) => {
-                  const isImage = isImageFile(file.mime_type ?? '');
-                  const imagePreview = isImage
-                    ? `data:${file.mime_type};base64,${file.data}`
-                    : null;
+                  const mimeType = normalizeMimeType(file.mime_type ?? '', file.filename);
+                  const isImage = isImageFile(mimeType);
+                  const fileData = file.data ?? file.content;
+                  const imagePreview =
+                    isImage && fileData ? `data:${mimeType};base64,${fileData}` : null;
 
                   return (
                     <div
                       key={idx}
-                      title={file.filename}
-                      className="flex items-center gap-3 p-2 bg-[var(--gray-2)] rounded-lg hover:bg-[var(--gray-3)] transition-colors group"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Preview ${file.filename}`}
+                      title={`${file.filename}\n${getFileTypeLabel(mimeType)} • ${formatFileSize(file.size || 0)}\nClick to preview`}
+                      // Rows preview their file; the rest of the area still opens the file picker
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewIndex(idx);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPreviewIndex(idx);
+                        } else if (e.key === 'F2') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setRenamingIndex(idx);
+                        }
+                      }}
+                      className="flex items-start gap-2.5 p-2 rounded-lg bg-[var(--gray-2)] hover:bg-[var(--gray-3)] cursor-pointer transition-colors group outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-8)]"
                     >
                       {/* Thumbnail/Icon */}
-                      <div className="flex-shrink-0 w-14 h-14 rounded-md overflow-hidden bg-[var(--gray-4)] flex items-center justify-center border border-[var(--gray-6)]">
-                        {isImage && imagePreview ? (
+                      <div className="flex-shrink-0 w-10 h-10 rounded-md overflow-hidden bg-[var(--gray-4)] flex items-center justify-center border border-[var(--gray-6)]">
+                        {imagePreview ? (
                           <img
                             src={imagePreview}
                             alt={file.filename}
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          getFileIcon(file.mime_type ?? '')
+                          getAttachmentIcon(mimeType, 'text-lg')
                         )}
                       </div>
 
-                      {/* File Info */}
+                      {/* File Info: the name gets the full width (up to two lines), the
+                          actions share the line below with the type and size */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-[var(--gray-12)] truncate">
-                          {file.filename}
-                        </p>
-                        <p className="text-xs text-[var(--gray-10)] mt-0.5">
-                          {formatFileSize(file.size || 0)}
-                        </p>
-                      </div>
+                        <>
+                          <p className="text-xs font-medium leading-snug text-[var(--gray-12)] line-clamp-2 [overflow-wrap:anywhere]">
+                            {file.filename}
+                          </p>
+                          <div className="flex items-center justify-between gap-1 mt-0.5 min-h-6">
+                            <p className="min-w-0 truncate whitespace-nowrap text-[11px] text-[var(--gray-10)]">
+                              {getFileTypeLabel(mimeType)} • {formatFileSize(file.size || 0)}
+                            </p>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {isImage && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePreviewClick(file);
-                            }}
-                            className="p-1.5 rounded hover:bg-[var(--gray-4)] text-[var(--gray-11)] hover:text-[var(--gray-12)] transition-colors"
-                            title="Preview image"
-                          >
-                            <FaEye size={14} />
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeAttachment(idx);
-                          }}
-                          className="p-1.5 rounded hover:bg-[var(--red-3)] text-[var(--gray-11)] hover:text-[var(--red-11)] transition-colors"
-                          title="Remove attachment"
-                        >
-                          <FaX size={12} />
-                        </button>
+                            {/* Actions — on hover/focus, always on touch screens */}
+                            <div className="flex flex-shrink-0 items-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewIndex(idx);
+                                }}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className="p-1 [@media(pointer:coarse)]:p-2 rounded hover:bg-[var(--gray-4)] text-[var(--gray-11)] hover:text-[var(--gray-12)] transition-colors"
+                                title="Preview"
+                                aria-label={`Preview ${file.filename}`}
+                              >
+                                <FaEye size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenamingIndex(idx);
+                                }}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className="p-1 [@media(pointer:coarse)]:p-2 rounded hover:bg-[var(--gray-4)] text-[var(--gray-11)] hover:text-[var(--gray-12)] transition-colors"
+                                title="Rename (F2)"
+                                aria-label={`Rename ${file.filename}`}
+                              >
+                                <FaPen size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeAttachment(idx);
+                                }}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className="p-1 [@media(pointer:coarse)]:p-2 rounded hover:bg-[var(--red-3)] text-[var(--gray-11)] hover:text-[var(--red-11)] transition-colors"
+                                title="Remove attachment"
+                                aria-label={`Remove ${file.filename}`}
+                              >
+                                <FaX size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </>
                       </div>
                     </div>
                   );
@@ -397,36 +417,21 @@ const AttachmentUploader = ({
         </div>
       </div>
 
-      {/* Image Preview Modal via Portal */}
-      {previewImage &&
-        createPortal(
-          <div
-            onClick={() => setPreviewImage(null)}
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in cursor-zoom-out"
-          >
-            {/* Close Button */}
-            <button
-              onClick={() => setPreviewImage(null)}
-              className="absolute top-6 right-6 w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all hover:scale-110 z-[100000] border border-white/20 shadow-2xl"
-              title="Close (Esc)"
-            >
-              <FaX size={20} />
-            </button>
+      {/* Outside the drop area, so clicks in the dialog don't open the file picker */}
+      <RenameFileDialog
+        filename={renamingIndex !== null ? (attachments[renamingIndex]?.filename ?? null) : null}
+        onSave={(name) => renamingIndex !== null && renameAttachment(renamingIndex, name)}
+        onClose={() => setRenamingIndex(null)}
+      />
 
-            {/* Image Container */}
-            <div className="relative max-w-full max-h-full flex items-center justify-center pointer-events-none">
-              <img
-                src={previewImage}
-                alt="Preview"
-                onClick={(e) => e.stopPropagation()}
-                className="max-w-[95vw] max-h-[92vh] object-contain rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-scale-in pointer-events-auto cursor-default"
-              />
-
-              {/* Optional: Add a subtle caption if filename was available, but here we just have data URL */}
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* Same preview as received attachments, above the composer */}
+      <AttachmentPreviewModal
+        attachments={previewAttachments}
+        index={previewIndex}
+        onIndexChange={setPreviewIndex}
+        onRename={renameAttachment}
+        portal
+      />
 
       <style>{`
         @media (max-width: 1280px) {
