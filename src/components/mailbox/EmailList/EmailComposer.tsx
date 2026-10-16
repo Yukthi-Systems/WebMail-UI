@@ -1364,54 +1364,57 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
               </div>
             </div>
 
-            {/* Content Editor and Attachments */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-              <div className="col-span-3">
-                <ContentEditor
-                  onChange={({ html, text }) =>
-                    updateComposerData({
-                      html: html,
-                      text: text,
-                    })
-                  }
-                  value={composerData.html || ''}
-                  height={getEditorDimensions(isMobile, false, false).height}
-                  maxheight={getEditorDimensions(isMobile, false, false).maxHeight}
-                />
-              </div>
-              <div className="col-span-1">
-                <AttachmentUploader
-                  attachments={composerData.attachments || []}
-                  onAttachmentsChange={(newAttachments) =>
-                    updateComposerData({ attachments: newAttachments })
-                  }
-                  height={getEditorDimensions(isMobile, false, true).height}
-                  maxHeight={getEditorDimensions(isMobile, false, true).maxHeight}
-                  disableDrop={true}
-                />
-              </div>
-              {/* Quoted original email — full width, always visible, directly editable */}
-              {quotedHtml && (
-                <div className="col-span-4">
-                  <div
-                    ref={quotedEditableRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    style={{
-                      paddingLeft: 12,
-                      borderLeft: '3px solid var(--gray-5)',
-                      outline: 'none',
-                      fontSize: 14,
-                      lineHeight: 1.6,
-                      color: 'var(--gray-11)',
-                      cursor: 'text',
-                      maxWidth: '100%',
-                      overflowX: 'auto',
-                      wordBreak: 'break-word',
-                    }}
+            {/* Content Editor and Attachments: side by side when the composer itself is
+                wide enough, stacked when it is narrow (resized window, phone) */}
+            <div className="@container">
+              <div className="grid grid-cols-1 @2xl:grid-cols-4 gap-2">
+                <div className="min-w-0 @2xl:col-span-3">
+                  <ContentEditor
+                    onChange={({ html, text }) =>
+                      updateComposerData({
+                        html: html,
+                        text: text,
+                      })
+                    }
+                    value={composerData.html || ''}
+                    height={getEditorDimensions(isMobile, false, false).height}
+                    maxheight={getEditorDimensions(isMobile, false, false).maxHeight}
                   />
                 </div>
-              )}
+                <div className="min-w-0 @2xl:col-span-1">
+                  <AttachmentUploader
+                    attachments={composerData.attachments || []}
+                    onAttachmentsChange={(newAttachments) =>
+                      updateComposerData({ attachments: newAttachments })
+                    }
+                    height={getEditorDimensions(isMobile, false, true).height}
+                    maxHeight={getEditorDimensions(isMobile, false, true).maxHeight}
+                    disableDrop={true}
+                  />
+                </div>
+                {/* Quoted original email — full width, always visible, directly editable */}
+                {quotedHtml && (
+                  <div className="min-w-0 @2xl:col-span-4">
+                    <div
+                      ref={quotedEditableRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      style={{
+                        paddingLeft: 12,
+                        borderLeft: '3px solid var(--gray-5)',
+                        outline: 'none',
+                        fontSize: 14,
+                        lineHeight: 1.6,
+                        color: 'var(--gray-11)',
+                        cursor: 'text',
+                        maxWidth: '100%',
+                        overflowX: 'auto',
+                        wordBreak: 'break-word',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

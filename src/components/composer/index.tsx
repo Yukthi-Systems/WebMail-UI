@@ -1325,36 +1325,41 @@ const Composer = () => {
             </div>
           )}
 
-          {/* Content Editor and Attachments */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            {show_body_field && (
-              <div className={`${!show_attach_file_button ? 'col-span-4' : 'col-span-3'}`}>
-                <ContentEditor
-                  onChange={({ html, text }) =>
-                    updateComposerData({
-                      html: html,
-                      text: text,
-                    })
-                  }
-                  value={composerData.html}
-                  height={getEditorDimensions(isMobile, fullViewEnabled, false).height}
-                  maxheight={getEditorDimensions(isMobile, fullViewEnabled, false).maxHeight}
-                />
-              </div>
-            )}
-            {show_attach_file_button && (
-              <div className={`${!show_body_field ? 'col-span-4' : 'col-span-1'}`}>
-                <AttachmentUploader
-                  attachments={composerData.attachments || []}
-                  onAttachmentsChange={(newAttachments) =>
-                    updateComposerData({ attachments: newAttachments })
-                  }
-                  height={getEditorDimensions(isMobile, fullViewEnabled, true).height}
-                  maxHeight={getEditorDimensions(isMobile, fullViewEnabled, true).maxHeight}
-                  disableDrop={true}
-                />
-              </div>
-            )}
+          {/* Content Editor and Attachments: side by side when the composer itself is
+              wide enough, stacked when it is narrow (resized window, phone) */}
+          <div className="@container">
+            <div className="grid grid-cols-1 @2xl:grid-cols-4 gap-2">
+              {show_body_field && (
+                <div
+                  className={`min-w-0 ${!show_attach_file_button ? '@2xl:col-span-4' : '@2xl:col-span-3'}`}
+                >
+                  <ContentEditor
+                    onChange={({ html, text }) =>
+                      updateComposerData({
+                        html: html,
+                        text: text,
+                      })
+                    }
+                    value={composerData.html}
+                    height={getEditorDimensions(isMobile, fullViewEnabled, false).height}
+                    maxheight={getEditorDimensions(isMobile, fullViewEnabled, false).maxHeight}
+                  />
+                </div>
+              )}
+              {show_attach_file_button && (
+                <div className={`min-w-0 ${!show_body_field ? '@2xl:col-span-4' : '@2xl:col-span-1'}`}>
+                  <AttachmentUploader
+                    attachments={composerData.attachments || []}
+                    onAttachmentsChange={(newAttachments) =>
+                      updateComposerData({ attachments: newAttachments })
+                    }
+                    height={getEditorDimensions(isMobile, fullViewEnabled, true).height}
+                    maxHeight={getEditorDimensions(isMobile, fullViewEnabled, true).maxHeight}
+                    disableDrop={true}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </CustomModal>
