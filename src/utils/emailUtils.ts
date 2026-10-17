@@ -102,6 +102,45 @@ export function getReadReceiptRequest(
 
 export const normalizeId = (id = '') => id.replace(/[<>]/g, '').trim();
 
+/** Escapes text for use inside a RegExp, so it only ever matches itself. */
+export const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+interface InlineImage {
+  filename?: string;
+  contentId?: string;
+  content?: string;
+  mimeType?: string;
+}
+
+/**
+ * Replaces `cid:` references in email HTML with the inline images' data URLs.
+ * Matches by Content-ID, and by file name for clients that reference
+ * `cid:<filename>@...`. Names and IDs are used as plain text: file names like
+ * "photo ((1).gif" are common and must not be read as regex syntax.
+ */
+export const inlineCidImages = (html: string, attachments: InlineImage[]): string => {
+  let processed = html;
+  attachments.forEach((attachment) => {
+    const content = attachment.content || '';
+    if (!content) return;
+
+    const dataUrl = `data:${attachment.mimeType || 'image/png'};base64,${content}`;
+    const filename = attachment.filename || '';
+    const cleanCid = (attachment.contentId || '').replace(/[<>]/g, '');
+
+    const patterns: RegExp[] = [];
+    if (filename) patterns.push(new RegExp(`cid:${escapeRegExp(filename)}@[^"'\\s]+`, 'gi'));
+    // An empty ID would match every "cid:" in the email
+    if (cleanCid) patterns.push(new RegExp(`cid:${escapeRegExp(cleanCid)}`, 'gi'));
+
+    patterns.forEach((pattern) => {
+      // A function, so "$" sequences in the data are never read as replacement patterns
+      processed = processed.replace(pattern, () => dataUrl);
+    });
+  });
+  return processed;
+};
+
 export const getMessageId = (email: unknown) => {
   const e = (email || {}) as Record<string, unknown>;
   return normalizeId(

@@ -19,6 +19,7 @@ import { Button } from '@radix-ui/themes';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { FiAlertTriangle, FiEye, FiEyeOff, FiLock } from 'react-icons/fi';
 import { sanitizeHTMLContent } from '../../../../../utils/sanitizeHTMLContent';
+import { inlineCidImages } from '../../../../../utils/emailUtils';
 import LinkPreviewTooltip from './LinkPreviewTooltip';
 
 interface HtmlContentAttachment {
@@ -87,30 +88,9 @@ const EmailHtmlContent = ({
   const showTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    let processedHTML = htmlContent;
-
-    if (attachments && attachments.length > 0) {
-      attachments.forEach((attachment) => {
-        const filename = attachment.filename || '';
-        const contentId = attachment.contentId || '';
-        const content = attachment.content || '';
-        const mimeType = attachment.mimeType || 'image/png';
-
-        if (!content) return;
-
-        const dataUrl = `data:${mimeType};base64,${content}`;
-        const cleanCid = contentId.replace(/[<>]/g, '');
-
-        const patterns = [
-          new RegExp(`cid:${filename.replace(/\./g, '\\.')}@[^"'\\s]+`, 'gi'),
-          new RegExp(`cid:${cleanCid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi'),
-        ];
-
-        patterns.forEach((pattern) => {
-          processedHTML = processedHTML.replace(pattern, dataUrl);
-        });
-      });
-    }
+    const processedHTML = attachments?.length
+      ? inlineCidImages(htmlContent, attachments)
+      : htmlContent;
 
     setBlockedSrcDoc(buildSrcDoc(sanitizeHTMLContent(processedHTML, true)));
     setUnblockedSrcDoc(buildSrcDoc(sanitizeHTMLContent(processedHTML, false)));

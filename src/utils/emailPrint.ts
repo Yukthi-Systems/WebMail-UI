@@ -17,6 +17,7 @@
 
 import { decodeWords } from 'postal-mime';
 import { sanitizeEmailHtml } from './sanitizeHTMLContent';
+import { inlineCidImages } from './emailUtils';
 
 // Printable email/attachment objects carry whatever header keys the source
 // (IMAP fetch, postal-mime parse) provided, so both stay loosely typed.
@@ -283,28 +284,7 @@ export function printEmail(email: unknown, emailContent: string, attachments?: u
 
 /** Replace cid: URLs with base64 data URLs for inline attachments. */
 function processCidAttachments(html: string, attachments: PrintableAttachment[]): string {
-  let processed = html;
-  attachments.forEach((attachment) => {
-    const filename = attachment.filename || '';
-    const contentId = attachment.contentId || '';
-    const content = attachment.content || '';
-    const mimeType = attachment.mimeType || 'image/png';
-
-    if (!content) return;
-
-    const dataUrl = `data:${mimeType};base64,${content}`;
-    const cleanCid = contentId.replace(/[<>]/g, '');
-
-    const patterns = [
-      new RegExp(`cid:${filename.replace(/\./g, '\\.')}@[^"'\\s]+`, 'gi'),
-      new RegExp(`cid:${cleanCid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi'),
-    ];
-
-    patterns.forEach((pattern) => {
-      processed = processed.replace(pattern, dataUrl);
-    });
-  });
-  return processed;
+  return inlineCidImages(html, attachments);
 }
 
 /** Open email in new window. */
