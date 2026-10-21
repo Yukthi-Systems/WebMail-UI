@@ -608,7 +608,7 @@ const FiltersManagement = () => {
             options={[
               { value: 'all', label: 'Matching all of the following rules' },
               { value: 'any', label: 'Matching any of the following rules' },
-              // { value: 'all_messages', label: 'All messages' },
+              { value: 'all_messages', label: 'All messages' },
             ]}
             className="w-full"
           />

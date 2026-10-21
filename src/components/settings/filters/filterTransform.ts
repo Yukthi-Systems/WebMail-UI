@@ -329,20 +329,22 @@ export const transformToApiFormat = (uiFilter: UIFilter): SieveFilters => {
       }
     });
 
-  // Map scope to match_type
-  let match_type: 'allof' | 'anyof' | '';
-  if (uiFilter.scope === 'all') {
-    match_type = 'allof';
-  } else if (uiFilter.scope === 'any') {
-    match_type = 'anyof';
-  } else {
-    match_type = '';
+  // "All messages" has no rules — Sieve needs a test, so send `anyof (true)`.
+  // Any rules left over from before the scope was switched are dropped.
+  if (uiFilter.scope === 'all_messages') {
+    return {
+      name: uiFilter.name,
+      enabled: uiFilter.enabled,
+      match_type: 'anyof',
+      conditions: [['true']],
+      actions: actions,
+    };
   }
 
   return {
     name: uiFilter.name,
     enabled: uiFilter.enabled,
-    match_type: match_type,
+    match_type: uiFilter.scope === 'all' ? 'allof' : 'anyof',
     conditions: conditions,
     actions: actions,
   };
@@ -733,12 +735,11 @@ export const transformFromApiFormat = (apiFilter: ApiFilterInput): UIFilter => {
     return { id: `action-${index}`, type: action[0] as string, values: {} };
   });
 
+  // `anyof (true)` reads back as no conditions — that's an "All messages" filter
   let scope: 'all' | 'any' | 'all_messages' = 'all';
-  if (apiFilter.match_type === 'allof') scope = 'all';
+  if (!apiFilter.conditions || apiFilter.conditions.length === 0) scope = 'all_messages';
+  else if (apiFilter.match_type === 'allof') scope = 'all';
   else if (apiFilter.match_type === 'anyof') scope = 'any';
-  else if (!apiFilter.match_type && (!apiFilter.conditions || apiFilter.conditions.length === 0)) {
-    scope = 'all_messages';
-  }
 
   return {
     name: apiFilter.name,
