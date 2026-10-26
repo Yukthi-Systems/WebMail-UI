@@ -374,6 +374,63 @@ export const processIncomingHtml = (html: string, allAttachments: EmailAttachmen
   };
 };
 
+const PLAIN_TEXT_BLOCK_TAGS = new Set([
+  'p',
+  'div',
+  'tr',
+  'table',
+  'ul',
+  'ol',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'section',
+  'article',
+]);
+
+// Plain-text alternative for outgoing mail; quoted (<blockquote>) lines get a "> " prefix
+export const htmlToPlainText = (html: string): string => {
+  if (!html) return '';
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('style, script, title').forEach((el) => el.remove());
+
+  const walk = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return (node.textContent || '').replace(/\s+/g, ' ');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const tag = (node as Element).tagName.toLowerCase();
+    if (tag === 'br') return '\n';
+    if (tag === 'pre') return `\n${node.textContent || ''}\n`;
+
+    const inner = Array.from(node.childNodes).map(walk).join('');
+    if (tag === 'blockquote') {
+      const quoted = inner
+        .trim()
+        .replace(/\n(\s*\n){2,}/g, '\n\n')
+        .split('\n')
+        .map((line) => (line.trim() ? `> ${line.trim()}` : '>'))
+        .join('\n');
+      return `\n${quoted}\n`;
+    }
+    if (tag === 'li') return `\n- ${inner.trim()}\n`;
+    if (tag === 'td' || tag === 'th') return `${inner.trim()}\t`;
+    if (PLAIN_TEXT_BLOCK_TAGS.has(tag)) return `\n${inner}\n`;
+    return inner;
+  };
+
+  return walk(doc.body)
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 export const processOutgoingHtml = (htmlContent: string) => {
   if (!htmlContent) return { html: '', inlineAttachments: [] };
 

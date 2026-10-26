@@ -57,6 +57,7 @@ import { folderQuotaAtom } from '../../../state/folders';
 // Import Utilities
 import {
   formatComposedEmailData,
+  htmlToPlainText,
   parseEmailAddresses,
   convertPostalMimeAttachments,
   extractHeadersFromRawEmail,
@@ -486,15 +487,22 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
           const originalDate = escapeHtml(formatEmailDate(email.Date || ''));
 
           const parsedFrom = parseEmail(email.From);
-          const parsedTo = parseEmail(normalizedEmails.to as string);
           const originalFrom = {
             name: escapeHtml(parsedFrom.name || ''),
             email: escapeHtml(parsedFrom.email || ''),
           };
-          const originalTo = {
-            name: escapeHtml(parsedTo.name || ''),
-            email: escapeHtml(parsedTo.email || ''),
-          };
+          // Forward header lists every recipient, not just the first.
+          // Names are decoded after splitting so a decoded comma can't break the list.
+          const formatAddressList = (field: unknown) =>
+            parseEmailAddresses((field as string) || '')
+              .map((a) => {
+                const name = decodeWords(a.name || '');
+                if (!a.address) return escapeHtml(name);
+                return escapeHtml(name ? `${name} <${a.address}>` : a.address);
+              })
+              .join(', ');
+          const originalTo = formatAddressList(normalizedEmails.to);
+          const originalCc = formatAddressList(normalizedEmails.cc);
           const originalSubject = escapeHtml(decodeWords(email.Subject) || '');
 
           const borderColors = {
@@ -513,7 +521,9 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
           // Editable part: just the cursor area + signature (no original HTML here)
           const editableHtml = `<p><br><br></p>${signatureBlock}`;
 
-          let processedOriginalHtml = parsed?.html || parsed?.text || '';
+          // Plain-text mails: escape so "<user@host>" isn't parsed as a tag, and keep line breaks
+          let processedOriginalHtml =
+            parsed?.html || escapeHtml(parsed?.text || '').replace(/\r?\n/g, '<br>');
           if (parsed && parsed.html) {
             const result = processIncomingHtml(parsed.html, allAttachments);
             processedOriginalHtml = result.html;
@@ -542,7 +552,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                     <strong>From:</strong> ${originalFrom.name} &lt;${originalFrom.email}&gt;<br>
                     <strong>Date:</strong> ${originalDate}<br>
                     <strong>Subject:</strong> ${originalSubject}<br>
-                    <strong>To:</strong> ${originalTo.name} &lt;${originalTo.email}&gt;
+                    <strong>To:</strong> ${originalTo}${originalCc ? `<br>\n                    <strong>Cc:</strong> ${originalCc}` : ''}
                   </div>
                 </div>
                 <blockquote style="margin: 0; padding-left: 12px; border-left: 3px solid ${borderColors.forward}; color: ${borderColors.text};">
@@ -621,8 +631,10 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     if (hasAutoSavedRef.current) return;
 
     const liveQuoted = quotedEditableRef.current?.innerHTML ?? quotedHtml;
+    const draftHtml = (currentComposerData.html || '') + liveQuoted;
+    // text must include the quote too, not just the editor's own text
     const draftData = liveQuoted
-      ? { ...currentComposerData, html: (currentComposerData.html || '') + liveQuoted }
+      ? { ...currentComposerData, html: draftHtml, text: htmlToPlainText(draftHtml) }
       : currentComposerData;
     const mailData = formatComposedEmailData(draftData, {
       folder_path: saveDraft || 'Drafts',
@@ -680,8 +692,10 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     const liveQuoted = quotedEditableRef.current?.innerHTML ?? quotedHtml;
     // Use overrides or current state; append quoted block so it's included in sent/drafted email
     const baseData = { ...composerData, ...dataOverrides };
+    const combinedHtml = (baseData.html || '') + liveQuoted;
+    // Plain-text alternative must carry the quoted/forwarded content as well
     const currentData = liveQuoted
-      ? { ...baseData, html: (baseData.html || '') + liveQuoted }
+      ? { ...baseData, html: combinedHtml, text: htmlToPlainText(combinedHtml) }
       : baseData;
 
     if (isDraft) {
