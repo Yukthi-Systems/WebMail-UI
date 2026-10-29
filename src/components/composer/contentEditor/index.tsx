@@ -550,6 +550,8 @@ const ContentEditor = ({
       }),
       CustomTable.configure({
         resizable: true,
+        // Matches the td/th min-width below; sets the table's min-width so it scrolls
+        cellMinWidth: 100,
       }),
       TableRow,
       CustomTableHeader,
@@ -859,12 +861,17 @@ const ContentEditor = ({
   display: block;
 }
 
+/* Wide tables (e.g. pasted from Excel) scroll instead of squeezing every column */
+.editor-content .tableWrapper {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
 .editor-content table {
   border-collapse: collapse;
   margin: 12px 0;
   width: 100%;
-  table-layout: fixed;
-  overflow: hidden;
+  table-layout: auto;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 

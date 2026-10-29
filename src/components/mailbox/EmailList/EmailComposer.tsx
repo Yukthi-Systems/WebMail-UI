@@ -186,9 +186,15 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   const { mutate: deleteMutate } = useDeleteMail();
 
   const folderForRaw = email?.folderPath || folder;
-  const shouldFetchRaw = Boolean(email?.id && mode !== 'new' && isInitialized === false);
+  // Not gated on isInitialized: a kept-mounted composer switching to another email must
+  // still fetch that email's raw source, or the quote falls back to the placeholder
+  const shouldFetchRaw = Boolean(email?.id && mode !== 'new');
   const isMobile = useIsMobile();
-  const { data: rawEmail, isLoading: isLoadingRaw } = useEmailRaw(
+  const {
+    data: rawEmail,
+    isLoading: isLoadingRaw,
+    isError: isRawError,
+  } = useEmailRaw(
     email?.id?.toString() || '',
     folderForRaw || 'INBOX',
     getMessageId(email) || '',
@@ -282,7 +288,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
   useEffect(() => {
     const setupEmailContent = async () => {
-      if (isLoadingRaw) {
+      // Wait for the raw source unless the fetch has given up
+      if (isLoadingRaw || (shouldFetchRaw && !rawEmail && !isRawError)) {
         setIsLoading(true);
         return;
       }
@@ -294,7 +301,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
       const normalizedEmails = normalizeFieldNames(email);
 
-      const currentEmailId = email.id.toString();
+      // Keyed by mode too, so reply -> forward on the same email rebuilds the quote
+      const currentEmailId = `${email.id}:${mode}`;
       if (emailIdRef.current === currentEmailId && isInitialized) {
         return;
       }
@@ -568,6 +576,10 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                   : `<p>---------- Forwarded message ----------</p><p>[Email content unavailable]</p>`;
             }
           } else {
+            toast.error({
+              description:
+                'Could not load the original message. Its content will not be included.',
+            });
             quotedBlock =
               mode === 'reply' || mode === 'replyAll'
                 ? `<p>On ${originalDate}, ${originalFrom.name || originalFrom.email} wrote:</p><blockquote>[Email content unavailable]</blockquote>`
@@ -619,6 +631,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     userSettings,
     rawEmail,
     isLoadingRaw,
+    isRawError,
+    shouldFetchRaw,
     setComposerData,
     resetComposerData,
   ]);

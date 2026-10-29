@@ -58,6 +58,9 @@ function buildSrcDoc(bodyHtml: string): string {
       word-break: break-word;
       overflow-wrap: break-word;
     }
+    /* break-word lets auto-layout tables shrink columns mid-word ("Busi|ness");
+       wide tables scroll in [data-table-scroll] instead */
+    td, th { word-break: normal; }
     img { max-width: 100%; }
     a { cursor: pointer; }
     [data-table-scroll] {
