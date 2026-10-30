@@ -60,7 +60,13 @@ const PRIMARY_COLOR = {
 const RECAPTCHA_SITE_KEY = API_CONFIG.recaptch_key;
 
 const schema = yup.object({
-  email: yup.string().email('Invalid email format').required('Email is required'),
+  // Addresses are case-insensitive; normalize so login, domain checks and stored user details agree
+  email: yup
+    .string()
+    .trim()
+    .lowercase()
+    .email('Invalid email format')
+    .required('Email is required'),
   password: yup
     .string()
     .min(8, 'Password must be at least 8 characters')
