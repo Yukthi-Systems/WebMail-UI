@@ -373,8 +373,10 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
     }));
 
     useEffect(() => {
+      // Single-letter queries are slower, so a reply can land after a newer one; ignore stale ones
+      let cancelled = false;
       const fetchSuggestions = async () => {
-        if (debouncedInput.length > 2) {
+        if (debouncedInput.trim().length > 0) {
           try {
             const response1 = await fetch(
               `${API_URL}/contacts/search?partial_email=${debouncedInput}`,
@@ -433,6 +435,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
               }
             });
 
+            if (cancelled) return;
             setSuggestionsOne(mergedContactsOne);
             setSuggestionsTwo(mergedContactsTwo);
             setShowSuggestions(true);
@@ -448,6 +451,9 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
         }
       };
       fetchSuggestions();
+      return () => {
+        cancelled = true;
+      };
     }, [debouncedInput, csrfToken, isVersionTwoUser]);
 
     useEffect(() => {
