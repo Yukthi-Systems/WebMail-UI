@@ -297,7 +297,7 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
                 />
                 {/* <div className="flex justify-end">
                   <a
-                    href="https://prp.mailservice25.com/"
+                    href={API_CONFIG.passwordResetURL}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs font-medium text-orange-600 hover:text-orange-700 transition-colors"
@@ -358,7 +358,7 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-3 mb-4">
             {[
               {
-                href: 'https://prp.mailservice25.com/',
+                href: API_CONFIG.passwordResetURL,
                 icon: FaLock,
                 label: 'Forgot password / Reset Password?',
               },

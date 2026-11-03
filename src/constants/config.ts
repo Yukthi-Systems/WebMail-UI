@@ -24,6 +24,7 @@ declare global {
       VITE_APP_VERSION?: string;
       VITE_RECAPTCHA_KEY?: string;
       VITE_DNS_API_URL?: string;
+      VITE_PASSWORD_RESET_URL?: string;
     };
   }
 }
@@ -41,4 +42,9 @@ export const API_CONFIG = {
     import.meta.env.VITE_RECAPTCHA_KEY ||
     '',
   DNS_API_URL: window._env_?.VITE_DNS_API_URL || import.meta.env.VITE_DNS_API_URL,
+  // Differs per deployment (prod vs RC), so it is a runtime setting
+  passwordResetURL:
+    window._env_?.VITE_PASSWORD_RESET_URL ||
+    import.meta.env.VITE_PASSWORD_RESET_URL ||
+    'https://admin.mailservice25.com/reset/admin?mode=identity',
 } as const;
