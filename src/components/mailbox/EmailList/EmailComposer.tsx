@@ -760,15 +760,19 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
     const mutateFn = isDraft ? draftMutate : sendMutate;
 
-    const autoDelete = isDraft
-      ? () => {
-          const payload = {
-            path: folder || 'INBOX',
-            body: [Number(email?.id)],
-          };
-          deleteMutate(payload);
-        }
-      : () => {};
+    // Re-saving an opened draft replaces the old copy. Only for mode 'draft':
+    // in reply/forward `email` is the ORIGINAL message, and this endpoint
+    // expunges permanently (no Trash), so it would destroy the user's email.
+    const autoDelete =
+      isDraft && mode === 'draft' && email?.id
+        ? () => {
+            const payload = {
+              path: email.folderPath || folder || saveDraft || 'Drafts',
+              body: [Number(email.id)],
+            };
+            deleteMutate(payload);
+          }
+        : () => {};
 
     if (mailData) {
       mailData.body_html = mailData.html || '';
