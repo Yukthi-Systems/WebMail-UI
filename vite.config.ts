@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
       svgr(),
       VitePWA({
         registerType: 'autoUpdate', // Automatically update the service worker
+        injectRegister: false,
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
         manifest: {
           name: 'Mail Service 25',

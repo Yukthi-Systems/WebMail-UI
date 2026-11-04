@@ -16,6 +16,7 @@
  */
 
 import { StrictMode } from 'react';
+import { registerSW } from 'virtual:pwa-register';
 import { createRoot } from 'react-dom/client';
 import {
   QueryClient,
@@ -128,6 +129,9 @@ declare module '@tanstack/react-router' {
     router: typeof router;
   }
 }
+
+registerSW({ immediate: true });
+
 const rootElement = document.getElementById('root')!;
 if (!rootElement.innerHTML) {
   const root = createRoot(rootElement);
