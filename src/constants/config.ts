@@ -30,7 +30,7 @@ declare global {
 }
 
 export const API_CONFIG = {
-  // Check runtime window._env_ first, fallback to Vite build-time env
+  // Check runtime , fallback to Vite build-time env
   baseURL: window._env_?.VITE_API_URL || import.meta.env.VITE_API_URL,
 
   DNS_API_KEY: window._env_?.VITE_DNS_API_KEY || import.meta.env.VITE_DNS_API_KEY,
