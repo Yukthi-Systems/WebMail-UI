@@ -161,6 +161,14 @@ const EmailHtmlContent = ({
         wrapper.appendChild(table);
       });
 
+      // Tabs opened from email links now run scripts (escape-sandbox), so cut the
+      // window.opener link: otherwise a page could redirect the webmail tab
+      // (reverse tabnabbing). noreferrer also keeps the webmail URL private.
+      Array.from(doc.querySelectorAll('a[href]')).forEach((a) => {
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+      });
+
       // Auto-resize when email images load or layout changes
       if (typeof ResizeObserver !== 'undefined') {
         const ro = new ResizeObserver(syncHeight);
@@ -254,7 +262,9 @@ const EmailHtmlContent = ({
           <iframe
             ref={iframeRef}
             srcDoc={srcDoc}
-            sandbox="allow-same-origin allow-popups"
+            // escape-sandbox: links opened from an email must load as normal pages,
+            // otherwise they inherit "no scripts" and JS sites open blank
+            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             title="Email content"
             style={{
               width: '100%',
