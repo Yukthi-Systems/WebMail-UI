@@ -15,6 +15,8 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import type { ThreadInfo } from './threads';
+
 /**
  * Extracts the display name from an email address field.
  *
@@ -89,4 +91,9 @@ export interface SimplifiedEmail {
   attachmentCount?: number;
   // From the list/search API; embedded body images don't count
   has_attachment?: boolean;
+  /** id is the UID: unique only inside this folder */
+  uid?: string;
+  folderPath?: string;
+  /** Conversation rows (search in conversation view) */
+  thread?: ThreadInfo;
 }

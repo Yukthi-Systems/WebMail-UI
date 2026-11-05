@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { Tooltip } from '@radix-ui/themes';
 import { useAtomValue } from 'jotai';
 import { useState, useRef, useEffect } from 'react';
 import { FaAngleLeft, FaAngleRight } from 'react-icons/fa6';
@@ -24,10 +25,21 @@ interface PaginationProps {
   currentPage: number;
   totalPages: number;
   totalCount: number;
+  /** Replaces the default "{totalCount} emails" */
+  countLabel?: string;
+  /** Shown when hovering over the count */
+  countTooltip?: string;
   onPageChange: (page: number) => void;
 }
 
-const Pagination = ({ currentPage, totalPages, totalCount, onPageChange }: PaginationProps) => {
+const Pagination = ({
+  currentPage,
+  totalPages,
+  totalCount,
+  countLabel,
+  countTooltip,
+  onPageChange,
+}: PaginationProps) => {
   const [inputValue, setInputValue] = useState(currentPage.toString());
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -203,7 +215,17 @@ const Pagination = ({ currentPage, totalPages, totalCount, onPageChange }: Pagin
         </div>
 
         <span className="text-sm text-[var(--gray-11)] text-nowrap">of {totalPages}</span>
-        <span className="text-sm text-[var(--gray-11)] text-nowrap">• {totalCount} emails</span>
+        {countTooltip ? (
+          <Tooltip content={countTooltip}>
+            <span tabIndex={0} className="text-sm text-[var(--gray-11)] text-nowrap cursor-help">
+              • {countLabel ?? `${totalCount} emails`}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="text-sm text-[var(--gray-11)] text-nowrap">
+            • {countLabel ?? `${totalCount} emails`}
+          </span>
+        )}
       </div>
 
       <div className="flex gap-1">

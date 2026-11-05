@@ -16,12 +16,29 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { searchEmails, type SearchRequest } from '../api/search';
+import { searchEmails, searchThreads, type SearchRequest } from '../api/search';
 
-export const useSearchEmails = (searchData: SearchRequest, enabled: boolean = true) => {
+/**
+ * Search. With `conversations` (conversation view) the results are the
+ * conversations containing a match, one row each (POST /email/search/threads).
+ */
+export const useSearchEmails = (
+  searchData: SearchRequest,
+  enabled: boolean = true,
+  {
+    conversations = false,
+    filterBy = 'all',
+    sentFolder,
+  }: { conversations?: boolean; filterBy?: string; sentFolder?: string } = {}
+) => {
   return useQuery({
-    queryKey: ['search-emails', searchData],
-    queryFn: () => searchEmails(searchData),
+    queryKey: conversations
+      ? ['search-emails', 'threads', searchData, filterBy]
+      : ['search-emails', searchData],
+    queryFn: () =>
+      conversations
+        ? searchThreads(searchData, { filterBy, sentFolder })
+        : searchEmails(searchData),
     enabled:
       enabled &&
       (!!searchData.from_ ||

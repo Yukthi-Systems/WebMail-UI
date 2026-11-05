@@ -16,7 +16,7 @@
  */
 
 import { Separator, Popover, Button } from '@radix-ui/themes';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEmailRaw } from '../../../../../../hooks/useEmailRaw';
 import {
   emailViewErrorMessage,
@@ -24,6 +24,7 @@ import {
   useParsedEmailView,
 } from '../../../../../../hooks/useEmailView';
 import EmailLoadingState from '../../EmailLoadingState';
+import { PendingReplyNotice } from './PendingReplyNotice';
 import EmailNoDataState from '../../EmailNoDataState';
 import EmailTabs, { type ParsedEmailForTabs } from '../../EmailTabs';
 import { decodeWords } from 'postal-mime';
@@ -42,11 +43,7 @@ import { parseEmail } from '../../../../../../utils/emailPerser';
 import { useUserTimezone } from '../../../../../../hooks/useTimezone';
 import { EmailActions } from './EmailActions';
 import { RecipientSection } from '../../RecipientSection';
-import {
-  getMessageId,
-  normalizeFieldNames,
-  parseMultipleEmails,
-} from '../../../../../../utils/emailUtils';
+import { normalizeFieldNames, parseMultipleEmails } from '../../../../../../utils/emailUtils';
 import { useToast } from '../../../../../../hooks/useToast';
 import {
   useCopyMail,
@@ -64,10 +61,11 @@ import {
   useUpdateFolderUnreadCount,
 } from '../../../../../../hooks/useFolders';
 import FolderDialog from '../../../MoveEmail';
+import { useMarkSeenOnOpen } from '../../../../../../hooks/useMarkSeenOnOpen';
 import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../../../../utils/emailPrint';
 import { userDetailsAtom } from '../../../../../../state/userDetails';
 import { useCreateEmailTemplate, useTemplateActions } from '../../../../../../hooks/useTempelate';
-import type { EmailLike } from '../../../../../../utils/emailThreading';
+import type { EmailLike } from '../../../../../../utils/threads';
 
 interface Folder {
   id: string;
@@ -88,9 +86,11 @@ interface ThreadEmailCardProps {
   onForward?: (email: EmailLike) => void;
   onForwardAsAttachment?: (email: EmailLike, rawContent: string) => void;
   onReplyAll?: (email: EmailLike) => void;
-  handleSingleEmailDelete?: (emailId: string) => void;
+  /** Deletes this email (its UID is only valid in its own folderPath) */
+  handleSingleEmailDelete?: (email: EmailLike) => void;
   onBack?: () => void;
-  FilteredListLength?: (emailId: string) => void;
+  /** This email left the conversation (moved): drop it from the view. */
+  FilteredListLength?: (email: EmailLike) => void;
   handleSingleEmailMarkAsFlagged?: (emailId: string, action: boolean) => void;
   handleSingleEmailMarkAsRead?: (emailId: string, action: boolean) => void;
   reFetchMails?: () => void;
@@ -142,26 +142,35 @@ const ThreadEmailCard = ({
     }
   }, [isCurrentEmail]);
 
+  // A reply just sent: shown from what was sent until
+  // the user reloads the conversation and gets the real copy from the Sent folder
+  const pending = threadEmail.pending;
+  const uid = String(threadEmail.id);
+
   // Raw is only fetched on demand (download .eml, view source, forward as attachment)
-  const { data: rawEmail, refetch } = useEmailRaw(
-    String(threadEmail.id),
-    folderPath,
-    getMessageId(threadEmail) || '',
-    false
-  );
+  const { data: rawEmail, refetch } = useEmailRaw(uid, folderPath, false);
 
   // Opening = body + attachment list only, fetched once the card is expanded
   const {
     data: emailViewData,
-    isLoading,
+    isLoading: isViewLoading,
     error: viewError,
-  } = useEmailView(String(threadEmail.id), folderPath, getMessageId(threadEmail) || '', isExpanded);
-  const parsedEmail = useParsedEmailView(
-    emailViewData,
-    String(threadEmail.id),
-    folderPath,
-    getMessageId(threadEmail) || ''
+  } = useEmailView(uid, folderPath, isExpanded && !pending);
+  const fetchedEmail = useParsedEmailView(emailViewData, uid, folderPath);
+  const parsedEmail = useMemo(
+    () =>
+      pending
+        ? {
+            html: pending.html,
+            text: pending.text,
+            attachments: [],
+            headers: {},
+            flags: ['\\Seen'],
+          }
+        : fetchedEmail,
+    [pending, fetchedEmail]
   );
+  const isLoading = !pending && isViewLoading;
 
   const { patchEmailFlags } = useEmailCacheUpdater(folderPath);
   const specialFolders = useSpecialFolderPaths();
@@ -182,8 +191,8 @@ const ThreadEmailCard = ({
   const { formatUserDateNice } = useUserTimezone();
   const createTemplateMutation = useCreateEmailTemplate();
 
-  const handleDelete = async (id: string) => {
-    handleSingleEmailDelete(id);
+  const handleDelete = async () => {
+    handleSingleEmailDelete(threadEmail);
   };
 
   const handleSaveAsTemplate = async (email: EmailLike) => {
@@ -223,26 +232,31 @@ const ThreadEmailCard = ({
     lastSyncedEmailId.current = emailKey;
 
     onContentLoaded?.(parsedEmail.html || parsedEmail.text || '');
+  }, [parsedEmail, threadEmail.id, folderPath, isExpanded, onContentLoaded]);
 
-    // Backend already marked as read via mark_as_read=true on the view fetch.
-    // Sync frontend: update the email list cache FLAGS and decrement folder unread count.
-    if (!threadEmail.FLAGS?.includes('\\Seen')) {
-      patchEmailFlags([Number(threadEmail.id)], '\\Seen');
-      updateFolderUnreadCount(-1);
-    }
-  }, [
-    parsedEmail,
-    threadEmail.id,
-    threadEmail.FLAGS,
-    folderPath,
-    isExpanded,
-    onContentLoaded,
-    patchEmailFlags,
-    updateFolderUnreadCount,
-  ]);
+  // Opening a card reads the email: mark it once (in its own folder)
+  useMarkSeenOnOpen({
+    uid,
+    folder: folderPath,
+    isUnread: !threadEmail.FLAGS?.includes('\\Seen'),
+    isLoaded: !!emailViewData,
+    isLoading: isViewLoading,
+    active: isExpanded && !pending,
+  });
 
   const renderHeaderInfo = () => {
-    const omitKeys = ['FLAGS', 'Thread-List', 'Thread-View', '_inReplyTo', '_references', 'id'];
+    const omitKeys = [
+      'FLAGS',
+      '_inReplyTo',
+      '_references',
+      'id',
+      'uid',
+      'folderPath',
+      'folder_path',
+      'has_attachment',
+      'thread',
+      'pending',
+    ];
     const filteredHeaders = Object.fromEntries(
       Object.entries(threadEmail).filter(([key]) => !omitKeys.includes(key))
     );
@@ -304,7 +318,7 @@ const ThreadEmailCard = ({
           setDialogOpen(false);
           setCopyDialogOpen(false);
           setSelectedFolder('');
-          FilteredListLength(String(threadEmail?.id));
+          FilteredListLength(threadEmail);
         },
         onError: () => {
           if (action === 'copy' && isQuotaExceeded) {
@@ -423,8 +437,7 @@ const ThreadEmailCard = ({
           onSuccess: (res) => {
             toast.dismiss(loadingId);
             toast.success({
-              description:
-                (res as unknown as { message?: string })?.message || 'Marked as unread.',
+              description: (res as unknown as { message?: string })?.message || 'Marked as unread.',
             });
             patchEmailFlags([emailIdNum], undefined, '\\Seen');
             if (!wasUnread) updateFolderUnreadCount(1);
@@ -566,37 +579,41 @@ const ThreadEmailCard = ({
                   className="flex items-center gap-1 flex-shrink-0"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div>
-                    <EmailActions
-                      email={threadEmail}
-                      onSaveAsTemplate={handleSaveAsTemplate}
-                      onReply={onReply}
-                      onReplyAll={onReplyAll}
-                      onForward={onForward}
-                      onForwardAsAttachment={handleThreadForwardAsAttachment}
-                      onDelete={handleDelete}
-                      onMove={handleMoveClick}
-                      onCopy={handleCopyClick}
-                      handleSingleEmailMarkAsFlagged={handleThreadMarkAsFlagged}
-                      handleSingleEmailMarkAsRead={handleThreadMarkAsRead}
-                      reFetchMails={reFetchMails}
-                      onPrint={handleThreadPrint}
-                      onDownload={handleThreadDownload}
-                      onEditAsNew={onEditAsNew}
-                      onSaveAsContact={onSaveAsContact}
-                      onViewInWindow={(e) =>
-                        viewEmailInWindow(
-                          e,
-                          parsedEmail?.html || parsedEmail?.text || '',
-                          parsedEmail?.attachments || []
-                        )
-                      }
-                      onViewInRaw={async () => {
-                        const content = rawEmail || (await refetch()).data;
-                        if (content) viewEmailRaw(content);
-                      }}
-                    />
-                  </div>
+                  {pending ? (
+                    <PendingReplyNotice />
+                  ) : (
+                    <div>
+                      <EmailActions
+                        email={threadEmail}
+                        onSaveAsTemplate={handleSaveAsTemplate}
+                        onReply={onReply}
+                        onReplyAll={onReplyAll}
+                        onForward={onForward}
+                        onForwardAsAttachment={handleThreadForwardAsAttachment}
+                        onDelete={handleDelete}
+                        onMove={handleMoveClick}
+                        onCopy={handleCopyClick}
+                        handleSingleEmailMarkAsFlagged={handleThreadMarkAsFlagged}
+                        handleSingleEmailMarkAsRead={handleThreadMarkAsRead}
+                        reFetchMails={reFetchMails}
+                        onPrint={handleThreadPrint}
+                        onDownload={handleThreadDownload}
+                        onEditAsNew={onEditAsNew}
+                        onSaveAsContact={onSaveAsContact}
+                        onViewInWindow={(e) =>
+                          viewEmailInWindow(
+                            e,
+                            parsedEmail?.html || parsedEmail?.text || '',
+                            parsedEmail?.attachments || []
+                          )
+                        }
+                        onViewInRaw={async () => {
+                          const content = rawEmail || (await refetch()).data;
+                          if (content) viewEmailRaw(content);
+                        }}
+                      />
+                    </div>
+                  )}
 
                   <Button
                     variant="ghost"

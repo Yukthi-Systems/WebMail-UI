@@ -36,7 +36,7 @@ import MobileBottomNav from './MobileBottomNav';
 import ResizablePanel from '../common/ResizeblePanel';
 import { useKeyboardNavigation } from '../../hooks/useKeyboardShortcuts';
 import { usePanelSizes } from '../../hooks/usePanelSizes';
-import type { EmailLike } from '../../utils/emailThreading';
+import { countUnread, type EmailLike } from '../../utils/threads';
 
 const Mailbox = () => {
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
@@ -56,6 +56,8 @@ const Mailbox = () => {
   const { isDesktop } = useWindowSize();
   const foldersRef = useRef<{ focusFirstFolder: () => void }>(null);
   const [draggedEmails, setDraggedEmails] = useState<number[]>([]);
+  // Folder of the dragged UIDs (a search can list another folder than the open one)
+  const [dragSourceFolder, setDragSourceFolder] = useState<string | undefined>(undefined);
   const [isDragging, setIsDragging] = useState(false);
   const { panelSizes, updatePanelSize } = usePanelSizes();
 
@@ -65,8 +67,9 @@ const Mailbox = () => {
     }
   }, [clearSelectedEmail]);
 
-  const handleDragStart = useCallback((emailIds: number[]) => {
+  const handleDragStart = useCallback((emailIds: number[], sourceFolder?: string) => {
     setDraggedEmails(emailIds);
+    setDragSourceFolder(sourceFolder);
     setIsDragging(true);
   }, []);
 
@@ -81,9 +84,10 @@ const Mailbox = () => {
 
   const handleDropOnFolder = useCallback(
     (targetFolder: string) => {
-      if (draggedEmails.length === 0 || !folder) return;
+      const sourceFolder = dragSourceFolder || folder;
+      if (draggedEmails.length === 0 || !sourceFolder) return;
 
-      if (targetFolder === folder) {
+      if (targetFolder === sourceFolder) {
         handleDragEnd();
         return;
       }
@@ -96,8 +100,8 @@ const Mailbox = () => {
 
       moveMutate(
         {
-          path: folder,
-          sourceFolder: folder,
+          path: sourceFolder,
+          sourceFolder,
           destFolder: targetFolder,
           body: draggedEmails,
         },
@@ -105,16 +109,15 @@ const Mailbox = () => {
           onSuccess: () => {
             // Compute unread delta from cached email pages before invalidating
             const cachedPages = queryClient.getQueriesData<{ emails?: EmailLike[] }>({
-              queryKey: ['folder', folder],
+              queryKey: ['folder', sourceFolder],
             });
             let unreadMoved = 0;
             for (const [, data] of cachedPages) {
               const raw = data?.emails;
               if (!raw) continue;
               const emails: EmailLike[] = Array.isArray(raw) ? raw : Object.values(raw);
-              unreadMoved += emails.filter(
-                (e) => draggedEmails.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
-              ).length;
+              // Conversation rows count their unread emails (draggedEmails are UIDs)
+              unreadMoved += countUnread(emails, draggedEmails);
             }
 
             // Clear selection before invalidating so the refetch render sees no stale IDs
@@ -123,7 +126,7 @@ const Mailbox = () => {
 
             // Update both source and destination folder counts locally
             if (unreadMoved > 0) {
-              updateAnyFolderUnreadCount(folder, -unreadMoved);
+              updateAnyFolderUnreadCount(sourceFolder, -unreadMoved);
               updateAnyFolderUnreadCount(targetFolder, unreadMoved);
             }
 
@@ -145,6 +148,7 @@ const Mailbox = () => {
     },
     [
       draggedEmails,
+      dragSourceFolder,
       folder,
       moveMutate,
       queryClient,

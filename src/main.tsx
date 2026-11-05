@@ -122,7 +122,11 @@ window.addEventListener('beforeinstallprompt', (e) => {
   window._deferredPWAPrompt = e as BeforeInstallPromptEvent;
 });
 
-const router = createRouter({ routeTree, defaultNotFoundComponent: () => <NotFound /> });
+const router = createRouter({
+  routeTree,
+  context: { queryClient },
+  defaultNotFoundComponent: () => <NotFound />,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {

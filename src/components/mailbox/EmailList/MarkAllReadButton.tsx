@@ -25,7 +25,7 @@ import { useMarkFolderRead } from '../../../hooks/useEmails';
 import { useToast } from '../../../hooks/useToast';
 import { folderDetailsAtom } from '../../../state/folders';
 import { searchStateAtom } from '../../../state/search';
-import type { EmailLike } from '../../../utils/emailThreading';
+import type { EmailLike } from '../../../utils/threads';
 
 interface MarkAllReadButtonProps {
   /** 'icon' renders a compact icon-only trigger (mobile toolbar). */
@@ -69,11 +69,14 @@ const MarkAllReadButton = ({ variant = 'button' }: MarkAllReadButtonProps) => {
             if (!Array.isArray(old?.emails)) return old;
             return {
               ...old,
-              emails: old.emails.map((email) =>
-                email.FLAGS?.includes('\\Seen')
-                  ? email
-                  : { ...email, FLAGS: [...(email.FLAGS || []), '\\Seen'] }
-              ),
+              emails: old.emails.map((email) => ({
+                ...email,
+                FLAGS: email.FLAGS?.includes('\\Seen')
+                  ? email.FLAGS
+                  : [...(email.FLAGS || []), '\\Seen'],
+                // Conversation rows: none of their emails is unread any more
+                ...(email.thread ? { thread: { ...email.thread, unreadCount: 0 } } : {}),
+              })),
             };
           }
         );

@@ -24,6 +24,9 @@ import type { Email } from '../../../api/mailbox';
 import type { Email as ParsedPostalEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { useParams } from '@tanstack/react-router';
 import { useEmailRaw } from '../../../hooks/useEmailRaw';
+import { useQueryClient } from '@tanstack/react-query';
+import { addPendingReply } from '../../../hooks/useThreadConversation';
+import type { EmailLike } from '../../../utils/threads';
 import PostalMime, { decodeWords } from 'postal-mime';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useSendMail, useDraftMail } from '../../../hooks/useComposer';
@@ -76,7 +79,7 @@ import { escapeHtml } from '../../../utils/emailPrint';
 import { sanitizeEmailHtml } from '../../../utils/sanitizeHTMLContent';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { useSpecialFolderPaths } from '../../../hooks/useFolders';
-import { getMessageId, normalizeFieldNames } from '../../../utils/emailUtils';
+import { normalizeFieldNames } from '../../../utils/emailUtils';
 import { getEditorDimensions } from '../../../utils/dimensions';
 import { parseEmailDate } from '../../../utils/dateFormat';
 import { useIsMobile } from '../../../hooks/use-mobile';
@@ -194,12 +197,32 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     data: rawEmail,
     isLoading: isLoadingRaw,
     isError: isRawError,
-  } = useEmailRaw(
-    email?.id?.toString() || '',
-    folderForRaw || 'INBOX',
-    getMessageId(email) || '',
-    shouldFetchRaw
-  );
+  } = useEmailRaw(email?.id?.toString() || '', folderForRaw || 'INBOX', shouldFetchRaw);
+
+  const queryClient = useQueryClient();
+  /**
+   * After /email/send succeeded: show a reply in its open conversation as a
+   * preview. Its copy reaches the Sent folder
+   * through a queue later, and the conversation only reloads when the user asks.
+   */
+  const announceSent = (sent: Record<string, unknown>) => {
+    if (email && (mode === 'reply' || mode === 'replyAll')) {
+      const recipients = (sent.to as { email?: string; name?: string }[] | undefined) ?? [];
+      const me = currentEmail?.address || '';
+      addPendingReply(queryClient, email as unknown as EmailLike, {
+        id: `pending-${String(sent.message_id || Date.now())}`,
+        folderPath: specialFolders.sent,
+        From: currentEmail?.name ? `${currentEmail.name} <${me}>` : me,
+        To: recipients
+          .map((r) => (r.name ? `${r.name} <${r.email}>` : r.email || ''))
+          .join(', '),
+        Subject: String(sent.subject || ''),
+        Date: new Date().toUTCString(),
+        FLAGS: ['\\Seen'],
+        pending: { html: String(sent.body_html || ''), text: String(sent.body_text || '') },
+      });
+    }
+  };
 
   useEffect(() => {
     if (userSettings?.email) {
@@ -863,6 +886,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         try {
           await sendMailV2(mailToSend as unknown as ComposerRequest);
           isSendInFlightRef.current = false;
+          announceSent(mailToSend);
           toast.dismiss(loadingId);
           window.removeEventListener('beforeunload', handleBeforeUnload);
           toast.success({ description: successDescription || '', duration: 5000 });
@@ -898,6 +922,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       onSuccess: () => {
         if (isDraft) {
           isManualSaveRef.current = false;
+        } else if (mailData) {
+          announceSent(mailData);
         }
         if (setSending) setSending(false);
         toast.success({

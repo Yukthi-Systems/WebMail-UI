@@ -29,6 +29,7 @@ import {
   deleteEmailFolder,
   editEmailFolder,
   emails,
+  emailThreads,
   emptyFolder,
   markFolderRead,
   markFlaggedEmail,
@@ -42,12 +43,14 @@ import {
   type EmailFolders,
   type EmailListOptions,
   type MoveEmailPayload,
+  type ThreadListOptions,
   type ReadEmailPayload,
   type UnReadEmailPayload,
 } from '../api/mailbox';
 import { useRef } from 'react';
 import { HttpError } from '../api/fetchWrapper';
 import { DEFAULT_EMAIL_SORT } from '../state/emailListView';
+import { noteUidValidity, removeEmailCaches } from '../utils/emailCache';
 
 /**
  * After any change to a folder, every cached list view of it (all filters,
@@ -72,6 +75,30 @@ export function invalidateFolderLists(
   queryClient.invalidateQueries({ queryKey: ['search-emails'], refetchType });
 }
 
+/**
+ * Emails that left a folder (moved or deleted): their UIDs are void there, so
+ * drop what was cached for them, and reload open conversations that held them.
+ */
+function forgetEmails(queryClient: QueryClient, folder: string, uids: number[]) {
+  removeEmailCaches(queryClient, folder, uids);
+  queryClient.invalidateQueries({ queryKey: ['thread'] });
+}
+
+// Same "go back to page 1 when the view changes" rule for both list hooks
+function useEffectivePage(viewKey: string, page: number) {
+  const lastViewKeyRef = useRef(viewKey);
+  const isViewChanged = lastViewKeyRef.current !== viewKey;
+  if (isViewChanged) {
+    lastViewKeyRef.current = viewKey;
+  }
+  return isViewChanged ? 1 : page;
+}
+
+// 400 (e.g. "Page number exceeds total pages") and 404 won't fix themselves
+const retryListFetch = (failureCount: number, error: Error) =>
+  !(error instanceof HttpError && (error.status === 400 || error.status === 404)) &&
+  failureCount < 5;
+
 export function useEmails(
   folder: string,
   page: number = 1,
@@ -81,20 +108,13 @@ export function useEmails(
     sortBy = DEFAULT_EMAIL_SORT.sortBy,
     sortOrder = DEFAULT_EMAIL_SORT.sortOrder,
     filterBy = 'all',
-  }: EmailListOptions = {}
+  }: EmailListOptions = {},
+  enabled = true
 ) {
   // Logic to handle folder / sort / filter changes gracefully:
   // If any of them changes, we should always default back to page 1
   // to avoid making an API call for a page index that might not exist in the new view.
-  const viewKey = `${folder}|${sortBy}|${sortOrder}|${filterBy}`;
-  const lastViewKeyRef = useRef(viewKey);
-  const isViewChanged = lastViewKeyRef.current !== viewKey;
-
-  if (isViewChanged) {
-    lastViewKeyRef.current = viewKey;
-  }
-
-  const effectivePage = isViewChanged ? 1 : page;
+  const effectivePage = useEffectivePage(`${folder}|${sortBy}|${sortOrder}|${filterBy}`, page);
 
   return useQuery({
     // Sort/filter go after the existing segments so prefix matches on
@@ -117,11 +137,9 @@ export function useEmails(
     ],
     queryFn: () =>
       emails(folder, effectivePage, perPage, full_headers, { sortBy, sortOrder, filterBy }),
+    enabled,
 
-    // 400 (e.g. "Page number exceeds total pages") and 404 won't fix themselves
-    retry: (failureCount, error) =>
-      !(error instanceof HttpError && (error.status === 400 || error.status === 404)) &&
-      failureCount < 5,
+    retry: retryListFetch,
     retryDelay: () => 500,
 
     // Keep the previous page on screen while fetching the new one
@@ -135,14 +153,66 @@ export function useEmails(
   });
 }
 
+/**
+ * Conversation view: one row per conversation, grouped by the API across the
+ * whole folder. Kept under ['folder', folder] so every folder invalidation
+ * reloads it too.
+ */
+export function useEmailThreads(
+  folder: string,
+  page: number = 1,
+  perPage: number = 50,
+  { sortOrder = DEFAULT_EMAIL_SORT.sortOrder, filterBy = 'all', sentFolder }: ThreadListOptions = {},
+  enabled = true
+) {
+  const queryClient = useQueryClient();
+  const effectivePage = useEffectivePage(`${folder}|${sortOrder}|${filterBy}`, page);
+
+  return useQuery({
+    queryKey: [
+      'folder',
+      folder,
+      'threads',
+      'page',
+      effectivePage,
+      'perPage',
+      perPage,
+      'sort',
+      sortOrder,
+      'filter',
+      filterBy,
+    ],
+    queryFn: async () => {
+      const data = await emailThreads(folder, effectivePage, perPage, {
+        sortOrder,
+        filterBy,
+        sentFolder,
+      });
+      noteUidValidity(queryClient, folder, data.uid_validity);
+      return data;
+    },
+    enabled,
+    retry: retryListFetch,
+    retryDelay: () => 500,
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 15,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  });
+}
+
 export function useMoveMail() {
   const queryClient = useQueryClient();
   return useMutation<EmailFolders, Error, MoveEmailPayload>({
     mutationKey: ['move_mails'],
     mutationFn: (payload: MoveEmailPayload) =>
       moveEmail(payload.path, payload.sourceFolder, payload.destFolder, payload.body),
-    onSuccess: (_data, payload) =>
-      invalidateFolderLists(queryClient, [payload.sourceFolder, payload.destFolder]),
+    // The emails get new UIDs in the destination: never reuse the old ones there
+    onSuccess: (_data, payload) => {
+      forgetEmails(queryClient, payload.sourceFolder, payload.body);
+      invalidateFolderLists(queryClient, [payload.sourceFolder, payload.destFolder]);
+    },
     retry: 5,
     retryDelay: 500,
   });
@@ -166,7 +236,10 @@ export function useDeleteMail() {
   return useMutation<EmailFolders, Error, DeleteEmailPayload>({
     mutationKey: ['delete_mails'],
     mutationFn: (payload: DeleteEmailPayload) => deleteEmail(payload.path, payload.body),
-    onSuccess: (_data, payload) => invalidateFolderLists(queryClient, [payload.path]),
+    onSuccess: (_data, payload) => {
+      forgetEmails(queryClient, payload.path, payload.body);
+      invalidateFolderLists(queryClient, [payload.path]);
+    },
     retry: 5,
     retryDelay: 500,
   });
@@ -263,6 +336,10 @@ export function useEmptyFolder() {
   return useMutation({
     mutationKey: ['empty_folder'],
     mutationFn: (folderPath: string) => emptyFolder(folderPath),
-    onSuccess: (_data, folderPath) => invalidateFolderLists(queryClient, [folderPath]),
+    onSuccess: (_data, folderPath) => {
+      removeEmailCaches(queryClient, folderPath);
+      queryClient.invalidateQueries({ queryKey: ['thread'] });
+      invalidateFolderLists(queryClient, [folderPath]);
+    },
   });
 }

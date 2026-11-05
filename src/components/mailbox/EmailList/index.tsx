@@ -19,6 +19,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   useDeleteMail,
   useEmails,
+  useEmailThreads,
   useFlaggedMail,
   useMoveMail,
   useSeenMail,
@@ -47,7 +48,7 @@ import {
   resetEmailComposerDataAtom,
   type EmailAttachment as ComposerAttachment,
 } from '../../../state/emailComposer';
-import { rawEmailCacheKey } from '../../../hooks/useEmailRaw';
+import { rawEmailCacheKey } from '../../../utils/emailCache';
 import { userSettingsAtom } from '../../../state/settings';
 import { flagAtom } from '../../../state/flags';
 import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../utils/emailPrint';
@@ -61,231 +62,49 @@ import type { SearchRequest } from '../../../api/search';
 import { convertToBytes, mapComparator } from '../../common/header/search/utils';
 import { useCreateEmailTemplate, useTemplateActions } from '../../../hooks/useTempelate';
 import FolderDialog from './MoveEmail';
+import BulkActionDialog from './BulkActionDialog';
+import BulkSelectBanner from './BulkSelectBanner';
+import { useBulkSelection } from '../../../hooks/useBulkSelection';
+import {
+  bulkConfirmText,
+  bulkOfferText,
+  bulkProgressTitle,
+  bulkSelectedText,
+  type BulkScope,
+} from '../../../utils/bulkSelection';
 import type { CreateContactData } from '../../../utils/contact';
 import { useCreateBulkContact } from '../../../hooks/useContacts';
 import { scrapeContactsFromEmails } from '../../../utils/contactScrapper';
 import { BulkCreateView } from '../../contacts/BulkCreateView';
-import { getMessageId } from '../../../utils/emailUtils';
 import CustomModal from '../../composer/CustomModal';
 import { useIsMobile } from '../../../hooks/use-mobile';
 import { folderDetailsAtom, folderQuotaAtom } from '../../../state/folders';
 import PermanentDeleteConfirm from './PermanentDeleteConfirm';
 import EmptyFolderBanner from './EmptyFolderBanner';
 import {
-  useUpdateFolderUnreadCount,
   useUpdateAnyFolderUnreadCount,
   useSpecialFolderPaths,
   useFolderUidValidity,
 } from '../../../hooks/useFolders';
 import { useEmailCacheUpdater } from '../../../hooks/useEmailCacheUpdater';
-import type { EmailLike } from '../../../utils/emailThreading';
-import { emailViewCacheKey, type ViewAttachment } from '../../../hooks/useEmailView';
+import { countUnread, expandRowIds, rowKey, type EmailLike } from '../../../utils/threads';
+import { type ViewAttachment } from '../../../hooks/useEmailView';
 import { emailFilterAtom, emailSortAtom } from '../../../state/emailListView';
-import { parseEmailDate } from '../../../utils/dateFormat';
+import { isConversationView } from '../../../utils/emailListUtils';
 
 interface EmailListProps {
   onRegisterClearCallback?: (callback: () => void) => void;
   onRegisterClearSelectionCallback?: (callback: () => void) => void;
-  onDragStart?: (emailIds: number[]) => void;
+  /** UIDs being dragged and the folder they are in */
+  onDragStart?: (emailIds: number[], sourceFolder?: string) => void;
   onDragEnd?: () => void;
   onFocusFolders?: () => void;
 }
 
-// ... Keep your applyThreading function exactly as is ...
-interface ThreadInfo {
-  ids: string[];
-  latestId: string;
-  latestDate: number;
-  count: number;
-}
-
-// Deliberately doesn't extend EmailLike: EmailLike's index signature would force
-// every concrete caller-side type (e.g. api/mailbox.ts's `Email`) to be cast before
-// it could satisfy the generic constraint. All fields are optional so any real
-// email shape (Email, EmailLike, etc.) satisfies this structurally with no cast.
-interface ThreadableEmail {
-  Date?: string;
-  FLAGS?: string[];
-  References?: string;
-  'In-Reply-To'?: string;
-}
-
-interface ThreadFields {
-  'Thread-View'?: boolean;
-  'Thread-Reference'?: string[];
-  'Thread-Count'?: number;
-  'Inbox-Visible'?: boolean;
-  'Thread-Latest'?: string;
-  'Thread-Position'?: string;
-  'Thread-HasUnread'?: boolean;
-  'Thread-Emails-Count'?: number;
-  'Thread-Unread-Count'?: number;
-}
-
-function applyThreading<T extends ThreadableEmail>(
-  apiResponse: T[] | { emails?: T[] }
-): (T & ThreadFields)[] {
-  const emails = Array.isArray(apiResponse) ? apiResponse : apiResponse?.emails;
-  if (!Array.isArray(emails)) return [];
-
-  const normalizeId = (id = '') => id.replace(/[<>]/g, '').trim();
-  const extractIds = (value = ''): string[] => {
-    if (!value) return [];
-    const matches = value.match(/<([^>]+)>/g);
-    return matches ? matches.map((v) => normalizeId(v)) : [];
-  };
-  // const getMessageId = (email: any) => normalizeId(email['Message-Id'] || email['Message-ID']);
-  const getEmailDate = (email: T): number => parseEmailDate(email.Date)?.getTime() ?? 0;
-
-  const emailByMessageId = new Map<string, T>();
-  const emailConnections = new Map<string, Set<string>>();
-
-  emails.forEach((email) => {
-    const messageId = getMessageId(email);
-    if (messageId) {
-      emailByMessageId.set(messageId, email);
-    }
-  });
-
-  emails.forEach((email) => {
-    const messageId = getMessageId(email);
-    if (!messageId) return;
-
-    if (!emailConnections.has(messageId)) {
-      emailConnections.set(messageId, new Set());
-    }
-
-    const references = extractIds(email['References']);
-    const inReplyTo = normalizeId(email['In-Reply-To']);
-    const allReferences = [...references];
-    if (inReplyTo) allReferences.push(inReplyTo);
-
-    allReferences.forEach((refId) => {
-      if (!emailConnections.has(refId)) {
-        emailConnections.set(refId, new Set());
-      }
-      emailConnections.get(refId)!.add(messageId);
-      emailConnections.get(messageId)!.add(refId);
-    });
-  });
-
-  const visited = new Set<string>();
-  const threads = new Map<string, string[]>();
-
-  const dfs = (node: string, component: string[]) => {
-    visited.add(node);
-    component.push(node);
-    const neighbors = emailConnections.get(node) || new Set();
-    for (const neighbor of neighbors) {
-      if (!visited.has(neighbor)) {
-        dfs(neighbor, component);
-      }
-    }
-  };
-
-  for (const [messageId] of emailConnections) {
-    if (!visited.has(messageId)) {
-      const component: string[] = [];
-      dfs(messageId, component);
-      component.sort((a, b) => {
-        const emailA = emailByMessageId.get(a);
-        const emailB = emailByMessageId.get(b);
-        // IDs not in this folder (ghost refs from other mailboxes) have no real date.
-        // Sort them last so a real folder email is always the thread root.
-        const dateA = emailA ? getEmailDate(emailA) : Infinity;
-        const dateB = emailB ? getEmailDate(emailB) : Infinity;
-        return dateA - dateB;
-      });
-      const threadId = component[0];
-      threads.set(threadId, component);
-    }
-  }
-
-  const threadInfo = new Map<string, ThreadInfo>();
-
-  threads.forEach((ids, threadId) => {
-    if (ids.length === 0) return;
-    let latestId = ids[0];
-    let latestDate = 0;
-    ids.forEach((id) => {
-      const email = emailByMessageId.get(id);
-      if (email) {
-        const emailDate = getEmailDate(email);
-        if (emailDate > latestDate) {
-          latestDate = emailDate;
-          latestId = id;
-        }
-      }
-    });
-    threadInfo.set(threadId, { ids, latestId, latestDate, count: ids.length });
-  });
-
-  return emails.map((email) => {
-    const messageId = getMessageId(email);
-    if (!messageId) {
-      return {
-        ...email,
-        'Thread-View': false,
-        'Thread-Reference': [],
-        'Thread-Count': 1,
-        'Inbox-Visible': true,
-        'Thread-Latest': '',
-        'Thread-Position': '1/1',
-        'Thread-HasUnread': email.FLAGS && !email.FLAGS.includes('\\Seen'),
-        'Thread-Emails-Count': 1,
-        'Thread-Unread-Count': email.FLAGS && !email.FLAGS.includes('\\Seen') ? 1 : 0,
-      } as T & ThreadFields;
-    }
-
-    let threadData: ThreadInfo | null = null;
-    for (const [, info] of threadInfo) {
-      if (info.ids.includes(messageId)) {
-        threadData = info;
-        break;
-      }
-    }
-
-    if (!threadData || threadData.count === 1) {
-      return {
-        ...email,
-        'Thread-View': false,
-        'Thread-Reference': [messageId],
-        'Thread-Count': 1,
-        'Inbox-Visible': true,
-        'Thread-Latest': messageId,
-        'Thread-Position': '1/1',
-        'Thread-HasUnread': email.FLAGS && !email.FLAGS.includes('\\Seen'),
-        'Thread-Emails-Count': 1,
-        'Thread-Unread-Count': email.FLAGS && !email.FLAGS.includes('\\Seen') ? 1 : 0,
-      } as T & ThreadFields;
-    }
-
-    const isThreaded = threadData.count > 1;
-    const isLatest = threadData.latestId === messageId;
-    const position = threadData.ids.indexOf(messageId) + 1;
-
-    let unreadCount = 0;
-    threadData.ids.forEach((id) => {
-      const e = emailByMessageId.get(id);
-      if (e && e.FLAGS && !e.FLAGS.includes('\\Seen')) {
-        unreadCount++;
-      }
-    });
-
-    return {
-      ...email,
-      'Thread-View': isThreaded,
-      'Thread-Reference': threadData.ids,
-      'Thread-Count': threadData.count,
-      'Inbox-Visible': isLatest,
-      'Thread-Latest': threadData.latestId,
-      'Thread-Position': `${position}/${threadData.count}`,
-      'Thread-HasUnread': unreadCount > 0,
-      'Thread-Emails-Count': threadData.count,
-      'Thread-Unread-Count': unreadCount,
-    } as T & ThreadFields;
-  });
-}
+// Stable "nothing yet" values. A new [] or {} on each render looks like new data
+// to the effects below, which then re-render forever while a list is loading.
+const NO_EMAILS: Email[] = [];
+const NO_FLAGS: string[] = [];
 
 const EmailList = ({
   onRegisterClearCallback,
@@ -331,6 +150,7 @@ const EmailList = ({
   const currentPage = searchState.isActive ? searchPage : regularPage;
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [emailToMove, setEmailToMove] = useState<number[]>([]);
+  const [moveSourceFolder, setMoveSourceFolder] = useState<string>('');
   const isMobile = useIsMobile();
   const folderDetails = useAtomValue(folderDetailsAtom);
   const folderQuota = useAtomValue(folderQuotaAtom);
@@ -340,12 +160,11 @@ const EmailList = ({
   
   const [isPermanentDeleteDialogOpen, setIsPermanentDeleteDialogOpen] = useState(false);
   const [permanentDeleteEmails, setPermanentDeleteEmails] = useState<number[]>([]);
+  const [permanentDeleteFolder, setPermanentDeleteFolder] = useState<string>('');
   const setFolderDetails = useSetAtom(folderDetailsAtom);
-  const updateFolderUnreadCount = useUpdateFolderUnreadCount(folder || 'INBOX');
   const updateAnyFolderUnreadCount = useUpdateAnyFolderUnreadCount();
   // Resolved Sent/Drafts/Trash/Spam (e.g. "INBOX/Trash" on servers nesting folders under INBOX)
   const specialFolders = useSpecialFolderPaths();
-  const isTrashFolder = specialFolders.isFolder(folder, 'trash');
   const { patchEmailFlags } = useEmailCacheUpdater(folder || 'INBOX');
   const { refetch: refetchUidValidity, data: liveUidValidity } = useFolderUidValidity(
     folder || 'INBOX'
@@ -356,17 +175,40 @@ const EmailList = ({
     return folderDetails.find((f) => f.folder_name === (folder || 'INBOX'));
   }, [folderDetails, folder]);
 
-  // Regular emails fetch
+  // Conversation view: one row per conversation, grouped by the API across the
+  // whole folder (pages, totals and unread counts are per conversation).
+  // Otherwise one row per email.
+  // The conversation endpoints only order by date: any other sort (sender, size,
+  // ...) lists single emails, which /email/fetch and /email/search/all can sort.
+  const conversationView =
+    isConversationView(userSettings, specialFolders.settingsKey(folder)) &&
+    emailSort.sortBy === 'date';
+
+  const plainList = useEmails(
+    folder || 'INBOX',
+    regularPage,
+    PER_PAGE,
+    true,
+    {
+      sortBy: emailSort.sortBy,
+      sortOrder: emailSort.sortOrder,
+      filterBy: emailFilter,
+    },
+    !conversationView
+  );
+  const conversationList = useEmailThreads(
+    folder || 'INBOX',
+    regularPage,
+    PER_PAGE,
+    { sortOrder: emailSort.sortOrder, filterBy: emailFilter, sentFolder: specialFolders.sent },
+    conversationView
+  );
   const {
     data: regularData,
     isFetching: isRegularFetching,
     dataUpdatedAt: regularDataUpdatedAt,
     error: regularError,
-  } = useEmails(folder || 'INBOX', regularPage, PER_PAGE, true, {
-    sortBy: emailSort.sortBy,
-    sortOrder: emailSort.sortOrder,
-    filterBy: emailFilter,
-  });
+  } = conversationView ? conversationList : plainList;
 
   // When the folder's UID status arrives and differs from the stored one, the
   // cached list may be outdated (new mail, changes elsewhere) — reload it.
@@ -453,8 +295,6 @@ const EmailList = ({
   const { mutate: deleteMutate } = useDeleteMail();
 
   const layout = userSettings?.ui?.layout || 'side-by-side';
-  const threadedView = userSettings?.email?.mail_thead_view || 'all threads';
-  const folderThreadView = userSettings?.folders;
   const [checkedEmails, setCheckedEmails] = useState<number[]>([]);
   const [viewingEmail, setViewingEmail] = useState<Email | null>(null);
   const [viewingEmailFolder, setViewingEmailFolder] = useState<string | undefined>(undefined);
@@ -483,7 +323,9 @@ const EmailList = ({
     error: searchError,
   } = useSearchEmails(
     searchRequest!,
-    searchState.isActive && searchRequest !== null && !viewingEmail
+    searchState.isActive && searchRequest !== null && !viewingEmail,
+    // No filterBy: search doesn't offer the filter (the menu hides it while searching)
+    { conversations: conversationView, sentFolder: specialFolders.sent }
   );
   const [viewMode, setViewMode] = useState<'left' | 'down'>(() => {
     return layout === 'vertical-split' ? 'down' : 'left';
@@ -498,8 +340,7 @@ const EmailList = ({
   const resetComposerData = useSetAtom(resetEmailComposerDataAtom);
   const { refetch: fetchRawEmail } = useEmailRaw(
     viewingEmail?.id.toString() || '',
-    folder || 'INBOX',
-    getMessageId(viewingEmail) || '',
+    viewingEmail?.folderPath || viewingEmailFolder || folder || 'INBOX',
     false
   );
   const { panelSizes, updatePanelSize } = usePanelSizes();
@@ -513,16 +354,22 @@ const EmailList = ({
   const { prepareTemplateFromCache } = useTemplateActions();
 
   // CHANGE 5: Get data based on mode
-  // Cast preserves an existing quirk: when regularData is undefined this falls
-  // back to `{}`, not `[]` — not changing that behavior here, just the type.
   const emails = (
-    searchState.isActive && searchData?.data ? searchData.data.data : regularData?.emails || {}
+    searchState.isActive && searchData?.data
+      ? searchData.data.data
+      : regularData?.emails || NO_EMAILS
   ) as Email[];
 
   const total_count =
     searchState.isActive && searchData?.data
       ? searchData.data.total_count
       : regularData?.total_count || 0;
+
+  const total_emails = !conversationView
+    ? undefined
+    : searchState.isActive && searchData?.data
+      ? searchData.data.total_messages
+      : conversationList.data?.total_messages;
 
   const total_pages =
     searchState.isActive && searchData?.data
@@ -583,31 +430,6 @@ const EmailList = ({
     ? emails
     : (Object.values(emails || {}) as Email[]);
 
-  // The API returns each page already sorted (sort_by/sort_order) across the
-  // whole folder, so these keep the server order instead of re-sorting the page.
-  function getFilteredThreadedList(
-    threadedEmails: (Email & ThreadFields)[]
-  ): (Email & ThreadFields)[] {
-    return threadedEmails
-      .filter((email) => email['Inbox-Visible'] === true)
-      .map((email) => ({
-        ...email,
-        'Thread-Emails-Count': (email['Thread-Reference'] as string[] | undefined)?.length || 1,
-        'Thread-Unread-Count': email['Thread-Unread-Count'] || 0,
-      }));
-  }
-
-  function getListOfEmail(threadedEmails: (Email & ThreadFields)[]): (Email & ThreadFields)[] {
-    return threadedEmails || [];
-  }
-
-  const isFolderThread = () => {
-    const folders = { ...folderThreadView };
-    const folderKey = specialFolders.settingsKey(folder);
-    const value = folders?.[folderKey]?.list_thread_view ?? 'threads';
-    return value == 'list' ? true : false;
-  };
-
   const handleSaveAsContactAction = () => {
     const emailsToProcess = viewingEmail
       ? [viewingEmail]
@@ -638,54 +460,109 @@ const EmailList = ({
     });
   };
 
-  const emailArray = useMemo(() => {
-    if (searchState.isActive) {
-      // Already sorted by the API (sort_by / sort_order in the search request)
-      return simpleEmailArray;
-    }
-    const threadedEmails = applyThreading(simpleEmailArray);
-    const listOfEmail =
-      threadedView === 'never' ||
-      (isFolderThread() && ['inbox', 'sent'].includes(specialFolders.settingsKey(folder)))
-        ? getListOfEmail(threadedEmails)
-        : getFilteredThreadedList(threadedEmails);
-    return listOfEmail || simpleEmailArray;
-  }, [emails]);
+  // Rows in API order: emails, or conversations (grouped and sorted by the API)
+  const emailArray = simpleEmailArray;
+
+  /** Rows to look ids up in: the list, plus the open email (it may come from search) */
+  const knownRows = (): EmailLike[] =>
+    viewingEmail
+      ? [...(emailArray as unknown as EmailLike[]), viewingEmail as unknown as EmailLike]
+      : (emailArray as unknown as EmailLike[]);
+
+  /** Row ids → UIDs to act on: a conversation row means all its emails in this folder */
+  const toEmailUids = (rowIds: number[]) => expandRowIds(knownRows(), rowIds);
+
+  /** The open email: same UID and same folder (UIDs repeat across folders) */
+  const isViewing = (email: Email | null | undefined) =>
+    !!viewingEmail &&
+    !!email &&
+    email.id === viewingEmail.id &&
+    (email.folderPath ?? '') === (viewingEmail.folderPath ?? '');
+
+  const findRow = (rowId: number) =>
+    knownRows().find((row) => Number(row.id) === rowId) as Email | undefined;
+
+  // Folder the listed rows are in: the searched folder while searching
+  const listFolder = (searchState.isActive && searchRequest?.folder) || folder || 'INBOX';
+
+  /**
+   * Folder of the rows acted on. UIDs are per folder: an action must name the
+   * folder of its emails, which is not the open folder for search results in
+   * another folder or an email opened from the header search.
+   */
+  const folderOf = (rowIds: number[]) =>
+    (rowIds.length ? findRow(rowIds[0])?.folderPath : undefined) || listFolder;
 
   useEffect(() => {
     if (emailArray) {
-      const email_flag = emailArray.find((email) => email?.id === viewingEmail?.id);
-      setViewingEmailFlag(email_flag?.FLAGS || []);
+      const email_flag = emailArray.find((email) => isViewing(email));
+      setViewingEmailFlag(email_flag?.FLAGS || NO_FLAGS);
     }
   }, [viewingEmail, emails, emailArray, setViewingEmailFlag]);
 
   const totalSelectedCount = emailArray.length;
   const checkedCount = checkedEmails.length;
 
+  // Select all in the folder, filter or search. Rows of this page that aren't
+  // checked are left out, so a row that arrives while selected isn't touched.
+  const bulkExcludedUids = useMemo(
+    () =>
+      emailArray.some((email) => !checkedEmails.includes(Number(email.id)))
+        ? expandRowIds(
+            emailArray as unknown as EmailLike[],
+            emailArray
+              .map((email) => Number(email.id))
+              .filter((id) => !checkedEmails.includes(id))
+          )
+        : [],
+    [emailArray, checkedEmails]
+  );
+  const bulkSelection = useBulkSelection({
+    folder: listFolder,
+    filterBy: searchState.isActive ? 'all' : emailFilter,
+    search: searchState.isActive ? searchRequest : null,
+    conversations: conversationView,
+    excludedUids: bulkExcludedUids,
+    onFinished: () => handleDeselectAll(),
+  });
+  const isBulkSelected = !!bulkSelection.selection && checkedCount > 0 && !viewingEmail;
+  const bulkTotal = total_emails ?? total_count;
+  const bulkScope: BulkScope = searchState.isActive
+    ? 'search'
+    : emailFilter !== 'all'
+      ? 'filter'
+      : 'folder';
+  const bulkSelectedCount = Math.max(0, bulkTotal - bulkExcludedUids.length);
+
+  useEffect(() => {
+    if (checkedCount === 0 || viewingEmail) bulkSelection.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkedCount, viewingEmail]);
+
   useEffect(() => {
     setCheckedEmails([]);
   }, [folder]);
 
   const handleQuickMove = (emailId: string) => {
-    setEmailToMove([Number(emailId)]);
+    setEmailToMove(toEmailUids([Number(emailId)]));
+    setMoveSourceFolder(folderOf([Number(emailId)]));
     setIsMoveDialogOpen(true);
   };
 
   const handleFolderSelect = (newFol: { name: string; path: string }) => {
     const loadingId = toast.loading({ description: `Moving to ${newFol.name}…` });
+    const sourceFolder = moveSourceFolder || listFolder;
     moveMutate(
       {
-        path: folder || 'INBOX',
-        sourceFolder: folder || 'INBOX',
+        path: sourceFolder,
+        sourceFolder,
         destFolder: newFol.path,
         body: emailToMove,
       },
       {
         onSuccess: () => {
           // Count unread emails being moved (emailToMove is still the closure value here)
-          const unreadMoved = emailArray.filter(
-            (e) => emailToMove.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
-          ).length;
+          const unreadMoved = countUnread(knownRows(), emailToMove);
 
           // Clear selection and close dialog before invalidating the query so the
           // re-render from the refetch never sees stale checkedEmails IDs.
@@ -700,7 +577,7 @@ const EmailList = ({
 
           // Update both source and destination folder unread counts locally
           if (unreadMoved > 0) {
-            updateAnyFolderUnreadCount(folder || 'INBOX', -unreadMoved);
+            updateAnyFolderUnreadCount(sourceFolder, -unreadMoved);
             updateAnyFolderUnreadCount(newFol.path, unreadMoved);
           }
 
@@ -875,13 +752,13 @@ const EmailList = ({
     setComposerOpen(true);
   };
 
-  const doMoveToTrash = (emailsToActOn: number[]) => {
+  const doMoveToTrash = (emailsToActOn: number[], sourceFolder: string) => {
     const actionId = `delete-${Date.now()}-${Math.random()}`;
     const isViewingEmailAffected = viewingEmail && emailsToActOn.includes(Number(viewingEmail.id));
 
     pendingDeleteActions.current.set(actionId, {
       emailIds: emailsToActOn,
-      originalFolder: folder || 'INBOX',
+      originalFolder: sourceFolder,
     });
 
     if (isViewingEmailAffected) {
@@ -905,8 +782,8 @@ const EmailList = ({
       const loadingId = toast.loading({ description: 'Moving to trash…' });
       moveMutate(
         {
-          path: folder || 'INBOX',
-          sourceFolder: folder || 'INBOX',
+          path: sourceFolder,
+          sourceFolder,
           destFolder: specialFolders.trash,
           body: emailsToActOn,
         },
@@ -929,12 +806,12 @@ const EmailList = ({
     }, undoTime);
   };
 
-  const doPermanentDelete = (emailsToActOn: number[]) => {
+  const doPermanentDelete = (emailsToActOn: number[], sourceFolder: string) => {
     const isViewingEmailAffected = viewingEmail && emailsToActOn.includes(Number(viewingEmail.id));
     const loadingId = toast.loading({ description: 'Deleting email(s)…' });
     deleteMutate(
       {
-        path: folder || 'INBOX',
+        path: sourceFolder,
         body: emailsToActOn,
       },
       {
@@ -960,48 +837,72 @@ const EmailList = ({
     );
   };
 
+  /** Delete rows: permanently in Trash, else to Trash (asks first when the quota is nearly full) */
+  const deleteRows = (rowIds: number[]) => {
+    // A conversation row deletes the whole conversation (in its folder)
+    const uids = toEmailUids(rowIds);
+    const sourceFolder = folderOf(rowIds);
+    const inTrash = specialFolders.isFolder(sourceFolder, 'trash');
+
+    if (isQuotaNearFull && !inTrash) {
+      setPermanentDeleteEmails(uids);
+      setPermanentDeleteFolder(sourceFolder);
+      setIsPermanentDeleteDialogOpen(true);
+      return;
+    }
+
+    if (inTrash) {
+      doPermanentDelete(uids, sourceFolder);
+    } else {
+      doMoveToTrash(uids, sourceFolder);
+    }
+  };
+
   const handleDelete = () => {
-    const emailsToActOn = getEmailsToActOn();
-
-    if (isQuotaNearFull && !isTrashFolder) {
-      setPermanentDeleteEmails(emailsToActOn);
-      setIsPermanentDeleteDialogOpen(true);
-      return;
-    }
-
-    if (isTrashFolder) {
-      doPermanentDelete(emailsToActOn);
+    if (!isBulkSelected) {
+      deleteRows(getEmailsToActOn());
+    } else if (
+      specialFolders.isFolder(listFolder, 'trash') ||
+      specialFolders.isFolder(listFolder, 'spam')
+    ) {
+      bulkSelection.request('delete');
     } else {
-      doMoveToTrash(emailsToActOn);
+      bulkSelection.request('move', specialFolders.trash, 'Trash');
     }
   };
 
-  const handleSingleEmailDelete = (emailId: string) => {
-    const emailIdNum = Number(emailId);
+  const handleSingleEmailDelete = (emailId: string) => deleteRows([Number(emailId)]);
 
-    if (isQuotaNearFull && !isTrashFolder) {
-      setPermanentDeleteEmails([emailIdNum]);
-      setIsPermanentDeleteDialogOpen(true);
-      return;
-    }
-
-    if (isTrashFolder) {
-      doPermanentDelete([emailIdNum]);
-    } else {
-      doMoveToTrash([emailIdNum]);
-    }
+  /**
+   * Read / unread of rows. Read: every email of a conversation. Unread: only
+   * its latest email (the row's id), like other mail apps.
+   */
+  const readTargets = (rowIds: number[], markRead: boolean) => {
+    const rows = rowIds
+      .map(findRow)
+      .filter((row): row is Email => !!row)
+      .filter((row) => (markRead ? !row.FLAGS?.includes('\\Seen') : row.FLAGS?.includes('\\Seen')));
+    return {
+      uids: markRead
+        ? toEmailUids(rows.map((row) => Number(row.id)))
+        : rows.map((row) => Number(row.id)),
+      count: markRead ? countUnread(rows as unknown as EmailLike[], rows.map((r) => Number(r.id))) : rows.length,
+    };
   };
+
+  /** Flag: the row's latest email. Unflag: every email of a conversation. */
+  const flagTargets = (rowIds: number[], unflag: boolean) =>
+    unflag ? toEmailUids(rowIds) : rowIds;
 
   const handleMarkAsRead = (isSeen: boolean) => {
-    const selectedIds = getEmailsToActOn();
-
-    const targetIds = emailArray
-      .filter(
-        (email) =>
-          selectedIds.includes(Number(email.id)) &&
-          (isSeen ? email.FLAGS?.includes('\\Seen') : !email.FLAGS?.includes('\\Seen'))
-      )
-      .map((email) => Number(email.id));
+    // isSeen: the selection is read and should become unread
+    if (isBulkSelected) {
+      bulkSelection.request(isSeen ? 'unread' : 'read');
+      return;
+    }
+    const rowIds = getEmailsToActOn();
+    const emailsFolder = folderOf(rowIds);
+    const { uids: targetIds, count } = readTargets(rowIds, !isSeen);
 
     if (targetIds.length === 0) return;
 
@@ -1011,7 +912,7 @@ const EmailList = ({
     });
     mutation(
       {
-        path: folder || 'INBOX',
+        path: emailsFolder,
         body: targetIds,
       },
       {
@@ -1024,34 +925,43 @@ const EmailList = ({
               `Marked as ${isSeen ? 'unread' : 'read'}.`,
           });
 
-          patchEmailFlags(targetIds, isSeen ? undefined : '\\Seen', isSeen ? '\\Seen' : undefined);
-          updateFolderUnreadCount(isSeen ? targetIds.length : -targetIds.length);
+          patchEmailFlags(
+            targetIds,
+            isSeen ? undefined : '\\Seen',
+            isSeen ? '\\Seen' : undefined,
+            emailsFolder
+          );
+          updateAnyFolderUnreadCount(emailsFolder, isSeen ? count : -count);
         },
       }
     );
   };
 
   const handleSingleEmailMarkAsRead = (emailId: string, isRead: boolean) => {
-    const emailIdNum = Number(emailId);
+    const row = findRow(Number(emailId));
+    // Read: all emails of a conversation; unread: its latest one
+    const targetIds = isRead ? toEmailUids([Number(emailId)]) : [Number(emailId)];
+    const unreadChange = isRead ? (row?.thread ? row.thread.unreadCount : 1) : 1;
+    const emailsFolder = folderOf([Number(emailId)]);
     const loadingId = toast.loading({
       description: isRead ? 'Marking as read...' : 'Marking as unread...',
     });
     if (isRead) {
       markReadMutate(
         {
-          path: folder || 'INBOX',
-          body: [emailIdNum],
+          path: emailsFolder,
+          body: targetIds,
         },
         {
           onSuccess: (res) => {
             toast.dismiss(loadingId);
             toast.success({
               description:
-                (res as unknown as { message?: string })?.message || 'Email marked as unread.',
+                (res as unknown as { message?: string })?.message || 'Email marked as read.',
             });
 
-            patchEmailFlags([emailIdNum], '\\Seen');
-            updateFolderUnreadCount(-1);
+            patchEmailFlags(targetIds, '\\Seen', undefined, emailsFolder);
+            updateAnyFolderUnreadCount(emailsFolder, -unreadChange);
           },
           onError: (error) => {
             toast.dismiss(loadingId);
@@ -1064,8 +974,8 @@ const EmailList = ({
     } else {
       markUnReadMutate(
         {
-          path: folder || 'INBOX',
-          body: [emailIdNum],
+          path: emailsFolder,
+          body: targetIds,
         },
         {
           onSuccess: (res) => {
@@ -1075,8 +985,8 @@ const EmailList = ({
                 (res as unknown as { message?: string })?.message || 'Email marked as unread.',
             });
 
-            patchEmailFlags([emailIdNum], undefined, '\\Seen');
-            updateFolderUnreadCount(1);
+            patchEmailFlags(targetIds, undefined, '\\Seen', emailsFolder);
+            updateAnyFolderUnreadCount(emailsFolder, unreadChange);
           },
           onError: (error) => {
             toast.dismiss(loadingId);
@@ -1090,14 +1000,21 @@ const EmailList = ({
   };
 
   const handleMarkAsFlagged = (action = false) => {
-    const emailsToActOn = getEmailsToActOn();
+    // action: unflag
+    if (isBulkSelected) {
+      bulkSelection.request(action ? 'unflag' : 'flag');
+      return;
+    }
+    const rowIds = getEmailsToActOn();
+    const emailsFolder = folderOf(rowIds);
+    const emailsToActOn = flagTargets(rowIds, action);
     const loadingId = toast.loading({
       description: action ? 'Unflagging email(s)...' : 'Flagging email(s)...',
     });
     if (action) {
       markUnFlaggedMutate(
         {
-          path: folder || 'Junk',
+          path: emailsFolder,
           body: emailsToActOn,
         },
         {
@@ -1108,7 +1025,7 @@ const EmailList = ({
               description:
                 (res as unknown as { message?: string })?.message || 'Email unmarked as flagged.',
             });
-            patchEmailFlags(emailsToActOn, undefined, '\\Flagged');
+            patchEmailFlags(emailsToActOn, undefined, '\\Flagged', emailsFolder);
           },
           onError: (error) => {
             toast.dismiss(loadingId);
@@ -1121,7 +1038,7 @@ const EmailList = ({
     } else {
       markFlaggedMutate(
         {
-          path: folder || '',
+          path: emailsFolder,
           body: emailsToActOn,
         },
         {
@@ -1132,7 +1049,7 @@ const EmailList = ({
               description:
                 (res as unknown as { message?: string })?.message || 'Email flagged as flagged.',
             });
-            patchEmailFlags(emailsToActOn, '\\Flagged');
+            patchEmailFlags(emailsToActOn, '\\Flagged', undefined, emailsFolder);
           },
           onError: (error) => {
             toast.dismiss(loadingId);
@@ -1146,15 +1063,16 @@ const EmailList = ({
   };
 
   const handleSingleEmailMarkAsFlagged = (emailId: string, action: boolean) => {
-    const emailIdNum = Number(emailId);
+    const targetIds = flagTargets([Number(emailId)], action);
+    const emailsFolder = folderOf([Number(emailId)]);
     const loadingId = toast.loading({
       description: action ? 'Unflagging email...' : 'Flagging email...',
     });
     if (action) {
       markUnFlaggedMutate(
         {
-          path: folder || 'Junk',
-          body: [emailIdNum],
+          path: emailsFolder,
+          body: targetIds,
         },
         {
           onSuccess: (res) => {
@@ -1164,7 +1082,7 @@ const EmailList = ({
               description:
                 (res as unknown as { message?: string })?.message || 'Email unmarked as flagged.',
             });
-            patchEmailFlags([emailIdNum], undefined, '\\Flagged');
+            patchEmailFlags(targetIds, undefined, '\\Flagged', emailsFolder);
           },
           onError: (error) => {
             toast.dismiss(loadingId);
@@ -1177,8 +1095,8 @@ const EmailList = ({
     } else {
       markFlaggedMutate(
         {
-          path: folder || '',
-          body: [emailIdNum],
+          path: emailsFolder,
+          body: targetIds,
         },
         {
           onSuccess: (res) => {
@@ -1188,7 +1106,7 @@ const EmailList = ({
               description:
                 (res as unknown as { message?: string })?.message || 'Email flagged as flagged.',
             });
-            patchEmailFlags([emailIdNum], '\\Flagged');
+            patchEmailFlags(targetIds, '\\Flagged', undefined, emailsFolder);
           },
           onError: (error) => {
             toast.dismiss(loadingId);
@@ -1295,6 +1213,10 @@ const EmailList = ({
     // of viewingEmail. Only close the composer explicitly when the user cancels.
   };
 
+  // Dragging a conversation row moves all its emails of this folder
+  const handleCardDragStart = (rowIds: number[]) =>
+    onDragStart?.(toEmailUids(rowIds), folderOf(rowIds));
+
   const handleEnterSelectionMode = () => {
     setIsSelectionMode(true);
   };
@@ -1393,15 +1315,12 @@ const EmailList = ({
       // so queryClient.fetchQuery returns the cached string without a network call.
       let raw = rawContent;
       if (!raw) {
-        const id = String(emailToForward.id);
-        const folderPath = viewingEmailFolder || folder || 'INBOX';
-        // Mirror the stableEmailKey logic in EmailViewer.tsx
-        const stableKey =
-          getMessageId(emailToForward) ||
-          `${id}-${emailToForward.Subject || ''}-${emailToForward.Date || ''}`;
+        const uid = String(emailToForward.id);
+        const folderPath = emailToForward.folderPath || viewingEmailFolder || folder || 'INBOX';
+        // Same cache entry (folder + UID) as the viewer's raw fetch
         raw = await queryClient.fetchQuery({
-          queryKey: rawEmailCacheKey(id, folderPath, stableKey),
-          queryFn: () => emailRaw(id, folderPath, false),
+          queryKey: rawEmailCacheKey(folderPath, uid),
+          queryFn: () => emailRaw(uid, folderPath, false),
           staleTime: 10 * 60 * 1000,
         });
       }
@@ -1459,7 +1378,7 @@ const EmailList = ({
   };
 
   const handleNextEmail = () => {
-    const currentIndex = emailArray.findIndex((e) => e.id === viewingEmail?.id);
+    const currentIndex = emailArray.findIndex((e) => isViewing(e));
     if (currentIndex < emailArray.length - 1) {
       const nextEmail = emailArray[currentIndex + 1];
       handleEmailClick(nextEmail);
@@ -1467,7 +1386,7 @@ const EmailList = ({
   };
 
   const handlePrevEmail = () => {
-    const currentIndex = emailArray.findIndex((e) => e.id === viewingEmail?.id);
+    const currentIndex = emailArray.findIndex((e) => isViewing(e));
     if (currentIndex > 0) {
       const prevEmail = emailArray[currentIndex - 1];
       handleEmailClick(prevEmail);
@@ -1475,12 +1394,12 @@ const EmailList = ({
   };
 
   const hasNextEmail = () => {
-    const currentIndex = emailArray.findIndex((e) => e.id === viewingEmail?.id);
+    const currentIndex = emailArray.findIndex((e) => isViewing(e));
     return currentIndex < emailArray.length - 1;
   };
 
   const hasPrevEmail = () => {
-    const currentIndex = emailArray.findIndex((e) => e.id === viewingEmail?.id);
+    const currentIndex = emailArray.findIndex((e) => isViewing(e));
     return currentIndex > 0;
   };
 
@@ -1491,32 +1410,8 @@ const EmailList = ({
     setViewingEmail(email);
     setViewingEmailFolder(folder);
 
-    const isAlreadySeen = email.FLAGS?.includes('\\Seen');
-
-    if (!isAlreadySeen) {
-      const emailIdNum = Number(email.id);
-      // Mirror the stableEmailKey logic in EmailViewer.tsx
-      const stableKey =
-        getMessageId(email) || `${email.id}-${email.Subject || ''}-${email.Date || ''}`;
-      const isCached = !!queryClient.getQueryData(
-        emailViewCacheKey(String(email.id), folder || 'INBOX', stableKey)
-      );
-
-      if (isCached) {
-        // Email was prefetched with mark_as_read=false — explicitly mark as read now
-        markReadMutate(
-          { path: folder || 'INBOX', body: [emailIdNum] },
-          {
-            onSuccess: () => {
-              patchEmailFlags([emailIdNum], '\\Seen');
-              updateFolderUnreadCount(-1);
-            },
-          }
-        );
-      }
-      // If not cached, EmailViewer's useEmailView will fetch with mark_as_read=true
-      // and handle the folder cache invalidation after the fetch completes
-    }
+    // Marking as read happens in the viewer (useMarkSeenOnOpen): once, by the
+    // view that shows the email, also when it was prefetched without marking
 
     const index = emailArray.findIndex((e) => e.id === email.id);
     if (index !== -1) {
@@ -1575,7 +1470,7 @@ const EmailList = ({
     try {
       const { subject, body } = await prepareTemplateFromCache(
         email.id.toString(),
-        folder || 'INBOX'
+        email.folderPath || folder || 'INBOX'
       );
 
       await createTemplateMutation.mutateAsync({
@@ -1683,6 +1578,29 @@ const EmailList = ({
       />
     );
 
+  const renderBulkBanner = () => {
+    if (viewingEmail || emailArray.length === 0 || total_pages <= 1) return null;
+    if (isBulkSelected) {
+      return (
+        <BulkSelectBanner
+          message={bulkSelectedText(bulkTotal, bulkExcludedUids.length, bulkScope)}
+          actionLabel="Clear selection"
+          onAction={handleDeselectAll}
+        />
+      );
+    }
+    if (checkedCount !== emailArray.length) return null;
+    const offer = bulkOfferText(emailArray.length, bulkTotal, conversationView, bulkScope);
+    return (
+      <BulkSelectBanner
+        message={offer.message}
+        actionLabel={bulkSelection.isSelecting ? 'Selecting…' : offer.action}
+        onAction={bulkSelection.selectAll}
+        disabled={bulkSelection.isSelecting}
+      />
+    );
+  };
+
   const renderEmailList = () => (
     <div
       ref={(node) => {
@@ -1692,11 +1610,12 @@ const EmailList = ({
       className={`h-full overflow-x-hidden bg-[var(--gray-1)] transition-opacity duration-200 ${isFetching ? 'opacity-80' : 'opacity-100'}`}
     >
       {renderEmptyFolderBanner()}
+      {renderBulkBanner()}
       <div className="flex flex-col gap-0">
         {emailArray.map((email, index) => (
           <EmailCard
             index={index}
-            key={email.id}
+            key={rowKey(email as unknown as EmailLike)}
             id={`email-card-${email.id}`}
             email={email}
             isSelected={!viewingEmail && checkedEmails.includes(Number(email.id))}
@@ -1709,12 +1628,12 @@ const EmailList = ({
             onMarkAsRead={handleSingleEmailMarkAsRead}
             onDelete={handleSingleEmailDelete}
             folder={folder}
-            isActive={viewingEmail?.id === email.id}
-            onDragStart={onDragStart}
+            isActive={isViewing(email)}
+            onDragStart={handleCardDragStart}
             onDragEnd={onDragEnd}
             showSelection={!viewingEmail}
             isKeyboardFocused={
-              currentEmailIndex === index && isKeyboardNavigating && viewingEmail?.id !== email.id
+              currentEmailIndex === index && isKeyboardNavigating && !isViewing(email)
             }
             myEmail={userDetails?.email}
             onMoveToFolder={handleQuickMove}
@@ -1733,12 +1652,10 @@ const EmailList = ({
     () => (
       <div className="h-full overflow-y-auto bg-[var(--gray-1)]">
         <EmailViewer
-          key={
-            getMessageId(viewingEmail) ||
-            `${viewingEmail!.id}-${viewingEmail!.Subject || ''}-${viewingEmail!.Date || ''}`
-          }
+          // folder + UID identify the email
+          key={`${viewingEmail!.folderPath || viewingEmailFolder}:${viewingEmail!.id}`}
           messageId={viewingEmail!.id.toString()}
-          folderPath={viewingEmailFolder}
+          folderPath={viewingEmail!.folderPath || viewingEmailFolder}
           subject={viewingEmail!.Subject}
           senderEmail={viewingEmail!.From}
           onBack={layout === 'modal' ? handleBackToList : handleBackToList}
@@ -1817,8 +1734,14 @@ const EmailList = ({
       {hasActiveSearch() && <SearchResultsBanner resultCount={total_count} />}
       <EmailToolbar
         checkedEmails={viewingEmail ? [Number(viewingEmail.id)] : checkedEmails}
+        actionEmailIds={toEmailUids(viewingEmail ? [Number(viewingEmail.id)] : checkedEmails)}
+        actionFolder={folderOf(viewingEmail ? [Number(viewingEmail.id)] : checkedEmails)}
         selectedCount={checkedCount}
         totalSelectedCount={totalSelectedCount}
+        bulkSelectedCount={isBulkSelected ? bulkSelectedCount : undefined}
+        onBulkMove={(destination) =>
+          bulkSelection.request('move', destination.path, destination.name)
+        }
         onSelectAll={handleSelectAll}
         onDeselectAll={handleDeselectAll}
         onDelete={handleDelete}
@@ -1829,6 +1752,7 @@ const EmailList = ({
         onBack={handleBackToList}
         total_pages={total_pages || 0}
         total_count={total_count || 0}
+        total_emails={total_emails}
         currentPage={currentPage}
         onPageChange={handlePageChange}
         emailList={emails || []}
@@ -1941,10 +1865,11 @@ const EmailList = ({
             className="overflow-x-hidden w-full h-full"
           >
             {renderEmptyFolderBanner()}
+            {renderBulkBanner()}
             {emailArray.map((email, index) => (
               <EmailCard
                 index={index}
-                key={email.id}
+                key={rowKey(email as unknown as EmailLike)}
                 id={`email-card-${email.id}`}
                 email={email}
                 isSelected={checkedEmails.includes(Number(email.id))}
@@ -1956,7 +1881,7 @@ const EmailList = ({
                 onMarkAsRead={handleSingleEmailMarkAsRead}
                 onDelete={handleSingleEmailDelete}
                 folder={folder}
-                onDragStart={onDragStart}
+                onDragStart={handleCardDragStart}
                 onDragEnd={onDragEnd}
                 checkedEmails={checkedEmails}
                 isKeyboardFocused={currentEmailIndex === index && isKeyboardNavigating}
@@ -2003,6 +1928,26 @@ const EmailList = ({
       )}
       {/* ──────────────────────────────────────────────────────────────────────── */}
 
+      {bulkSelection.pending && (
+        <BulkActionDialog
+          open
+          action={bulkSelection.pending.action}
+          progressTitle={bulkProgressTitle(
+            bulkSelection.pending.action,
+            bulkSelection.pending.destName
+          )}
+          {...bulkConfirmText(
+            bulkSelection.pending.action,
+            bulkSelectedCount,
+            conversationView,
+            bulkSelection.pending.destName
+          )}
+          progress={bulkSelection.progress}
+          onConfirm={bulkSelection.run}
+          onCancel={bulkSelection.cancel}
+        />
+      )}
+
       {isMoveDialogOpen && (
         <FolderDialog
           open={isMoveDialogOpen}
@@ -2040,11 +1985,11 @@ const EmailList = ({
         quotaPercent={folderQuota?.used_percent}
         onMoveToTrash={() => {
           setIsPermanentDeleteDialogOpen(false);
-          doMoveToTrash(permanentDeleteEmails);
+          doMoveToTrash(permanentDeleteEmails, permanentDeleteFolder || listFolder);
         }}
         onPermanentDelete={() => {
           setIsPermanentDeleteDialogOpen(false);
-          doPermanentDelete(permanentDeleteEmails);
+          doPermanentDelete(permanentDeleteEmails, permanentDeleteFolder || listFolder);
         }}
       />
     </div>

@@ -31,6 +31,7 @@ import {
 } from '../api/tempelates';
 import { useCallback } from 'react';
 import { emailRaw } from '../api/mailbox';
+import { rawEmailCacheKey } from '../utils/emailCache';
 import PostalMime from 'postal-mime';
 import { convertPostalMimeAttachments, processIncomingHtml } from '../utils/replyForwardHelper';
 
@@ -104,13 +105,13 @@ export const useTemplateActions = () => {
   const queryClient = useQueryClient();
 
   const prepareTemplateFromCache = useCallback(
-    async (messageId: string, folderPath: string) => {
-      let rawEmail = queryClient.getQueryData<string>(['email', 'raw', messageId, folderPath]);
-
-      if (!rawEmail) {
-        rawEmail = await emailRaw(messageId, folderPath);
-        queryClient.setQueryData(['email', 'raw', messageId, folderPath], rawEmail);
-      }
+    async (uid: string, folderPath: string) => {
+      // Same cache entry as useEmailRaw (folder + UID); doesn't mark the email as read
+      const rawEmail = await queryClient.fetchQuery({
+        queryKey: rawEmailCacheKey(folderPath, uid),
+        queryFn: () => emailRaw(uid, folderPath, false),
+        staleTime: 10 * 60 * 1000,
+      });
 
       if (!rawEmail) throw new Error('No raw content found');
 
