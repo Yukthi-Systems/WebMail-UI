@@ -20,7 +20,15 @@ import { webmailStore } from '../store.ts';
 import { API_URL } from './config.ts';
 import { fetchListWithAuth, fetchWithAuth } from './fetchWrapper.ts';
 import type { FolderQuota } from '../state/folders.ts';
-import type { EmailLike } from '../utils/emailThreading.ts';
+import type { SearchRequest } from './search.ts';
+import {
+  normalizeEmails,
+  threadToRow,
+  unquoteFolder,
+  type ApiThread,
+  type EmailLike,
+  type ThreadInfo,
+} from '../utils/threads.ts';
 import type { EmailFilterBy, EmailSortBy, EmailSortOrder } from '../state/emailListView.ts';
 
 export type CustomFolders = string[];
@@ -34,10 +42,14 @@ interface Email {
   Bcc?: string;
   bcc?: string;
   Subject: string;
+  /** The IMAP UID (never the sequence number), unique inside folderPath */
   id: string;
+  uid?: string;
   folderPath?: string;
   // Real attachments only — images embedded in the body don't count
   has_attachment?: boolean;
+  /** Set on conversation rows (conversation view) */
+  thread?: ThreadInfo;
 }
 
 interface EmailFolder {
@@ -99,6 +111,30 @@ interface EmailListOptions {
   sortBy?: EmailSortBy;
   sortOrder?: EmailSortOrder;
   filterBy?: EmailFilterBy;
+}
+
+/** Conversation list: one row per conversation, same shape as EmailResponse */
+interface ThreadListResponse extends EmailResponse {
+  /** Emails in all the conversations (total_count counts conversations) */
+  total_messages: number;
+  uid_validity: string;
+  sent_folder_path: string | null;
+}
+
+interface ThreadListOptions {
+  sortOrder?: EmailSortOrder;
+  filterBy?: EmailFilterBy;
+  /** Sent folder path from the folder settings (saves the API a lookup) */
+  sentFolder?: string;
+}
+
+/** A conversation opened in the viewer */
+interface ThreadDetail {
+  /** All emails, oldest first: this folder's and your replies (each with folderPath) */
+  emails: EmailLike[];
+  row: EmailLike;
+  uid_validity: string;
+  sent_folder_path: string | null;
 }
 
 interface EmailViewAttachment {
@@ -229,6 +265,30 @@ export const foldersQuota = async (): Promise<{ quota: FolderQuota }> => {
   return body;
 };
 
+const authHeaders = (contentType?: string): Record<string, string> => {
+  const csrfToken = webmailStore.get(csrfTokenAtom);
+  return {
+    ...(contentType ? { 'Content-Type': contentType } : {}),
+    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+  };
+};
+
+/**
+ * Query string of every call that names emails by id: the ids are UIDs
+ * (use_uid=true), never sequence numbers.
+ */
+const uidParams = (folderPath: string, extra: Record<string, string> = {}) =>
+  new URLSearchParams({
+    folder_path: sanitizeFolderPath(unquoteFolder(folderPath)),
+    ...extra,
+    use_uid: 'true',
+  });
+
+const errorMessage = async (res: Response, fallback: string) => {
+  const error = await res.json().catch(() => ({}));
+  return (error as { message?: string }).message || fallback;
+};
+
 export const emails = async (
   folder: string,
   page: number = 1,
@@ -236,10 +296,8 @@ export const emails = async (
   full_headers: boolean = true,
   { sortBy = 'date', sortOrder = 'desc', filterBy = 'all' }: EmailListOptions = {}
 ): Promise<EmailResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const sanitizedFolder = sanitizeFolderPath(folder);
   const params = new URLSearchParams();
-  params.append('folder_path', sanitizedFolder);
+  params.append('folder_path', sanitizeFolderPath(folder));
   params.append('full_headers', full_headers.toString());
   // Always send sort_by: without it the API returns pages in sequence-number
   // order, which mixes years across pages.
@@ -250,41 +308,101 @@ export const emails = async (
     method: 'GET',
     credentials: 'include',
     timeout: 120000,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
+    headers: authHeaders('application/json'),
   });
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to list emails');
+    throw new Error(await errorMessage(res, 'Unable to list emails'));
   }
-  return await res.json();
+  const data = (await res.json()) as EmailResponse;
+  // id := UID, so everything that acts on a listed email uses its UID
+  const listed = normalizeEmails(data.emails as unknown as Record<string, unknown>[], folder);
+  return { ...data, emails: listed as unknown as Email[] };
+};
+
+/**
+ * One page of conversations: the API groups the whole folder, so a
+ * conversation is never split over pages and the totals count conversations.
+ */
+export const emailThreads = async (
+  folder: string,
+  page: number = 1,
+  perPage: number = 50,
+  { sortOrder = 'desc', filterBy = 'all', sentFolder }: ThreadListOptions = {}
+): Promise<ThreadListResponse> => {
+  const params = new URLSearchParams({
+    folder_path: sanitizeFolderPath(folder),
+    sort_order: sortOrder,
+    filter_by: filterBy,
+    full_headers: 'true',
+  });
+  if (sentFolder) params.append('sent_folder', unquoteFolder(sentFolder));
+
+  const res = await fetchListWithAuth(`${API_URL}/email/threads/${perPage}/${page}?${params}`, {
+    method: 'GET',
+    credentials: 'include',
+    timeout: 120000,
+    headers: authHeaders('application/json'),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, 'Unable to list conversations'));
+  }
+  const data = await res.json();
+  return {
+    emails: ((data.threads ?? []) as ApiThread[]).map(
+      (thread) => threadToRow(thread, folder) as unknown as Email
+    ),
+    total_count: data.total_count ?? 0,
+    total_pages: data.total_pages ?? 0,
+    total_messages: data.total_messages ?? 0,
+    currentPage: page,
+    sort_order: sortOrder,
+    filter_by: filterBy,
+    uid_validity: String(data.uid_validity ?? ''),
+    sent_folder_path: data.sent_folder_path ? unquoteFolder(data.sent_folder_path) : null,
+  };
+};
+
+/** The conversation containing email `uid` of `folder`, with all its emails */
+export const emailThread = async (
+  uid: string,
+  folder: string,
+  { sentFolder }: { sentFolder?: string } = {}
+): Promise<ThreadDetail> => {
+  const params = new URLSearchParams({
+    folder_path: sanitizeFolderPath(unquoteFolder(folder)),
+    full_headers: 'true',
+  });
+  if (sentFolder) params.append('sent_folder', unquoteFolder(sentFolder));
+
+  const res = await fetchWithAuth(`${API_URL}/email/thread/${uid}?${params}`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: authHeaders('application/json'),
+  });
+  const data = await res.json();
+  return {
+    // Each email keeps its own folder: your replies are in the Sent folder
+    emails: normalizeEmails(data.emails ?? [], folder),
+    row: threadToRow(data as ApiThread, folder),
+    uid_validity: String(data.uid_validity ?? ''),
+    sent_folder_path: data.sent_folder_path ? unquoteFolder(data.sent_folder_path) : null,
+  };
 };
 
 export const emailRaw = async (
-  messageId: string,
+  uid: string,
   folderPath: string,
   markAsRead: boolean = true
 ): Promise<string> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const params = new URLSearchParams();
-  const sanitizedFolder = sanitizeFolderPath(folderPath);
-  params.append('folder_path', sanitizedFolder);
-  params.append('mark_as_read', String(markAsRead));
-
-  const res = await fetchWithAuth(`${API_URL}/email/raw/${messageId}?${params}`, {
+  const params = uidParams(folderPath, { mark_as_read: String(markAsRead) });
+  const res = await fetchWithAuth(`${API_URL}/email/raw/${uid}?${params}`, {
     method: 'GET',
     credentials: 'include',
-    headers: {
-      'Content-Type': 'message/rfc822',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
+    headers: authHeaders('message/rfc822'),
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to fetch raw email');
+    throw new Error(await errorMessage(res, 'Unable to fetch raw email'));
   }
 
   const buffer = await res.arrayBuffer();
@@ -296,22 +414,15 @@ export const emailRaw = async (
  * Attachments are downloaded separately via emailAttachment().
  */
 export const emailView = async (
-  messageId: string,
+  uid: string,
   folderPath: string,
   markAsRead: boolean = true
 ): Promise<EmailViewResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const params = new URLSearchParams();
-  params.append('folder_path', sanitizeFolderPath(folderPath));
-  params.append('mark_as_read', String(markAsRead));
-
-  const res = await fetchWithAuth(`${API_URL}/email/view/${messageId}?${params}`, {
+  const params = uidParams(folderPath, { mark_as_read: String(markAsRead) });
+  const res = await fetchWithAuth(`${API_URL}/email/view/${uid}?${params}`, {
     method: 'GET',
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
+    headers: authHeaders('application/json'),
   });
 
   return res.json();
@@ -322,232 +433,155 @@ export const emailView = async (
  * <img src>) because the request must carry the X-CSRF-Token header.
  */
 export const emailAttachment = async (
-  messageId: string,
+  uid: string,
   partId: string,
   folderPath: string,
   inline: boolean = false
 ): Promise<Blob> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const params = new URLSearchParams();
-  params.append('folder_path', sanitizeFolderPath(folderPath));
-  params.append('inline', String(inline));
-
-  const res = await fetchWithAuth(
-    `${API_URL}/email/attachment/${messageId}/${partId}?${params}`,
-    {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-    }
-  );
+  const params = uidParams(folderPath, { inline: String(inline) });
+  const res = await fetchWithAuth(`${API_URL}/email/attachment/${uid}/${partId}?${params}`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: authHeaders(),
+  });
 
   return res.blob();
 };
 
-export const emailFetchByIds = async ({
-  folderPath,
-  messageIds = [],
-}: {
-  folderPath: string;
-  messageIds: string[];
-}): Promise<{ emails: EmailLike[] }> => {
-  if (!folderPath || messageIds.length === 0) {
-    throw new Error('folderPath and messageIds are required');
-  }
-
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const sanitizedFolder = sanitizeFolderPath(folderPath);
-  const params = new URLSearchParams();
-  params.append('folder_path', sanitizedFolder);
-
-  const res = await fetchWithAuth(
-    `${API_URL}/email/fetch-by-message-ids?${params}`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      body: JSON.stringify(messageIds),
-    }
-  );
-
+/** PUT/PATCH/DELETE with a JSON list of UIDs as body */
+const sendUidList = async (
+  method: 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  params: URLSearchParams,
+  uids: number[],
+  fallbackError: string
+) => {
+  const res = await fetchWithAuth(`${API_URL}${path}?${params}`, {
+    method,
+    credentials: 'include',
+    headers: authHeaders('application/json'),
+    body: uids.length ? JSON.stringify(uids) : undefined,
+  });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.message || 'Unable to fetch emails');
+    throw new Error(await errorMessage(res, fallbackError));
   }
-
   return res.json();
 };
 
-export const moveEmail = async (
+const folderParams = (path: string, sourceFolder: string, destFolder: string) =>
+  uidParams(path, {
+    source_folder: sanitizeFolderPath(unquoteFolder(sourceFolder)),
+    dest_folder: sanitizeFolderPath(unquoteFolder(destFolder)),
+  });
+
+/** Moves emails (UIDs of sourceFolder). They get new UIDs in destFolder. */
+export const moveEmail = (
   path: string,
   sourceFolder: string,
   destFolder: string,
   body: number[]
-): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const sanitizedSource = sanitizeFolderPath(sourceFolder);
-  const sanitizedDest = sanitizeFolderPath(destFolder);
-  const res = await fetchWithAuth(
-    `${API_URL}/email/move?folder_path=${path}&source_folder=${sanitizedSource}&dest_folder=${sanitizedDest}`,
-    {
-      method: 'PUT',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      body: body.length ? JSON.stringify(body) : undefined,
-    }
+): Promise<EmailFolders> =>
+  sendUidList(
+    'PUT',
+    '/email/move',
+    folderParams(path, sourceFolder, destFolder),
+    body,
+    'Unable to Move Email'
   );
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to Move Email');
-  }
 
-  const data = await res.json();
-  return data;
-};
-
-export const copyEmail = async (
+export const copyEmail = (
   path: string,
   sourceFolder: string,
   destFolder: string,
   body: number[]
-): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const res = await fetchWithAuth(
-    `${API_URL}/email/copy?folder_path=${path}&source_folder=${sourceFolder}&dest_folder=${destFolder}`,
-    {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      body: body.length ? JSON.stringify(body) : undefined,
-    }
+): Promise<EmailFolders> =>
+  sendUidList(
+    'PATCH',
+    '/email/copy',
+    folderParams(path, sourceFolder, destFolder),
+    body,
+    'Unable to copy Email'
   );
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to copy Email');
-  }
 
-  const data = await res.json();
-  return data;
-};
+/** Deletes exactly these UIDs (never other emails already marked as deleted) */
+export const deleteEmail = (path: string, body: number[]): Promise<EmailFolders> =>
+  sendUidList('DELETE', '/email/permanently', uidParams(path), body, 'Unable to Delete Email');
 
-export const deleteEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const res = await fetchWithAuth(`${API_URL}/email/permanently?folder_path=${path}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
-    body: body.length ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to Delete Email');
-  }
+export const markReadEmail = (path: string, body: number[]): Promise<EmailFolders> =>
+  sendUidList('PUT', '/email/mark/read', uidParams(path), body, 'Unable to Mark Email as Read');
 
-  const data = await res.json();
-  return data;
-};
-
-export const markReadEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const sanitizedFolder = sanitizeFolderPath(path);
-  const res = await fetchWithAuth(`${API_URL}/email/mark/read?folder_path=${sanitizedFolder}`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
-    body: body.length ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to Mark Email as Read');
-  }
-
-  const data = await res.json();
-  return data;
-};
-
-export const unmarkReadEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const sanitizedFolder = sanitizeFolderPath(path);
-  const res = await fetchWithAuth(`${API_URL}/email/mark/unseen?folder_path=${sanitizedFolder}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
-    body: body.length ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to Mark Email as Unread');
-  }
-
-  const data = await res.json();
-  return data;
-};
-
-export const markFlaggedEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const sanitizedFolder = sanitizeFolderPath(path);
-  const res = await fetchWithAuth(`${API_URL}/email/mark/flagged?folder_path=${sanitizedFolder}`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
-    body: body.length ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to Mark Email as Flagged');
-  }
-
-  const data = await res.json();
-  return data;
-};
-
-export const markUnFlaggedEmail = async (path: string, body: number[]): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-  const sanitizedFolder = sanitizeFolderPath(path);
-  const res = await fetchWithAuth(
-    `${API_URL}/email/mark/unflagged?folder_path=${sanitizedFolder}`,
-    {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      body: body.length ? JSON.stringify(body) : undefined,
-    }
+export const unmarkReadEmail = (path: string, body: number[]): Promise<EmailFolders> =>
+  sendUidList(
+    'PATCH',
+    '/email/mark/unseen',
+    uidParams(path),
+    body,
+    'Unable to Mark Email as Unread'
   );
+
+export const markFlaggedEmail = (path: string, body: number[]): Promise<EmailFolders> =>
+  sendUidList(
+    'PUT',
+    '/email/mark/flagged',
+    uidParams(path),
+    body,
+    'Unable to Mark Email as Flagged'
+  );
+
+export const markUnFlaggedEmail = (path: string, body: number[]): Promise<EmailFolders> =>
+  sendUidList(
+    'PATCH',
+    '/email/mark/unflagged',
+    uidParams(path),
+    body,
+    'Unable to Mark Email as Unflagged'
+  );
+
+export type BulkAction = 'read' | 'unread' | 'flag' | 'unflag' | 'move' | 'delete';
+
+export interface BulkEmailRequest {
+  folder_path: string;
+  action: BulkAction;
+  /** UIDNEXT - 1 when the user selected all: newer emails are not touched */
+  max_uid: number;
+  uid_validity: string;
+  dest_folder?: string;
+  /** Emails the user unselected */
+  exclude_uids: number[];
+  filter_by: string;
+  search?: SearchRequest;
+  conversations: boolean;
+}
+
+export interface BulkEmailResponse {
+  folder_path: string;
+  action: BulkAction;
+  done: number;
+  /** Above 0: send the same request again */
+  remaining: number;
+  /** Unread emails among those moved or deleted */
+  unread_affected: number;
+}
+
+/** Runs an action on all emails of a folder, filter or search, not only the loaded page. */
+export const bulkEmails = async (request: BulkEmailRequest): Promise<BulkEmailResponse> => {
+  const clean = (path: string) => sanitizeFolderPath(unquoteFolder(path));
+  const res = await fetchWithAuth(`${API_URL}/email/bulk`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: authHeaders('application/json'),
+    body: JSON.stringify({
+      ...request,
+      folder_path: clean(request.folder_path),
+      dest_folder: request.dest_folder ? clean(request.dest_folder) : undefined,
+      search: request.search ? { ...request.search, folder: clean(request.search.folder) } : undefined,
+    }),
+  });
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Unable to Mark Email as Unflagged');
+    throw new Error(await errorMessage(res, 'Unable to change the selected emails'));
   }
-
-  const data = await res.json();
-  return data;
+  return res.json();
 };
-
 
 /** Marks every unread email in the folder as read, including ones not loaded in the UI. */
 export const markFolderRead = async (
@@ -678,6 +712,9 @@ export {
   type Email,
   type EmailResponse,
   type EmailListOptions,
+  type ThreadListResponse,
+  type ThreadListOptions,
+  type ThreadDetail,
   type EmailViewAttachment,
   type EmailViewResponse,
   type EmailFolder,

@@ -33,8 +33,7 @@ const SubjectField = ({ value, onChange }: SubjectFieldProps) => {
         alignItems: 'center',
         borderBottom: isFocused ? '2px solid var(--accent-9)' : '2px solid transparent',
         transition: 'border-bottom 0.2s ease',
-        padding: '0 4px',
-        marginBottom: '8px',
+        padding: '0 2px',
       }}
     >
       <span
@@ -59,8 +58,8 @@ const SubjectField = ({ value, onChange }: SubjectFieldProps) => {
           flex: 1,
           border: 'none',
           outline: 'none',
-          padding: '8px 4px',
-          fontSize: '16px',
+          padding: '6px 4px',
+          fontSize: '14px',
           background: 'transparent',
         }}
       />

@@ -16,6 +16,7 @@
  */
 
 // EmailToolbar.tsx
+import { listCountLabels } from '../../../utils/emailListUtils';
 import { Flex, Button, Checkbox, Separator, Text } from '@radix-ui/themes';
 import { useEffect, useState } from 'react';
 import {
@@ -45,6 +46,7 @@ import { LuFlagOff } from 'react-icons/lu';
 import { RiSpam2Line } from 'react-icons/ri';
 import FolderDialog from './MoveEmail';
 import { useCopyMail, useMoveMail } from '../../../hooks/useEmails';
+import { countUnread, type EmailLike } from '../../../utils/threads';
 import { useParams } from '@tanstack/react-router';
 import { useSpecialFolderPaths, useUpdateAnyFolderUnreadCount } from '../../../hooks/useFolders';
 import type { Email } from '../../../api/mailbox';
@@ -70,9 +72,19 @@ interface Folder {
 
 interface EmailToolbarProps {
   checkedEmails: number[];
+  /** UIDs to move / copy: checkedEmails with conversation rows expanded to all their emails */
+  actionEmailIds?: number[];
+  /** Folder of those emails (the searched folder may differ from the open one) */
+  actionFolder?: string;
   selectedCount: number;
   totalSelectedCount: number;
+  /** All emails of the folder, filter or search are selected, not only this page */
+  bulkSelectedCount?: number;
+  /** Moves the whole selection while bulkSelectedCount is set */
+  onBulkMove?: (folder: { name: string; path: string }) => void;
   total_count: number;
+  /** Conversation view: emails in the listed conversations (total_count counts conversations) */
+  total_emails?: number;
   total_pages: number;
   currentPage: number;
   isRefreshing?: boolean;
@@ -110,8 +122,12 @@ interface EmailToolbarProps {
 
 const EmailToolbar = ({
   checkedEmails = [],
+  actionEmailIds,
+  actionFolder,
   selectedCount,
   totalSelectedCount,
+  bulkSelectedCount,
+  onBulkMove,
   onSelectAll,
   onDeselectAll,
   onDelete,
@@ -121,6 +137,7 @@ const EmailToolbar = ({
   showBackButton = false,
   onBack,
   total_count,
+  total_emails,
   total_pages,
   currentPage,
   onPageChange,
@@ -143,6 +160,7 @@ const EmailToolbar = ({
   onSaveAsTemplate,
   onSaveAsContact,
 }: EmailToolbarProps) => {
+  const { label: countLabel, tooltip: countTooltip } = listCountLabels(total_count, total_emails);
   const { folder: folderNameParam } = useParams({ strict: false });
   const folderName = folderNameParam ?? '';
   // Resolved Spam folder (e.g. "INBOX/spam"), plus the plain Junk/Spam names
@@ -190,6 +208,12 @@ const EmailToolbar = ({
   }, [checkedEmails, emailList, showBackButton]);
 
   const handleFolderSelect = (folder: Folder, action: 'move' | 'copy') => {
+    if (action === 'move' && bulkSelectedCount !== undefined && onBulkMove) {
+      setDialogOpen(false);
+      onBulkMove({ name: folder?.name ?? 'the folder', path: folder?.path ?? '' });
+      return;
+    }
+
     // Check if quota is exceeded for copy operation
     if (action === 'copy' && isQuotaExceeded) {
       toast.error({
@@ -208,22 +232,21 @@ const EmailToolbar = ({
 
     setSelectedFolder(folder);
     const mutation = action === 'move' ? moveMutate : copyMutate;
+    const sourceFolder = actionFolder || folderName;
     mutation(
       {
-        path: folderName,
-        sourceFolder: folderName,
-        destFolder: folder?.path || folderName || '',
-        body: checkedEmails,
+        path: sourceFolder,
+        sourceFolder,
+        destFolder: folder?.path || sourceFolder || '',
+        body: actionEmailIds ?? checkedEmails,
       },
       {
         onSuccess: () => {
           // Count unread emails being moved (checkedEmails/emailList are closure values)
           if (action === 'move') {
-            const unreadMoved = emailList.filter(
-              (e) => checkedEmails.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
-            ).length;
+            const unreadMoved = countUnread(emailList as unknown as EmailLike[], checkedEmails);
             if (unreadMoved > 0) {
-              updateAnyFolderUnreadCount(folderName, -unreadMoved);
+              updateAnyFolderUnreadCount(sourceFolder, -unreadMoved);
               updateAnyFolderUnreadCount(folder?.path || '', unreadMoved);
             }
           }
@@ -314,6 +337,12 @@ const EmailToolbar = ({
 
   // Function to open copy dialog with quota check
   const handleCopyClick = () => {
+    if (bulkSelectedCount !== undefined) {
+      toast.error({
+        description: 'Copying is not available for a whole folder. Select the emails on this page.',
+      });
+      return;
+    }
     // if (hasSelection) {
     if (isQuotaExceeded) {
       toast.error({
@@ -637,7 +666,7 @@ const EmailToolbar = ({
 
                       {hasSelection && (
                         <Text size="2" color="gray">
-                          {selectedCount} selected
+                          {(bulkSelectedCount ?? selectedCount).toLocaleString('en-US')} selected
                         </Text>
                       )}
 
@@ -737,7 +766,7 @@ const EmailToolbar = ({
 
                       {/* <Flex align="center" gap="3">
                       <Text size="1" color="gray">
-                        Page {currentPage} of {total_pages} • {total_count} emails
+                        Page {currentPage} of {total_pages} • {countLabel}
                       </Text>
                       <Flex gap="1">
                         <Button
@@ -764,6 +793,8 @@ const EmailToolbar = ({
                         currentPage={currentPage}
                         totalPages={total_pages}
                         totalCount={total_count}
+                        countLabel={countLabel}
+                        countTooltip={countTooltip}
                         onPageChange={onPageChange}
                       />
                     </Flex>
@@ -793,6 +824,8 @@ const EmailToolbar = ({
                         currentPage={currentPage}
                         totalPages={total_pages}
                         totalCount={total_count}
+                        countLabel={countLabel}
+                        countTooltip={countTooltip}
                         onPageChange={onPageChange}
                       />
                     </div>
@@ -992,7 +1025,7 @@ const EmailToolbar = ({
               />
 
               {hasSelection && (
-                <span className="text-sm text-[var(--gray-11)]">{selectedCount} selected</span>
+                <span className="text-sm text-[var(--gray-11)]">{(bulkSelectedCount ?? selectedCount).toLocaleString('en-US')} selected</span>
               )}
             </div>
 
@@ -1028,7 +1061,9 @@ const EmailToolbar = ({
 
           {/* Mobile Pagination */}
           <div className="flex md:hidden items-center justify-between mt-2 pt-2 border-t border-[var(--gray-4)]">
-            <span className="text-xs text-[var(--gray-11)]">{total_count} emails</span>
+            <span className="text-xs text-[var(--gray-11)]" title={countTooltip}>
+              {countLabel}
+            </span>
             <div className="flex items-center gap-2">
               <span className="text-xs text-[var(--gray-11)]">
                 {currentPage}/{total_pages}
@@ -1066,7 +1101,7 @@ const EmailToolbar = ({
 
             {hasSelection && (
               <Text size="2" color="gray">
-                {selectedCount} selected
+                {(bulkSelectedCount ?? selectedCount).toLocaleString('en-US')} selected
               </Text>
             )}
 
@@ -1169,7 +1204,7 @@ const EmailToolbar = ({
 
               {/* <Flex align="center" gap="3">
                 <Text size="1" color="gray">
-                  Page {currentPage} of {total_pages} • {total_count} emails
+                  Page {currentPage} of {total_pages} • {countLabel}
                 </Text>
                 <Flex gap="1">
                   <Button
@@ -1196,6 +1231,8 @@ const EmailToolbar = ({
                 currentPage={currentPage}
                 totalPages={total_pages}
                 totalCount={total_count}
+                countLabel={countLabel}
+                countTooltip={countTooltip}
                 onPageChange={onPageChange}
               />
             </Flex>

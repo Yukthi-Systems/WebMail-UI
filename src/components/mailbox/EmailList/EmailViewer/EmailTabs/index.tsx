@@ -29,7 +29,7 @@ import { useSendMail } from '../../../../../hooks/useComposer';
 import { generateMessageId, type ComposerRequest } from '../../../../../api/composer';
 import { useToast } from '../../../../../hooks/useToast';
 import { useSpecialFolderPaths } from '../../../../../hooks/useFolders';
-import { formatComposedEmailData } from '../../../../../utils/replyForwardHelper';
+import { buildReplyHeaders, formatComposedEmailData } from '../../../../../utils/replyForwardHelper';
 
 // Loose shape covering both postal-mime attachments and the composer's local
 // payload shape — filename deliberately excludes `null` (postal-mime's real
@@ -63,6 +63,8 @@ export interface ParsedEmailForTabs {
   text?: string;
   attachments: EmailTabAttachment[];
   parts?: EmailTabCalendarPart[];
+  /** Headers of the email (an RSVP reply threads onto them) */
+  headers?: Record<string, string>;
 }
 
 interface EmailTabsProps {
@@ -138,10 +140,8 @@ const EmailTabs = ({ parsedEmail }: EmailTabsProps) => {
         html: `<pre>${body}</pre>`,
         text: body,
         messageId: messageId,
-        headers: {
-          'Message-ID': messageId,
-          'In-Reply-To': messageId,
-        },
+        // In-Reply-To / References from the invite, so the RSVP joins its conversation
+        headers: buildReplyHeaders(parsedEmail.headers ?? {}, messageId, 'reply'),
         attachments: [
           {
             filename: 'invite-reply.ics',

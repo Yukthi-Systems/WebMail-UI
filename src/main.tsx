@@ -26,7 +26,6 @@ import {
 } from '@tanstack/react-query';
 import { Provider as JotaiProvider } from 'jotai';
 import '@radix-ui/themes/styles.css';
-import 'jotai-devtools/styles.css';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { routeTree } from './routeTree.gen';
 import { Toasts } from './components/ui/ToastComponent.tsx';
@@ -122,7 +121,11 @@ window.addEventListener('beforeinstallprompt', (e) => {
   window._deferredPWAPrompt = e as BeforeInstallPromptEvent;
 });
 
-const router = createRouter({ routeTree, defaultNotFoundComponent: () => <NotFound /> });
+const router = createRouter({
+  routeTree,
+  context: { queryClient },
+  defaultNotFoundComponent: () => <NotFound />,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {

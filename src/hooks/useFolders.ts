@@ -15,9 +15,11 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { noteUidValidity } from '../utils/emailCache';
 import { folders, foldersFullPath, folderUidValidity, foldersQuota } from '../api/mailbox';
 import { buildFolderTree } from '../utils/folderUtils';
+import { FOLDERS_FULL_PATH_QUERY_KEY, mergeFolderDetails } from '../utils/workspaceFolders';
 
 import { type EmailFolders, defaultFolders } from '../api/mailbox';
 import { useEffect, useMemo, useCallback } from 'react';
@@ -58,7 +60,7 @@ export function useFoldersFullPath() {
   // actual response shape (FoldersFullPathResponse) — pre-existing API-layer
   // mismatch, preserved via cast rather than "fixed" here.
   const query = useQuery<FoldersFullPathResponse, Error>({
-    queryKey: ['foldersFullPath'],
+    queryKey: FOLDERS_FULL_PATH_QUERY_KEY,
     queryFn: foldersFullPath as unknown as () => Promise<FoldersFullPathResponse>,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 30,
@@ -71,18 +73,7 @@ export function useFoldersFullPath() {
   useEffect(() => {
     const data = query.data;
     if (query.isSuccess && data) {
-      // /folder/path has no UID status — keep the stored one, or the "new mail?"
-      // check sees no status, reports a change and reloads the list needlessly
-      setFolderDetails((prev) => {
-        const statusByFolder = new Map(
-          (Array.isArray(prev) ? prev : []).map((f) => [f.folder_name, f.status])
-        );
-        return (data.folders || []).map((f) =>
-          f.status || !statusByFolder.get(f.folder_name)
-            ? f
-            : { ...f, status: statusByFolder.get(f.folder_name) }
-        );
-      });
+      setFolderDetails((prev) => mergeFolderDetails(prev, data.folders || []));
     } else if (query.isError || (query.isSuccess && !data)) {
       setFolderDetails([]);
     }
@@ -171,10 +162,13 @@ export function useUpdateAnyFolderUnreadCount() {
 }
 
 export function useFolderUidValidity(folderPath?: string) {
+  const queryClient = useQueryClient();
   return useQuery<{ MESSAGES: number; UIDNEXT: number; UIDVALIDITY: number }, Error>({
     queryKey: ['folderUidValidity', folderPath],
     queryFn: async () => {
       const response = await folderUidValidity(folderPath!);
+      // A new UIDVALIDITY voids every UID cached for this folder
+      noteUidValidity(queryClient, folderPath!, response.data?.UIDVALIDITY);
       return response.data;
     },
     enabled: !!folderPath,

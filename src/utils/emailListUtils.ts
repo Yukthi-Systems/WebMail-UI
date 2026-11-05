@@ -32,23 +32,28 @@ export const createSafeStringSet = (
   );
 };
 
-export const isFolderThreadEnabled = (
-  folderThreadView: UserSettings['folders'] | undefined,
-  folder?: string,
-  folderPath?: string
-): boolean => {
-  const folderKey = folder?.toLowerCase() || 'inbox';
-  const value = folderThreadView?.[folderKey]?.list_thread_view ?? 'threads';
-  return value === 'list' && ['inbox', 'sent'].includes(folderPath?.toLowerCase() || '');
+/**
+ * Conversation view for a folder: on unless "Expand Message Threads" is
+ * "never" or the folder's View Mode is "list". folderKey is the folder's key
+ * in the settings (useSpecialFolderPaths().settingsKey(folder)).
+ */
+/**
+ * The list's count always shows emails. In conversation view pages count
+ * conversations, so total_count is shown on hover and totalEmails is the label.
+ */
+export const listCountLabels = (
+  totalCount: number,
+  totalEmails?: number
+): { label: string; tooltip?: string } => {
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+  if (totalEmails === undefined) return { label: plural(totalCount, 'email') };
+  return { label: plural(totalEmails, 'email'), tooltip: plural(totalCount, 'conversation') };
 };
 
-export const shouldApplyThreading = (
-  threadedView: string,
-  isFolderThread: boolean,
-  folder?: string
+export const isConversationView = (
+  userSettings: Pick<UserSettings, 'email' | 'folders'> | null | undefined,
+  folderKey: string
 ): boolean => {
-  return !(
-    threadedView === 'never' ||
-    (isFolderThread && ['inbox', 'sent'].includes(folder?.toLowerCase() || ''))
-  );
+  if ((userSettings?.email?.mail_thead_view || 'all threads') === 'never') return false;
+  return (userSettings?.folders?.[folderKey]?.list_thread_view ?? 'threads') !== 'list';
 };

@@ -33,6 +33,11 @@ interface CustomModalProps {
   position?: 'center' | 'bottom-right';
   blocking?: boolean;
   draggable?: boolean;
+  /**
+   * Fixed-height window whose content manages its own scrolling and padding
+   * (the composer), instead of a window that grows with a scrolling body.
+   */
+  fillContent?: boolean;
 }
 
 const CustomModal = ({
@@ -46,6 +51,7 @@ const CustomModal = ({
   position = 'center',
   blocking = true,
   draggable = true,
+  fillContent = false,
 }: CustomModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
@@ -249,11 +255,11 @@ const CustomModal = ({
       return `${baseClasses} inset-0 w-full max-w-[100vw] h-full h-[100dvh] max-h-[100dvh] rounded-none overflow-hidden`;
     }
     if (isFullView) {
-      return `${baseClasses} w-[95vw] max-h-[90vh] top-1/2 left-1/2 transition-all duration-300 ease-in-out`;
+      return `${baseClasses} w-[95vw] ${fillContent ? 'h-[90vh]' : ''} max-h-[90vh] top-1/2 left-1/2 transition-all duration-300 ease-in-out`;
     }
     const posClass = position === 'bottom-right' ? 'bottom-5 right-5' : 'top-1/2 left-1/2';
     // Always include transition — during drag we disable it directly on the DOM element
-    return `${baseClasses} transition-all duration-300 ease-in-out w-[95vw] lg:w-[950px] max-h-[90vh] ${posClass}`;
+    return `${baseClasses} transition-all duration-300 ease-in-out w-[95vw] ${fillContent ? 'lg:w-[820px] h-[min(85vh,760px)]' : 'lg:w-[950px]'} max-h-[90vh] ${posClass}`;
   };
 
   const getTransform = () => {
@@ -358,7 +364,11 @@ const CustomModal = ({
             </Button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 sm:py-4 min-h-0 animate-fadeIn">{children}</div>
+        <div
+          className={`flex-1 overflow-y-auto min-h-0 animate-fadeIn ${fillContent ? '' : 'px-4 sm:px-5 py-3 sm:py-4'}`}
+        >
+          {children}
+        </div>
         {footer && (
           <div
             className="px-4 sm:px-5 pt-3 border-t border-[var(--gray-5)] bg-[var(--gray-1)] rounded-none sm:rounded-b-lg shrink-0 z-10"

@@ -15,14 +15,12 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { lazy, Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import Folders from './Folders';
 import EmailList from './EmailList';
-import Composer from '../composer';
 import CreateFolder from './CreateFolder';
-import ContactView from '../contacts';
 import { viewContactModel } from '../../state/contact';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { composerOpenAtom } from '../../state/composer';
 import { userSettingsAtom } from '../../state/settings';
 import { sidebarCollapsedAtom } from '../../state/sidebar';
@@ -36,7 +34,13 @@ import MobileBottomNav from './MobileBottomNav';
 import ResizablePanel from '../common/ResizeblePanel';
 import { useKeyboardNavigation } from '../../hooks/useKeyboardShortcuts';
 import { usePanelSizes } from '../../hooks/usePanelSizes';
-import type { EmailLike } from '../../utils/emailThreading';
+import { countUnread, type EmailLike } from '../../utils/threads';
+
+// Loaded when needed, so the mail page doesn't download the rich text editor and
+// the spreadsheet libraries of contact import up front
+const loadComposer = () => import('../composer');
+const Composer = lazy(loadComposer);
+const ContactView = lazy(() => import('../contacts'));
 
 const Mailbox = () => {
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
@@ -47,7 +51,24 @@ const Mailbox = () => {
   const [viewContact] = useAtom(viewContactModel);
   const userSettings = useAtomValue(userSettingsAtom);
   const { show_sidebar = true } = userSettings?.ui ?? {};
-  const setOpenComposer = useSetAtom(composerOpenAtom);
+  const [composerOpen, setOpenComposer] = useAtom(composerOpenAtom);
+  // Stays mounted after the first open: an undo-send timer lives in the composer
+  const [composerUsed, setComposerUsed] = useState(composerOpen);
+  if (composerOpen && !composerUsed) setComposerUsed(true);
+
+  // Fetched once the page is idle, so the first compose or reply opens right away
+  useEffect(() => {
+    const load = () => {
+      void loadComposer();
+      void import('./EmailList/EmailComposer');
+    };
+    if (typeof requestIdleCallback === 'undefined') {
+      const timer = setTimeout(load, 2000);
+      return () => clearTimeout(timer);
+    }
+    const handle = requestIdleCallback(load, { timeout: 5000 });
+    return () => cancelIdleCallback(handle);
+  }, []);
   const { folder } = useParams({ strict: false });
   const { mutate: moveMutate } = useMoveMail();
   const queryClient = useQueryClient();
@@ -56,6 +77,8 @@ const Mailbox = () => {
   const { isDesktop } = useWindowSize();
   const foldersRef = useRef<{ focusFirstFolder: () => void }>(null);
   const [draggedEmails, setDraggedEmails] = useState<number[]>([]);
+  // Folder of the dragged UIDs (a search can list another folder than the open one)
+  const [dragSourceFolder, setDragSourceFolder] = useState<string | undefined>(undefined);
   const [isDragging, setIsDragging] = useState(false);
   const { panelSizes, updatePanelSize } = usePanelSizes();
 
@@ -65,8 +88,9 @@ const Mailbox = () => {
     }
   }, [clearSelectedEmail]);
 
-  const handleDragStart = useCallback((emailIds: number[]) => {
+  const handleDragStart = useCallback((emailIds: number[], sourceFolder?: string) => {
     setDraggedEmails(emailIds);
+    setDragSourceFolder(sourceFolder);
     setIsDragging(true);
   }, []);
 
@@ -81,9 +105,10 @@ const Mailbox = () => {
 
   const handleDropOnFolder = useCallback(
     (targetFolder: string) => {
-      if (draggedEmails.length === 0 || !folder) return;
+      const sourceFolder = dragSourceFolder || folder;
+      if (draggedEmails.length === 0 || !sourceFolder) return;
 
-      if (targetFolder === folder) {
+      if (targetFolder === sourceFolder) {
         handleDragEnd();
         return;
       }
@@ -96,8 +121,8 @@ const Mailbox = () => {
 
       moveMutate(
         {
-          path: folder,
-          sourceFolder: folder,
+          path: sourceFolder,
+          sourceFolder,
           destFolder: targetFolder,
           body: draggedEmails,
         },
@@ -105,16 +130,15 @@ const Mailbox = () => {
           onSuccess: () => {
             // Compute unread delta from cached email pages before invalidating
             const cachedPages = queryClient.getQueriesData<{ emails?: EmailLike[] }>({
-              queryKey: ['folder', folder],
+              queryKey: ['folder', sourceFolder],
             });
             let unreadMoved = 0;
             for (const [, data] of cachedPages) {
               const raw = data?.emails;
               if (!raw) continue;
               const emails: EmailLike[] = Array.isArray(raw) ? raw : Object.values(raw);
-              unreadMoved += emails.filter(
-                (e) => draggedEmails.includes(Number(e.id)) && !e.FLAGS?.includes('\\Seen')
-              ).length;
+              // Conversation rows count their unread emails (draggedEmails are UIDs)
+              unreadMoved += countUnread(emails, draggedEmails);
             }
 
             // Clear selection before invalidating so the refetch render sees no stale IDs
@@ -123,7 +147,7 @@ const Mailbox = () => {
 
             // Update both source and destination folder counts locally
             if (unreadMoved > 0) {
-              updateAnyFolderUnreadCount(folder, -unreadMoved);
+              updateAnyFolderUnreadCount(sourceFolder, -unreadMoved);
               updateAnyFolderUnreadCount(targetFolder, unreadMoved);
             }
 
@@ -145,6 +169,7 @@ const Mailbox = () => {
     },
     [
       draggedEmails,
+      dragSourceFolder,
       folder,
       moveMutate,
       queryClient,
@@ -238,9 +263,9 @@ const Mailbox = () => {
 
         <MobileBottomNav onFolderClick={handleFolderClick} />
 
-        <Composer />
+        <Suspense fallback={null}>{composerUsed && <Composer />}</Suspense>
         <CreateFolder />
-        {viewContact && <ContactView />}
+        <Suspense fallback={null}>{viewContact && <ContactView />}</Suspense>
         <div className="md:hidden h-20" />
       </div>
     </>

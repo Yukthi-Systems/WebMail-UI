@@ -18,12 +18,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Box, Button, Dialog, Flex, Text } from '@radix-ui/themes';
 import { FaExclamationTriangle } from 'react-icons/fa';
-import { FaPaperPlane, FaDeleteLeft, FaFloppyDisk } from 'react-icons/fa6';
 import { mightHaveForgottenAttachment as mightHaveForgottenAttachmentCheck } from '../../../utils/attachmentReminder';
 import type { Email } from '../../../api/mailbox';
 import type { Email as ParsedPostalEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { useParams } from '@tanstack/react-router';
 import { useEmailRaw } from '../../../hooks/useEmailRaw';
+import { useQueryClient } from '@tanstack/react-query';
+import { addPendingReply } from '../../../hooks/useThreadConversation';
+import type { EmailLike } from '../../../utils/threads';
 import PostalMime, { decodeWords } from 'postal-mime';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useSendMail, useDraftMail } from '../../../hooks/useComposer';
@@ -37,7 +39,19 @@ import { emailAddress } from '../../../state/emailAddress';
 import RecipientField, { type RecipientFieldHandle } from '../../composer/RecipientField';
 import SubjectField from '../../composer/SubjectField';
 import ContentEditor from '../../composer/contentEditor';
-import AttachmentUploader from '../../composer/AttachmentUploader';
+import AttachmentUploader, {
+  type AttachmentUploaderHandle,
+} from '../../composer/AttachmentUploader';
+import { ComposerDropOverlay, ComposerFooter } from '../../composer/ComposerFrame';
+import {
+  NO_QUOTE,
+  extractQuote,
+  hasQuote,
+  prepareOutgoingHtml,
+  withoutQuote,
+  wrapQuote,
+  type OriginalQuote,
+} from '../../../utils/emailQuote';
 import {
   toBase64,
   MAX_TOTAL_SIZE,
@@ -45,7 +59,6 @@ import {
   formatFileSize,
 } from '../../composer/attachmentUtils';
 import { useDropzone } from 'react-dropzone';
-import { FaPaperclip } from 'react-icons/fa6';
 import EmailPriorityField from '../../composer/EmailPriorityField';
 import ReadReceiptField from '../../composer/ReadReceiptField';
 import { generateMessageId, sendMailV2, type ComposerRequest } from '../../../api/composer';
@@ -76,10 +89,8 @@ import { escapeHtml } from '../../../utils/emailPrint';
 import { sanitizeEmailHtml } from '../../../utils/sanitizeHTMLContent';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { useSpecialFolderPaths } from '../../../hooks/useFolders';
-import { getMessageId, normalizeFieldNames } from '../../../utils/emailUtils';
-import { getEditorDimensions } from '../../../utils/dimensions';
+import { normalizeFieldNames } from '../../../utils/emailUtils';
 import { parseEmailDate } from '../../../utils/dateFormat';
-import { useIsMobile } from '../../../hooks/use-mobile';
 import type { ComposerEmail } from '../../../state/emailComposer';
 import type { EmailAddress as RecipientEmailAddress } from '../../../state/composer';
 
@@ -154,9 +165,10 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [quotedHtml, setQuotedHtml] = useState('');
+  // The original of the quote in the editor: sent as is unless the user changes it
+  const originalQuoteRef = useRef<OriginalQuote>(NO_QUOTE);
+  const attachmentsRef = useRef<AttachmentUploaderHandle>(null);
 
-  const quotedEditableRef = useRef<HTMLDivElement>(null);
   const [fieldVisibility, setFieldVisibility] = useState({
     cc: false,
     bcc: false,
@@ -189,17 +201,36 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   // Not gated on isInitialized: a kept-mounted composer switching to another email must
   // still fetch that email's raw source, or the quote falls back to the placeholder
   const shouldFetchRaw = Boolean(email?.id && mode !== 'new');
-  const isMobile = useIsMobile();
   const {
     data: rawEmail,
     isLoading: isLoadingRaw,
     isError: isRawError,
-  } = useEmailRaw(
-    email?.id?.toString() || '',
-    folderForRaw || 'INBOX',
-    getMessageId(email) || '',
-    shouldFetchRaw
-  );
+  } = useEmailRaw(email?.id?.toString() || '', folderForRaw || 'INBOX', shouldFetchRaw);
+
+  const queryClient = useQueryClient();
+  /**
+   * After /email/send succeeded: show a reply in its open conversation as a
+   * preview. Its copy reaches the Sent folder
+   * through a queue later, and the conversation only reloads when the user asks.
+   */
+  const announceSent = (sent: Record<string, unknown>) => {
+    if (email && (mode === 'reply' || mode === 'replyAll')) {
+      const recipients = (sent.to as { email?: string; name?: string }[] | undefined) ?? [];
+      const me = currentEmail?.address || '';
+      addPendingReply(queryClient, email as unknown as EmailLike, {
+        id: `pending-${String(sent.message_id || Date.now())}`,
+        folderPath: specialFolders.sent,
+        From: currentEmail?.name ? `${currentEmail.name} <${me}>` : me,
+        To: recipients
+          .map((r) => (r.name ? `${r.name} <${r.email}>` : r.email || ''))
+          .join(', '),
+        Subject: String(sent.subject || ''),
+        Date: new Date().toUTCString(),
+        FLAGS: ['\\Seen'],
+        pending: { html: String(sent.body_html || ''), text: String(sent.body_text || '') },
+      });
+    }
+  };
 
   useEffect(() => {
     if (userSettings?.email) {
@@ -313,6 +344,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
       try {
         resetComposerData();
+        originalQuoteRef.current = NO_QUOTE;
 
         const basicData: ComposerBasicData = {
           to: [],
@@ -418,6 +450,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
               parsed.html || '',
               allAttachments
             );
+            // A saved reply or forward finds its quote again by the marker
+            originalQuoteRef.current = { raw: extractQuote(html), normalized: null };
             basicData.html = html;
             basicData.text = parsed.text || '';
             basicData.attachments = regularAttachments;
@@ -526,7 +560,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
           const signatureBlock = signatureHtml ? `<div>${signatureHtml}</div><p><br></p>` : '';
 
-          // Editable part: just the cursor area + signature (no original HTML here)
+          // The part to write in: the cursor area + signature, above the quote
           const editableHtml = `<p><br><br></p>${signatureBlock}`;
 
           // Plain-text mails: escape so "<user@host>" isn't parsed as a tag, and keep line breaks
@@ -536,10 +570,9 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
             const result = processIncomingHtml(parsed.html, allAttachments);
             processedOriginalHtml = result.html;
           }
-          // Quoted HTML is injected into the app document via innerHTML
+          // Goes into the editor and out in the email
           processedOriginalHtml = sanitizeEmailHtml(processedOriginalHtml);
 
-          // Quoted part: rendered in an iframe, not fed into Tiptap
           let quotedBlock = '';
           if (parsed) {
             try {
@@ -586,11 +619,12 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                 : `<p>---------- Forwarded message ----------</p><p>[Email content unavailable]</p>`;
           }
 
-          setQuotedHtml(quotedBlock);
+          const bodyHtml = editableHtml + wrapQuote(quotedBlock);
+          originalQuoteRef.current = { raw: extractQuote(bodyHtml), normalized: null };
           setComposerData((prev) => ({
             ...prev,
-            html: editableHtml,
-            text: editableHtml,
+            html: bodyHtml,
+            text: htmlToPlainText(editableHtml),
             attachments: mode === 'forward' ? prev.attachments : [],
           }));
         }
@@ -644,10 +678,13 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     }
     if (hasAutoSavedRef.current) return;
 
-    const liveQuoted = quotedEditableRef.current?.innerHTML ?? quotedHtml;
-    const draftHtml = (currentComposerData.html || '') + liveQuoted;
-    // text must include the quote too, not just the editor's own text
-    const draftData = liveQuoted
+    const draftHtml = prepareOutgoingHtml(
+      currentComposerData.html || '',
+      originalQuoteRef.current,
+      { keepMarker: true }
+    );
+    // text must include the quote too
+    const draftData = hasQuote(currentComposerData.html)
       ? { ...currentComposerData, html: draftHtml, text: htmlToPlainText(draftHtml) }
       : currentComposerData;
     const mailData = formatComposedEmailData(draftData, {
@@ -668,7 +705,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         console.error('error', err);
       },
     });
-  }, [quotedHtml, priority, readReceipt, draftMutate, isQuotaExceeded, saveDraft]);
+  }, [priority, readReceipt, draftMutate, isQuotaExceeded, saveDraft]);
 
   const [debouncedSaveToDraft, cancelDebouncedSaveToDraft] = useDebounce(saveToDraft, 15000);
 
@@ -702,14 +739,14 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     // Prepare headers based on mode
     let finalHeaders: EmailHeaders = {};
 
-    // Read live quoted content from the editable div (if expanded & edited) or fall back to original
-    const liveQuoted = quotedEditableRef.current?.innerHTML ?? quotedHtml;
-    // Use overrides or current state; append quoted block so it's included in sent/drafted email
+    // Use overrides or current state
     const baseData = { ...composerData, ...dataOverrides };
-    const combinedHtml = (baseData.html || '') + liveQuoted;
+    const outgoingHtml = prepareOutgoingHtml(baseData.html || '', originalQuoteRef.current, {
+      keepMarker: isDraft,
+    });
     // Plain-text alternative must carry the quoted/forwarded content as well
-    const currentData = liveQuoted
-      ? { ...baseData, html: combinedHtml, text: htmlToPlainText(combinedHtml) }
+    const currentData = hasQuote(baseData.html)
+      ? { ...baseData, html: outgoingHtml, text: htmlToPlainText(outgoingHtml) }
       : baseData;
 
     if (isDraft) {
@@ -863,6 +900,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         try {
           await sendMailV2(mailToSend as unknown as ComposerRequest);
           isSendInFlightRef.current = false;
+          announceSent(mailToSend);
           toast.dismiss(loadingId);
           window.removeEventListener('beforeunload', handleBeforeUnload);
           toast.success({ description: successDescription || '', duration: 5000 });
@@ -871,7 +909,6 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
           setKeepMounted(false);
           onSend();
           resetComposerData();
-          setQuotedHtml('');
           hasAutoSavedRef.current = false;
           emailIdRef.current = null;
           setIsInitialized(false);
@@ -898,6 +935,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       onSuccess: () => {
         if (isDraft) {
           isManualSaveRef.current = false;
+        } else if (mailData) {
+          announceSent(mailData);
         }
         if (setSending) setSending(false);
         toast.success({
@@ -907,7 +946,6 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         autoDelete();
         onClose();
         resetComposerData();
-        setQuotedHtml('');
         hasAutoSavedRef.current = false;
         emailIdRef.current = null;
         setIsInitialized(false);
@@ -992,8 +1030,11 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       });
     };
 
+    // Only what the user wrote: the quote may well say "see attached"
     const bodyMentionsAttachment = mightHaveForgottenAttachmentCheck(
-      composerData.text || '',
+      hasQuote(composerData.html)
+        ? htmlToPlainText(withoutQuote(composerData.html || ''))
+        : composerData.text || '',
       composerData.attachments?.length || 0
     );
 
@@ -1063,7 +1104,6 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
     onClose();
     resetComposerData();
-    setQuotedHtml('');
     hasAutoSavedRef.current = false;
     emailIdRef.current = null;
     setIsInitialized(false);
@@ -1103,15 +1143,6 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       cancelDebouncedSaveToDraft();
     };
   }, [cancelDebouncedSaveToDraft]);
-
-  // Populate the contenteditable div whenever quotedHtml is set or the modal reopens
-  // (e.g. after undo-send: modal was hidden so the div was unmounted, but quotedHtml
-  // state didn't change, so we must also re-run when composerOpen flips back to true)
-  useEffect(() => {
-    if (quotedEditableRef.current && quotedHtml) {
-      quotedEditableRef.current.innerHTML = quotedHtml;
-    }
-  }, [quotedHtml, composerOpen]);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -1192,6 +1223,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
       onClose={handleComposerCancel}
       position="bottom-right"
       blocking={false}
+      fillContent
       title={
         mode === 'reply'
           ? 'Reply'
@@ -1204,112 +1236,40 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                 : 'New Message'
       }
       footer={
-        <div className="flex flex-row items-center justify-between w-full gap-2 sm:gap-3">
-          <div className="hidden sm:flex items-center gap-3">
-            <EmailPriorityField priority={priority} onChange={setPriority} />
-            <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 justify-end ml-auto">
-            <button
-              onClick={handleComposerCancel}
-              className="flex items-center gap-2 text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] px-3 py-2 rounded text-sm min-h-[38px] touch-manipulation"
-              disabled={isLoading}
-              aria-label="Cancel compose"
-            >
-              <FaDeleteLeft />
-              <span>Cancel</span>
-            </button>
-
-            <div className="h-6 w-px bg-[var(--gray-6)]" />
-
-            <button
-              onClick={handleSaveDraft}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors min-h-[38px] touch-manipulation ${
-                isQuotaExceeded ||
-                (!composerData.to?.length &&
-                  !(toRef.current as unknown as { inputValue?: string })?.inputValue) ||
-                isDrafting
-                  ? 'opacity-50 cursor-not-allowed text-[var(--gray-9)]'
-                  : 'text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)]'
-              }`}
-              title={
-                !composerData.to?.length ? 'At least one recipient required to save draft' : ''
-              }
-              disabled={isLoading || isQuotaExceeded || isDrafting}
-              aria-label="Save draft"
-            >
-              {isDrafting ? (
-                <>
-                  <FaFloppyDisk className="animate-pulse" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <FaFloppyDisk />
-                  <span>
-                    Save Draft{isQuotaExceeded && ' (Disabled)'}
-                  </span>
-                </>
-              )}
-            </button>
-
-            <div className="h-6 w-px bg-[var(--gray-6)]" />
-
-            <button
-              onClick={handleSend}
-              className="flex items-center gap-2 bg-[var(--accent-9)] hover:bg-[var(--accent-10)] text-white font-medium px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm min-h-[38px] touch-manipulation shadow-sm"
-              disabled={isLoading || isSending}
-              aria-label="Send email"
-            >
-              {isSending ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  <span>Sending...</span>
-                </>
-              ) : (
-                <>
-                  <FaPaperPlane />
-                  <span>Send</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        <ComposerFooter
+          onAttach={() => attachmentsRef.current?.openPicker()}
+          optionsStripProps={{
+            onTouchStart: handleStripTouchStart,
+            onTouchMove: handleStripTouchMove,
+            onClickCapture: handleStripClickCapture,
+          }}
+          options={
+            <>
+              <div className="shrink-0 px-2">
+                <EmailPriorityField priority={priority} onChange={setPriority} />
+              </div>
+              <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
+            </>
+          }
+          onCancel={handleComposerCancel}
+          cancelDisabled={isLoading}
+          draft={{
+            onClick: handleSaveDraft,
+            disabled: isLoading || isQuotaExceeded || isDrafting,
+            dimmed:
+              !composerData.to?.length &&
+              !(toRef.current as unknown as { inputValue?: string })?.inputValue,
+            isSaving: isDrafting,
+            title: !composerData.to?.length ? 'At least one recipient required to save draft' : '',
+            quotaExceeded: isQuotaExceeded,
+          }}
+          send={{ onClick: handleSend, disabled: isLoading, isSending }}
+        />
       }
     >
-      <div {...getRootProps()} className="space-y-3 relative outline-none h-full min-h-[400px]">
+      <div {...getRootProps()} className="relative outline-none h-full flex flex-col">
         <input {...getInputProps()} />
-        {isDragActive && (
-          <div className="absolute inset-0 z-[9999] bg-[var(--gray-2)]/90 backdrop-blur-sm border-[3px] border-dashed border-[var(--accent-9)] rounded-xl flex items-center justify-center pointer-events-none">
-            <div className="bg-white px-8 py-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-              <div className="p-4 bg-[var(--accent-3)] text-[var(--accent-11)] rounded-full">
-                <FaPaperclip size={36} />
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-[var(--gray-12)]">Drop files here to attach</p>
-                <p className="text-sm text-[var(--gray-10)] mt-1">
-                  Maximum {formatFileSize(MAX_INDIVIDUAL_FILE_SIZE)} per file
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {isDragActive && <ComposerDropOverlay />}
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <div className="text-[var(--gray-11)]">Loading email content...</div>
@@ -1320,7 +1280,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
           <>
             {/* Quota Warning */}
             {isQuotaExceeded && (
-              <div className="p-2 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+              <div className="shrink-0 px-3 py-2 bg-yellow-50 border-l-4 border-yellow-400">
                 <div className="text-yellow-700 text-sm">
                   <strong>Storage Quota Exceeded:</strong> Draft saving is disabled because storage
                   is {folderQuota?.used_percent}% full. Please free up space to save drafts.
@@ -1329,7 +1289,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
             )}
 
             {/* Recipient Fields */}
-            <div className="space-y-2 relative">
+            <div className="shrink-0 relative border-b border-[var(--gray-4)] px-2">
               <RecipientField
                 ref={toRef}
                 label="To"
@@ -1338,7 +1298,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                 onChange={(emailAddresses) => updateComposerData({ to: emailAddresses })}
               />
 
-              <div className="flex gap-4 ml-2 absolute right-0 top-1 z-50">
+              <div className="flex gap-4 absolute right-3 top-1.5 z-50">
                 <button
                   onClick={() => toggleField('cc')}
                   className="text-[var(--gray-11)] hover:text-[var(--gray-12)] text-sm"
@@ -1352,8 +1312,10 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                   Bcc
                 </button>
               </div>
+            </div>
 
-              {fieldVisibility.cc && (
+            {fieldVisibility.cc && (
+              <div className="shrink-0 border-b border-[var(--gray-4)] px-2">
                 <RecipientField
                   ref={ccRef}
                   label="Cc"
@@ -1361,9 +1323,11 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                   value={(composerData.cc as unknown as RecipientEmailAddress[]) || []}
                   onChange={(emailAddresses) => updateComposerData({ cc: emailAddresses })}
                 />
-              )}
+              </div>
+            )}
 
-              {fieldVisibility.bcc && (
+            {fieldVisibility.bcc && (
+              <div className="shrink-0 border-b border-[var(--gray-4)] px-2">
                 <RecipientField
                   ref={bccRef}
                   label="Bcc"
@@ -1371,83 +1335,48 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
                   value={(composerData.bcc as unknown as RecipientEmailAddress[]) || []}
                   onChange={(emailAddresses) => updateComposerData({ bcc: emailAddresses })}
                 />
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Subject Field */}
-            <SubjectField
-              value={composerData.subject || ''}
-              onChange={(subject) => updateComposerData({ subject })}
+            <div className="shrink-0 border-b border-[var(--gray-4)] px-2">
+              <SubjectField
+                value={composerData.subject || ''}
+                onChange={(subject) => updateComposerData({ subject })}
+              />
+            </div>
+
+            {/* One writing space: the reply and the quoted original, one toolbar */}
+            <div className="flex-1 min-h-[240px]">
+              <ContentEditor
+                fill
+                onChange={({ html, text }) =>
+                  updateComposerData({
+                    html: html,
+                    text: text,
+                  })
+                }
+                value={composerData.html || ''}
+                // Not for a new message: that one starts at the To field
+                focusStartKey={mode !== 'new' && email ? `${email.id}:${mode}` : undefined}
+                onContentLoaded={(html) => {
+                  if (!originalQuoteRef.current.normalized) {
+                    originalQuoteRef.current = {
+                      ...originalQuoteRef.current,
+                      normalized: extractQuote(html),
+                    };
+                  }
+                }}
+              />
+            </div>
+
+            <AttachmentUploader
+              ref={attachmentsRef}
+              attachments={composerData.attachments || []}
+              onAttachmentsChange={(newAttachments) =>
+                updateComposerData({ attachments: newAttachments })
+              }
             />
-
-            {/* Priority and Read Receipt for mobile screens - Slideable row */}
-            <div
-              className="flex sm:hidden items-center gap-2.5 px-1 py-1 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap shrink-0 overscroll-x-contain"
-              style={{ WebkitOverflowScrolling: 'touch' }}
-              onTouchStart={handleStripTouchStart}
-              onTouchMove={handleStripTouchMove}
-              onClickCapture={handleStripClickCapture}
-            >
-              <div className="shrink-0">
-                <EmailPriorityField priority={priority} onChange={setPriority} />
-              </div>
-              <div className="shrink-0 flex items-center h-[34px] px-2.5 rounded-lg border border-[var(--gray-5)] bg-[var(--gray-2)]/60 hover:bg-[var(--gray-3)] transition-colors">
-                <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
-              </div>
-            </div>
-
-            {/* Content Editor and Attachments: side by side when the composer itself is
-                wide enough, stacked when it is narrow (resized window, phone) */}
-            <div className="@container">
-              <div className="grid grid-cols-1 @2xl:grid-cols-4 gap-2">
-                <div className="min-w-0 @2xl:col-span-3">
-                  <ContentEditor
-                    onChange={({ html, text }) =>
-                      updateComposerData({
-                        html: html,
-                        text: text,
-                      })
-                    }
-                    value={composerData.html || ''}
-                    height={getEditorDimensions(isMobile, false, false).height}
-                    maxheight={getEditorDimensions(isMobile, false, false).maxHeight}
-                  />
-                </div>
-                <div className="min-w-0 @2xl:col-span-1">
-                  <AttachmentUploader
-                    attachments={composerData.attachments || []}
-                    onAttachmentsChange={(newAttachments) =>
-                      updateComposerData({ attachments: newAttachments })
-                    }
-                    height={getEditorDimensions(isMobile, false, true).height}
-                    maxHeight={getEditorDimensions(isMobile, false, true).maxHeight}
-                    disableDrop={true}
-                  />
-                </div>
-                {/* Quoted original email — full width, always visible, directly editable */}
-                {quotedHtml && (
-                  <div className="min-w-0 @2xl:col-span-4">
-                    <div
-                      ref={quotedEditableRef}
-                      contentEditable
-                      suppressContentEditableWarning
-                      style={{
-                        paddingLeft: 12,
-                        borderLeft: '3px solid var(--gray-5)',
-                        outline: 'none',
-                        fontSize: 14,
-                        lineHeight: 1.6,
-                        color: 'var(--gray-11)',
-                        cursor: 'text',
-                        maxWidth: '100%',
-                        overflowX: 'auto',
-                        wordBreak: 'break-word',
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
           </>
         )}
       </div>

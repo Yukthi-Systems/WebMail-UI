@@ -16,7 +16,7 @@
  */
 
 // src/components/email/EmailViewer.tsx
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   emailViewErrorMessage,
   isEmailGoneError,
@@ -28,31 +28,34 @@ import { flagAtom } from '../../../../state/flags';
 import { useAtom, useAtomValue } from 'jotai';
 import { useUserTimezone } from '../../../../hooks/useTimezone';
 import { folderDetailsAtom } from '../../../../state/folders';
-import {
-  useSpecialFolderPaths,
-  useUpdateFolderUnreadCount,
-} from '../../../../hooks/useFolders';
+import { useSpecialFolderPaths } from '../../../../hooks/useFolders';
 import { getSentFolderPath } from '../../../../utils/folderUtils';
-import { useEmailCacheUpdater } from '../../../../hooks/useEmailCacheUpdater';
+import { useMarkSeenOnOpen } from '../../../../hooks/useMarkSeenOnOpen';
+import { isConversationView } from '../../../../utils/emailListUtils';
 import { userSettingsAtom } from '../../../../state/settings';
 import { useParams } from '@tanstack/react-router';
 import { ThreadView } from './ThreadView';
 import { SingleEmailView } from './SingleEmailView';
-import { extractIds, getMessageId, getReadReceiptRequest } from '../../../../utils/emailUtils';
+import { getMessageId, getReadReceiptRequest } from '../../../../utils/emailUtils';
 import { AlertDialog, Button, Flex, Separator, Text } from '@radix-ui/themes';
 import { FaEnvelope } from 'react-icons/fa';
 import { decodeWords } from 'postal-mime';
 import { useDeleteMail, useMoveMail } from '../../../../hooks/useEmails';
 import { useToast } from '../../../../hooks/useToast';
-import { useThreadEmails, useThreadMutations } from '../../../../hooks/useThreadEmails';
+import {
+  isSameEmail,
+  useThreadConversation,
+  useThreadMutations,
+} from '../../../../hooks/useThreadConversation';
 import { useSendMail } from '../../../../hooks/useComposer';
 import { generateMessageId, type ComposerRequest } from '../../../../api/composer';
 import { emailAddress } from '../../../../state/emailAddress';
 import { userDetailsAtom } from '../../../../state/userDetails';
-import type { EmailLike } from '../../../../utils/emailThreading';
+import type { EmailLike } from '../../../../utils/threads';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface EmailViewerProps {
+  /** UID of the email in folderPath (named messageId for historical reasons) */
   messageId: string;
   folderPath: string | undefined;
   subject: string;
@@ -97,33 +100,22 @@ const EmailViewer = ({
   handleSingleEmailMarkAsRead,
   onSaveAsContact,
 }: EmailViewerProps) => {
-  // Build a stable cache/parser key that uniquely identifies this email.
-  // Prefer the IMAP Message-ID (globally unique). For emails that lack one,
-  // fall back to seq-id + Subject + Date so that a different email which
-  // inherits the same sequence ID after deletions never maps to the same key.
-  const stableEmailKey =
-    getMessageId(email) || `${messageId}-${email?.Subject || ''}-${email?.Date || ''}`;
+  const uid = messageId;
+  const viewFolder = folderPath ?? '';
 
   // Body + attachment list only; attachments are downloaded on demand
   const {
     data: emailViewData,
     isLoading,
     error: viewError,
-  } = useEmailView(messageId, folderPath ?? '', stableEmailKey, true);
-  const parsedEmail = useParsedEmailView(
-    emailViewData,
-    messageId,
-    folderPath ?? '',
-    stableEmailKey
-  );
+  } = useEmailView(uid, viewFolder, true);
+  const parsedEmail = useParsedEmailView(emailViewData, uid, viewFolder);
   const headers = useMemo(() => parsedEmail?.headers ?? {}, [parsedEmail?.headers]);
   const queryClient = useQueryClient();
   const [folderDetails] = useAtom(folderDetailsAtom);
   const [isHeaderPopoverOpen, setIsHeaderPopoverOpen] = useState(false);
   const { folder } = useParams({ strict: false });
   const [viewingEmailFlag] = useAtom(flagAtom);
-  const updateFolderUnreadCount = useUpdateFolderUnreadCount(folderPath || 'INBOX');
-  const { patchEmailFlags } = useEmailCacheUpdater(folderPath || 'INBOX');
 
   const userSettings = useAtomValue(userSettingsAtom);
   // Resolved Sent/Drafts/Trash/Spam (e.g. "INBOX/Trash" on servers nesting folders under INBOX)
@@ -133,23 +125,6 @@ const EmailViewer = ({
   const { mutate: deleteMutate } = useDeleteMail();
   const { mutate: moveMutate } = useMoveMail();
   const toast = useToast();
-
-  // When useEmailView fetches fresh (not from prefetch cache), the API marked the
-  // email as read — sync the list cache and unread count. isLoading is true only
-  // on initial fetch (no cached data).
-  const wasLoadingRef = useRef(false);
-  useEffect(() => {
-    if (
-      wasLoadingRef.current &&
-      !isLoading &&
-      emailViewData &&
-      !email?.FLAGS?.includes('\\Seen')
-    ) {
-      patchEmailFlags([Number(email?.id)], '\\Seen');
-      updateFolderUnreadCount(-1);
-    }
-    wasLoadingRef.current = isLoading;
-  }, [isLoading, emailViewData, email, folderPath, patchEmailFlags, updateFolderUnreadCount]);
 
   // Email deleted/moved in another client: the list is stale, refresh it
   useEffect(() => {
@@ -185,7 +160,8 @@ const EmailViewer = ({
   const { mutate: sendReceiptMutate, isPending: isSendingReceipt } = useSendMail();
   const [showReadReceiptPrompt, setShowReadReceiptPrompt] = useState(false);
   const readReceiptRequest = useMemo(() => getReadReceiptRequest(headers), [headers]);
-  const readReceiptStorageKey = `webmail-read-receipt-${stableEmailKey}`;
+  // Remembered per message (Message-ID); emails without one by folder + UID
+  const readReceiptStorageKey = `webmail-read-receipt-${getMessageId(email) || `${viewFolder}:${uid}`}`;
 
   useEffect(() => {
     if (isLoading || !readReceiptRequest) return;
@@ -272,8 +248,6 @@ const EmailViewer = ({
     </AlertDialog.Root>
   );
 
-  const threadedView = userSettings?.email?.mail_thead_view || 'all threads';
-
   const flagged = '\\Flagged';
 
   const isFlagged = useMemo(() => {
@@ -283,111 +257,90 @@ const EmailViewer = ({
     return false;
   }, [viewingEmailFlag]);
 
-  // Threading is enabled for this folder if it's not explicitly set to "list" mode.
-  // No folder-name restriction — threading works in Inbox, Sent, [Gmail]/Sent Mail,
-  // custom folders, etc.
-  const isFolderThread = useMemo(() => {
-    const folderThreadView = userSettings?.folders || {};
-    const folderKey = specialFolders.settingsKey(folder);
-    const value = folderThreadView?.[folderKey]?.list_thread_view ?? 'threads';
-    return value === 'threads';
-  }, [folder, userSettings, specialFolders]);
-
   // ------------------------------------------------------------------
-  // FLAWLESS THREAD LOGIC
+  // CONVERSATION (from the API: GET /email/thread/{uid})
   // ------------------------------------------------------------------
 
-  // 1. Calculate the required Message IDs (Stable memoization)
-  const requiredMessageIds = useMemo(() => {
-    if (!email) return [];
+  const conversationView = isConversationView(
+    userSettings,
+    specialFolders.settingsKey(folderPath || folder)
+  );
+  // A list row known to be a single email needs no lookup
+  const isKnownSingle = email?.thread ? email.thread.messageCount <= 1 : false;
+  const shouldFetchThread = conversationView && !isKnownSingle;
 
-    const references = email['References'] ? extractIds(email['References'] as string) : [];
-    const threadRefs = (email['Thread-Reference'] as string[]) || [];
-    const currentId = getMessageId(email);
-
-    // Combine all relevant IDs
-    const ids = [...new Set([...threadRefs, ...references, currentId])];
-
-    // Only return IDs if we actually need to fetch a thread
-    const needsThreading = email['Thread-View'] === true || ids.length > 1;
-
-    return needsThreading ? ids : [];
-  }, [email]);
-
-  // 2. Resolve Sent and Inbox folder names from IMAP flags — handles Gmail-style
-  //    folders like [Gmail]/Sent Mail, several \Sent folders and INBOX/ namespaces.
+  // Your replies are added from the Sent folder (resolved by its IMAP flags)
   const sentFolderName = useMemo(() => getSentFolderPath(folderDetails), [folderDetails]);
 
-  const inboxFolderName = useMemo(() => {
-    if (!Array.isArray(folderDetails)) return 'INBOX';
-    const inboxFolder = folderDetails.find((f) => f.flags?.includes('Inbox'));
-    return inboxFolder?.folder_name || 'INBOX';
-  }, [folderDetails]);
-
-  // 3. Determine if we should fetch threads
-  const shouldFetchThreads = isFolderThread && threadedView === 'all threads';
-
-  // 4. The Hook - Fetches from currentFolder + inboxFolder + sentFolder
   const {
-    data: listofThreadEmails = [],
+    data: threadData,
     isLoading: isThreadLoading,
     isFetching: isThreadFetching,
+    isSuccess: isThreadSuccess,
+    isError: isThreadError,
     error: threadError,
-  } = useThreadEmails(
-    requiredMessageIds,
-    folderPath || 'INBOX',
-    sentFolderName,
-    inboxFolderName,
-    shouldFetchThreads
-  );
+  } = useThreadConversation(uid, viewFolder, {
+    sentFolder: sentFolderName,
+    enabled: shouldFetchThread,
+  });
+  const listofThreadEmails = useMemo(() => threadData?.emails ?? [], [threadData]);
 
-  // 5. Thread mutation helpers for optimistic updates
+  // Thread mutation helpers for optimistic updates
   const { optimisticallyRemove, optimisticallyRestore, invalidateThread } = useThreadMutations(
-    folderPath || 'INBOX',
-    requiredMessageIds
+    viewFolder,
+    uid
   );
 
-  // 6. Determine if we are effectively threaded
-  // Show threaded view only if we have finished loading and actually found multiple messages.
-  // While loading, it will fall back to SingleEmailView so the user sees the parent email immediately without blocking.
-  const isThreadedViewActive = shouldFetchThreads && listofThreadEmails.length > 1;
+  // Threaded view only once the conversation is loaded and has several emails.
+  // Until then the opened email is shown on its own, without waiting.
+  const isThreadedViewActive = shouldFetchThread && listofThreadEmails.length > 1;
+  const isThreadSettled = !shouldFetchThread || isThreadSuccess || isThreadError;
 
-  // Show error state if thread fetch failed
+  // Shown on its own: this view marks it as read (in a conversation, its card does)
+  useMarkSeenOnOpen({
+    uid,
+    folder: viewFolder,
+    isUnread: !email?.FLAGS?.includes('\\Seen'),
+    isLoaded: !!emailViewData,
+    isLoading,
+    active: isThreadSettled && !isThreadedViewActive,
+  });
+
+  // The email itself is gone (404) is shown by the single view; other failures here
   useEffect(() => {
-    if (threadError) {
+    if (threadError && !isEmailGoneError(threadError)) {
       console.error('[Thread] Failed to load thread:', threadError);
       toast.error({
-        description: 'Some emails in this thread could not be loaded. Showing available messages.',
+        description: 'The conversation could not be loaded. Showing this email only.',
       });
     }
   }, [threadError, toast]);
 
   // ------------------------------------------------------------------
   // DELETE & MOVE OPERATIONS WITH OPTIMISTIC UPDATES
+  // (UIDs are per folder: an email is identified by folderPath + id)
   // ------------------------------------------------------------------
 
-  function FilteredListLength(filteredId: string) {
-    const emailIdNum = Number(filteredId);
-    const remaining = listofThreadEmails.filter((i) => Number(i.id) !== emailIdNum);
+  function FilteredListLength(movedEmail: EmailLike) {
+    const remaining = listofThreadEmails.filter((e) => !isSameEmail(e, movedEmail));
 
     if (remaining.length === 0) {
       onBack?.();
     } else {
       // Optimistically update UI
-      optimisticallyRemove(emailIdNum);
+      optimisticallyRemove(movedEmail);
     }
   }
 
-  function deletedThreadMessage(deleteId: string) {
-    const emailIdNum = Number(deleteId);
-
-    // Find the email for potential restoration
-    const emailToDelete = listofThreadEmails.find((e) => Number(e.id) === emailIdNum);
-    const actualFolderPath = emailToDelete?.folderPath || folderPath || folder || 'INBOX';
+  function deletedThreadMessage(emailToDelete: EmailLike) {
+    const emailIdNum = Number(emailToDelete.id);
+    const actualFolderPath = emailToDelete.folderPath || folderPath || folder || 'INBOX';
+    const remainingAfter = () =>
+      listofThreadEmails.filter((e) => !isSameEmail(e, emailToDelete)).length;
 
     if (specialFolders.isFolder(actualFolderPath, 'trash')) {
       // Permanent delete - optimistically remove immediately
-      optimisticallyRemove(emailIdNum);
+      optimisticallyRemove(emailToDelete);
 
       deleteMutate(
         {
@@ -403,12 +356,11 @@ const EmailViewer = ({
             invalidateThread();
 
             // Check if we should close the view
-            const remaining = listofThreadEmails.filter((i) => Number(i.id) !== emailIdNum);
-            if (remaining.length === 0) onBack?.();
+            if (remainingAfter() === 0) onBack?.();
           },
           onError: (error) => {
             // Restore on error
-            if (emailToDelete) optimisticallyRestore(emailToDelete);
+            optimisticallyRestore(emailToDelete);
 
             toast.error({ description: error?.message || 'Failed to delete email.' });
           },
@@ -421,15 +373,15 @@ const EmailViewer = ({
       let hasMoved = false;
 
       // Optimistically remove from UI
-      optimisticallyRemove(emailIdNum);
+      optimisticallyRemove(emailToDelete);
 
       toast.success({
         description: 'Email moved to trash',
         undo: {
           label: 'Undo',
           onClick: () => {
-            // Too late: the email is already in Trash under a new id there, so it
-            // can't be moved back by this id (that would move a different email)
+            // Too late: the email is already in Trash under a new UID there, so it
+            // can't be moved back by this one (that would move a different email)
             if (hasMoved) {
               toast.error({ description: 'The email was already moved to Trash.' });
               invalidateThread();
@@ -438,7 +390,7 @@ const EmailViewer = ({
 
             // Cancel the delayed move and restore the UI
             if (undoTimeoutId) clearTimeout(undoTimeoutId);
-            if (emailToDelete) optimisticallyRestore(emailToDelete);
+            optimisticallyRestore(emailToDelete);
             toast.success({ description: 'Undo successful' });
           },
           duration: undoTime,
@@ -460,12 +412,11 @@ const EmailViewer = ({
               // Confirm the optimistic update
               invalidateThread();
 
-              const remaining = listofThreadEmails.filter((i) => Number(i.id) !== emailIdNum);
-              if (remaining.length === 0) onBack?.();
+              if (remainingAfter() === 0) onBack?.();
             },
             onError: (error) => {
               // Restore on error
-              if (emailToDelete) optimisticallyRestore(emailToDelete);
+              optimisticallyRestore(emailToDelete);
 
               toast.error({ description: error?.message || 'Failed to move email.' });
             },
@@ -538,6 +489,7 @@ const EmailViewer = ({
           listofThreadEmails={listofThreadEmails}
           messageId={messageId}
           folderPath={folderPath}
+          matchedEmailIds={email?.thread?.matchedEmailIds}
           date={date}
           onContentLoaded={onContentLoaded}
           splitView={splitView}

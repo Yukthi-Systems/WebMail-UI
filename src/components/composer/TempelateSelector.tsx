@@ -40,8 +40,7 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
   const [searchTerm, setSearchTerm] = useState('');
   const userDetails = useAtomValue(userDetailsAtom);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number }>({
-    top: 0,
+  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({
     left: 0,
   });
   const location = useLocation();
@@ -112,10 +111,12 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
     if (!isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - 330));
-      setDropdownPosition({
-        top: rect.bottom + 6,
-        left,
-      });
+      // Opens upward when there is more room above (it sits in the composer's footer)
+      setDropdownPosition(
+        rect.top > window.innerHeight - rect.bottom
+          ? { bottom: window.innerHeight - rect.top + 6, left }
+          : { top: rect.bottom + 6, left }
+      );
     }
     setIsOpen((prev) => !prev);
   };
@@ -127,10 +128,10 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
         ref={triggerRef}
         type="button"
         onClick={toggleOpen}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] rounded-lg transition-all border border-[var(--gray-5)] whitespace-nowrap"
+        className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] rounded transition-all min-h-9 whitespace-nowrap"
       >
         <FaFileAlt className="w-3.5 h-3.5" />
-        Use Template
+        Template
         <FaChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
@@ -145,8 +146,9 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
             <div
               style={{
                 position: 'fixed',
-                top: `${dropdownPosition.top}px`,
-                left: `${dropdownPosition.left}px`,
+                top: dropdownPosition.top,
+                bottom: dropdownPosition.bottom,
+                left: dropdownPosition.left,
                 zIndex: 10001,
               }}
               className="w-80 max-w-[calc(100vw-16px)] bg-[var(--gray-1)] border border-[var(--gray-6)] rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"

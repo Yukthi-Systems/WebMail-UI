@@ -130,7 +130,8 @@ export default defineConfig(({ mode }) => {
             'vendor-tanstack': ['@tanstack/react-query', '@tanstack/react-router'],
             'vendor-radix': ['@radix-ui/themes'],
             'vendor-tiptap': ['@tiptap/react', '@tiptap/starter-kit'],
-            'vendor-heavy': ['mammoth', 'xlsx', 'postal-mime', 'jszip'],
+            // xlsx, mammoth and jszip stay out of here: a shared chunk would load them
+            // with the mail page. Rollup splits them with what imports them on demand.
           },
         },
       },

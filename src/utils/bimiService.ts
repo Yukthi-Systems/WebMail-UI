@@ -16,6 +16,7 @@
  */
 
 import { API_CONFIG } from '../constants/config';
+import { getStoredBimiRecord, storeBimiRecord } from './bimiCache';
 
 export interface BIMIRecord {
   logo?: string;
@@ -84,6 +85,12 @@ export class BIMIService {
       return this.cache.get(domain)!;
     }
 
+    const stored = getStoredBimiRecord(domain);
+    if (stored) {
+      this.cache.set(domain, stored);
+      return stored;
+    }
+
     if (this.pendingRequests.has(domain)) {
       return this.pendingRequests.get(domain)!;
     }
@@ -115,13 +122,15 @@ export class BIMIService {
       const apiResponse: BIMIApiResponse = await response.json();
 
       if (apiResponse.success && apiResponse.data) {
-        return {
+        const record: BIMIRecord = {
           exists: apiResponse.data.exists,
           domain: apiResponse.data.domain,
           version: apiResponse.data.version,
           logo: apiResponse.data.logo,
           record: apiResponse.data.record,
         };
+        storeBimiRecord(domain, record);
+        return record;
       } else {
         throw new Error('API returned unsuccessful response');
       }

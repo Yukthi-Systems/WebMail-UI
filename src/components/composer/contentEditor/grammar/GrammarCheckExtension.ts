@@ -53,7 +53,8 @@ export interface CheckableText {
 }
 
 // Quoted emails (replies/forwards) are someone else's text — don't check them
-const SKIPPED_NODES = new Set(['blockquote', 'image', 'table']);
+// emailQuote: the quoted original of a reply or forward, not the user's own text
+const SKIPPED_NODES = new Set(['blockquote', 'emailQuote', 'image', 'table']);
 
 /**
  * Plain text of the document as sent to the checker, plus a map from text

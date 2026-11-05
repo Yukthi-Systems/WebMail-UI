@@ -23,13 +23,20 @@ import ThreadEmailCard from './ThreadEmailCard';
 import ThreadLoadingState from './ThreadLoadingState';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../../../state/settings';
-import { useMemo } from 'react';
-import type { EmailLike } from '../../../../../utils/emailThreading';
+import { useMemo, useRef } from 'react';
+import { findOpenEmail, useScrollToOpenEmail } from '../../../../../hooks/useScrollToOpenEmail';
+import type { EmailLike } from '../../../../../utils/threads';
 
 interface ThreadViewProps {
   listofThreadEmails: EmailLike[];
+  /** UID of the email that was opened (in folderPath) */
   messageId: string;
   folderPath?: string;
+  /**
+   * Search in conversation view: UIDs (in folderPath) of the emails that
+   * matched.
+   */
+  matchedEmailIds?: number[];
   date: string;
   onContentLoaded?: (content: string) => void;
   splitView?: boolean;
@@ -40,9 +47,9 @@ interface ThreadViewProps {
   onForwardAsAttachment?: (email: EmailLike, rawContent: string) => void;
   onEditAsNew?: (email: EmailLike) => void;
   onReplyAll?: (email: EmailLike) => void;
-  handleSingleEmailDelete?: (emailId: string) => void;
+  handleSingleEmailDelete?: (email: EmailLike) => void;
   isLoadingInitial: boolean;
-  FilteredListLength?: (emailId: string) => void;
+  FilteredListLength?: (email: EmailLike) => void;
   handleSingleEmailMarkAsFlagged?: (emailId: string, action: boolean) => void;
   handleSingleEmailMarkAsRead?: (emailId: string, action: boolean) => void;
   reFetchMails?: () => void;
@@ -54,6 +61,7 @@ export const ThreadView = ({
   listofThreadEmails,
   messageId,
   folderPath = '',
+  matchedEmailIds,
   date,
   onContentLoaded,
   splitView,
@@ -90,6 +98,15 @@ export const ThreadView = ({
       }
     });
   }, [listofThreadEmails, sortOrder]);
+
+  // Open at the email that was clicked, wherever the sort order puts it
+  const openEmail = findOpenEmail(sortedEmails, messageId, folderPath, matchedEmailIds);
+  const openEmailRef = useRef<HTMLDivElement>(null);
+  useScrollToOpenEmail(
+    openEmailRef,
+    `${folderPath}:${messageId}`,
+    !isLoadingInitial && !!openEmail
+  );
 
   if (isLoadingInitial) {
     return (
@@ -128,11 +145,19 @@ export const ThreadView = ({
         ) : (
           <div className="w-full mx-auto">
             {sortedEmails.map((threadEmail, index: number) => (
-              <div key={`${threadEmail.id}-${threadEmail.folderPath}`}>
+              <div
+                key={`${threadEmail.id}-${threadEmail.folderPath}`}
+                ref={threadEmail === openEmail ? openEmailRef : undefined}
+              >
                 <ThreadEmailCard
                   threadEmail={threadEmail}
                   folderPath={threadEmail.folderPath || folderPath || ''}
-                  isCurrentEmail={threadEmail.id === messageId}
+                  // UIDs are per folder: the same number in Sent is another email
+                  isCurrentEmail={
+                    threadEmail.folderPath === folderPath &&
+                    (String(threadEmail.id) === messageId ||
+                      !!matchedEmailIds?.includes(Number(threadEmail.id)))
+                  }
                   onContentLoaded={onContentLoaded}
                   foundedIn={
                     threadEmail.folderPath !== folderPath ? threadEmail.folderPath || '' : ''

@@ -25,12 +25,12 @@ import {
   type EmailAddress,
   type ComposedEmailData,
 } from '../../state/composer';
-import { FaDeleteLeft, FaFloppyDisk, FaPaperPlane } from 'react-icons/fa6';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import RecipientField, { type RecipientFieldHandle } from './RecipientField';
 import SubjectField from './SubjectField';
 import ContentEditor from './contentEditor';
-import AttachmentUploader from './AttachmentUploader';
+import AttachmentUploader, { type AttachmentUploaderHandle } from './AttachmentUploader';
+import { ComposerDropOverlay, ComposerFooter } from './ComposerFrame';
 import {
   toBase64,
   MAX_TOTAL_SIZE,
@@ -38,7 +38,6 @@ import {
   formatFileSize,
 } from './attachmentUtils';
 import { useDropzone } from 'react-dropzone';
-import { FaPaperclip } from 'react-icons/fa6';
 import { formatComposedEmailData } from '../../utils/composedDataFormat';
 import EmailPriorityField from './EmailPriorityField';
 import ReadReceiptField from './ReadReceiptField';
@@ -53,8 +52,6 @@ import { folderQuotaAtom } from '../../state/folders';
 import { FaExclamationTriangle } from 'react-icons/fa';
 import CustomModal from './CustomModal';
 import { useSpecialFolderPaths } from '../../hooks/useFolders';
-import { useIsMobile } from '../../hooks/use-mobile';
-import { getEditorDimensions } from '../../utils/dimensions';
 import { mightHaveForgottenAttachment as mightHaveForgottenAttachmentCheck } from '../../utils/attachmentReminder';
 
 export type EmailPriority = 'normal' | 'high' | 'low';
@@ -130,9 +127,9 @@ const Composer = () => {
   const specialFolders = useSpecialFolderPaths();
   const [saveDraft, setSaveDraft] = useState<string>(specialFolders.drafts);
   const [folder, setFolder] = useState<string>(specialFolders.sent);
-  const isMobile = useIsMobile();
   // Refs for recipient fields to access flush method
   const toRef = useRef<RecipientFieldHandle>(null);
+  const attachmentsRef = useRef<AttachmentUploaderHandle>(null);
   const ccRef = useRef<RecipientFieldHandle>(null);
   const bccRef = useRef<RecipientFieldHandle>(null);
 
@@ -1139,101 +1136,74 @@ const Composer = () => {
         title="New mail"
         position="bottom-right"
         draggable={true}
+        fillContent
         isFullView={fullViewEnabled}
         onToggleFullView={() => setFullViewEnabled((prev) => !prev)}
         footer={
-          <div className="flex items-center justify-end gap-2 sm:gap-3 w-full">
-            <Button
-              variant="ghost"
-              size="2"
-              onClick={handleComposerCancel}
-              className="text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] min-h-[38px] px-3 touch-manipulation"
-              aria-label="Cancel compose"
-            >
-              <FaDeleteLeft />
-              <span>Cancel</span>
-            </Button>
-
-            {show_save_draft_button && (
+          <ComposerFooter
+            onAttach={show_attach_file_button ? () => attachmentsRef.current?.openPicker() : undefined}
+            optionsStripProps={{
+              onTouchStart: handleStripTouchStart,
+              onTouchMove: handleStripTouchMove,
+              onClickCapture: handleStripClickCapture,
+            }}
+            options={
               <>
-                <div className="h-6 w-px bg-[var(--gray-6)]" />
-                <Button
-                  variant="ghost"
-                  size="2"
-                  onClick={handleDraftButtonClick}
-                  className={`text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-3)] min-h-[38px] px-3 touch-manipulation ${
-                    isQuotaExceeded ||
+                <div className="shrink-0">
+                  <TemplateSelector onTemplateSelect={handleTemplateSelect} />
+                </div>
+                <div className="shrink-0 px-2">
+                  <EmailPriorityField priority={priority} onChange={setPriority} />
+                </div>
+                <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
+              </>
+            }
+            onCancel={handleComposerCancel}
+            // We can't rely solely on state for 'disabled' because of pending text in Ref
+            draft={
+              show_save_draft_button
+                ? {
+                    onClick: handleDraftButtonClick,
+                    disabled: isQuotaExceeded || isDrafting,
                     // RecipientFieldHandle doesn't actually expose `inputValue` (only `flush`),
                     // so this always evaluates truthy — pre-existing no-op, not fixed here.
-                    (!composerData.to?.length &&
-                      !(toRef.current as unknown as { inputValue?: string })?.inputValue)
-                      ? 'opacity-50 cursor-not-allowed'
-                      : ''
-                  }`}
-                  title={
-                    !composerData.to?.length ? 'At least one recipient required to save draft' : ''
+                    dimmed:
+                      !composerData.to?.length &&
+                      !(toRef.current as unknown as { inputValue?: string })?.inputValue,
+                    isSaving: isDrafting,
+                    title: !composerData.to?.length
+                      ? 'At least one recipient required to save draft'
+                      : '',
+                    quotaExceeded: isQuotaExceeded,
                   }
-                  aria-label="Save draft"
-                  // We can't rely solely on state for 'disabled' because of pending text in Ref
-                  disabled={isQuotaExceeded || isDrafting}
-                >
-                  {isDrafting ? (
-                    <>
-                      <FaFloppyDisk className="animate-pulse" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FaFloppyDisk />
-                      <span>
-                        Save Draft{isQuotaExceeded && ' (Disabled)'}
-                      </span>
-                    </>
-                  )}
-                </Button>
-              </>
-            )}
-
-            {show_send_button && (
-              <>
-                <div className="h-6 w-px bg-[var(--gray-6)]" />
-                <Button
-                  variant="solid"
-                  size="2"
-                  onClick={handleSendButtonClick}
-                  className="bg-[var(--blue-9)] hover:bg-[var(--blue-10)] text-white font-medium min-h-[38px] px-4 touch-manipulation shadow-sm"
-                  aria-label="Send email"
-                  disabled={isQuotaExceeded}
-                >
-                  <FaPaperPlane />
-                  <span>Send</span>
-                </Button>
-              </>
-            )}
-          </div>
+                : undefined
+            }
+            send={
+              show_send_button
+                ? { onClick: handleSendButtonClick, disabled: isQuotaExceeded }
+                : undefined
+            }
+          />
         }
       >
-        <div {...getRootProps()} className="space-y-3 relative outline-none h-full min-h-[400px]">
+        <div {...getRootProps()} className="relative outline-none h-full flex flex-col">
           <input {...getInputProps()} />
-          {isDragActive && (
-            <div className="absolute inset-0 z-[9999] bg-[var(--gray-2)]/90 backdrop-blur-sm border-[3px] border-dashed border-[var(--accent-9)] rounded-xl flex items-center justify-center pointer-events-none">
-              <div className="bg-white px-8 py-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-                <div className="p-4 bg-[var(--accent-3)] text-[var(--accent-11)] rounded-full">
-                  <FaPaperclip size={36} />
-                </div>
-                <div className="text-center">
-                  <p className="text-xl font-bold text-[var(--gray-12)]">
-                    Drop files here to attach
-                  </p>
-                  <p className="text-sm text-[var(--gray-10)] mt-1">
-                    Maximum {formatFileSize(MAX_INDIVIDUAL_FILE_SIZE)} per file
-                  </p>
+          {isDragActive && <ComposerDropOverlay />}
+
+          {/* Quota Warning */}
+          {isQuotaExceeded && (
+            <div className="shrink-0 px-3 py-2 bg-yellow-50 border-l-4 border-yellow-400">
+              <div className="flex items-center">
+                <div className="text-yellow-700 text-sm">
+                  <strong>Storage Quota Exceeded:</strong> Draft saving is disabled because storage
+                  is {folderQuota?.used_percent}% full. Please free up space to save drafts.
                 </div>
               </div>
             </div>
           )}
+
           {/* Recipient Fields */}
-          <div className="space-y-2 relative">
+          <div className="shrink-0 relative border-b border-[var(--gray-4)] px-2 min-h-[37px]">
             {show_to_field && (
               <RecipientField
                 ref={toRef}
@@ -1244,7 +1214,7 @@ const Composer = () => {
               />
             )}
 
-            <div className="absolute right-0 top-1 z-50 flex gap-4 ml-2">
+            <div className="absolute right-3 top-1.5 z-50 flex gap-4">
               {show_cc_field && (
                 <Button
                   variant="ghost"
@@ -1264,8 +1234,10 @@ const Composer = () => {
                 </Button>
               )}
             </div>
+          </div>
 
-            {fieldVisibility.cc && (
+          {fieldVisibility.cc && (
+            <div className="shrink-0 border-b border-[var(--gray-4)] px-2">
               <RecipientField
                 ref={ccRef}
                 label="Cc"
@@ -1273,9 +1245,11 @@ const Composer = () => {
                 value={composerData.cc}
                 onChange={(emailAddresses) => updateComposerData({ cc: emailAddresses })}
               />
-            )}
+            </div>
+          )}
 
-            {fieldVisibility.bcc && (
+          {fieldVisibility.bcc && (
+            <div className="shrink-0 border-b border-[var(--gray-4)] px-2">
               <RecipientField
                 ref={bccRef}
                 label="Bcc"
@@ -1283,84 +1257,44 @@ const Composer = () => {
                 value={composerData.bcc}
                 onChange={(emailAddresses) => updateComposerData({ bcc: emailAddresses })}
               />
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Subject Field */}
           {show_subject_field && (
-            <SubjectField
-              value={composerData.subject}
-              onChange={(subject) => updateComposerData({ subject })}
+            <div className="shrink-0 border-b border-[var(--gray-4)] px-2">
+              <SubjectField
+                value={composerData.subject}
+                onChange={(subject) => updateComposerData({ subject })}
+              />
+            </div>
+          )}
+
+          {/* The writing space */}
+          {show_body_field && (
+            <div className="flex-1 min-h-[240px]">
+              <ContentEditor
+                fill
+                onChange={({ html, text }) =>
+                  updateComposerData({
+                    html: html,
+                    text: text,
+                  })
+                }
+                value={composerData.html}
+              />
+            </div>
+          )}
+
+          {show_attach_file_button && (
+            <AttachmentUploader
+              ref={attachmentsRef}
+              attachments={composerData.attachments || []}
+              onAttachmentsChange={(newAttachments) =>
+                updateComposerData({ attachments: newAttachments })
+              }
             />
           )}
-
-          {/* Priority, Template, and Read Receipt - Slideable row on mobile */}
-          <div
-            className="w-full flex items-center gap-2.5 px-1 py-1 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap shrink-0 overscroll-x-contain"
-            style={{ WebkitOverflowScrolling: 'touch' }}
-            onTouchStart={handleStripTouchStart}
-            onTouchMove={handleStripTouchMove}
-            onClickCapture={handleStripClickCapture}
-          >
-            <div className="shrink-0">
-              <TemplateSelector onTemplateSelect={handleTemplateSelect} />
-            </div>
-            <div className="shrink-0">
-              <EmailPriorityField priority={priority} onChange={setPriority} />
-            </div>
-            <div className="shrink-0 flex items-center h-[34px] px-2.5 rounded-lg border border-[var(--gray-5)] bg-[var(--gray-2)]/60 hover:bg-[var(--gray-3)] transition-colors">
-              <ReadReceiptField checked={readReceipt} onChange={setReadReceipt} />
-            </div>
-          </div>
-
-          {/* Quota Warning */}
-          {isQuotaExceeded && (
-            <div className="px-3 py-2 bg-yellow-50 border-l-4 border-yellow-400">
-              <div className="flex items-center">
-                <div className="text-yellow-700 text-sm">
-                  <strong>Storage Quota Exceeded:</strong> Draft saving is disabled because storage
-                  is {folderQuota?.used_percent}% full. Please free up space to save drafts.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Content Editor and Attachments: side by side when the composer itself is
-              wide enough, stacked when it is narrow (resized window, phone) */}
-          <div className="@container">
-            <div className="grid grid-cols-1 @2xl:grid-cols-4 gap-2">
-              {show_body_field && (
-                <div
-                  className={`min-w-0 ${!show_attach_file_button ? '@2xl:col-span-4' : '@2xl:col-span-3'}`}
-                >
-                  <ContentEditor
-                    onChange={({ html, text }) =>
-                      updateComposerData({
-                        html: html,
-                        text: text,
-                      })
-                    }
-                    value={composerData.html}
-                    height={getEditorDimensions(isMobile, fullViewEnabled, false).height}
-                    maxheight={getEditorDimensions(isMobile, fullViewEnabled, false).maxHeight}
-                  />
-                </div>
-              )}
-              {show_attach_file_button && (
-                <div className={`min-w-0 ${!show_body_field ? '@2xl:col-span-4' : '@2xl:col-span-1'}`}>
-                  <AttachmentUploader
-                    attachments={composerData.attachments || []}
-                    onAttachmentsChange={(newAttachments) =>
-                      updateComposerData({ attachments: newAttachments })
-                    }
-                    height={getEditorDimensions(isMobile, fullViewEnabled, true).height}
-                    maxHeight={getEditorDimensions(isMobile, fullViewEnabled, true).maxHeight}
-                    disableDrop={true}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </CustomModal>
 

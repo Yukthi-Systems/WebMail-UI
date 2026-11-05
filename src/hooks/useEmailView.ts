@@ -25,6 +25,9 @@ import {
   type EmailViewResponse,
 } from '../api/mailbox';
 import { HttpError } from '../api/fetchWrapper';
+import { emailAttachmentCacheKey, emailViewCacheKey } from '../utils/emailCache';
+
+export { emailAttachmentCacheKey, emailViewCacheKey };
 
 /**
  * Attachment as consumed by the viewer components (EmailTabs, EmailHtmlContent,
@@ -50,31 +53,17 @@ export interface ParsedEmailView {
   flags: string[];
 }
 
-// Same caching rule as the old raw hook: only cache when keyed by a stable
-// Message-ID. Sequence ids shift after deletions, so a seq-id key must never
-// serve content of a different email that inherited the id.
-const cacheTimes = (stableKey: string) => ({
-  staleTime: stableKey ? 10 * 60 * 1000 : 0,
-  gcTime: stableKey ? 30 * 60 * 1000 : 0,
-});
+// Keyed by folder + UID, which never points to another email (the folder's
+// cache is dropped if its UIDVALIDITY changes), so it is always safe to cache
+const CACHE_TIMES = {
+  staleTime: 10 * 60 * 1000,
+  gcTime: 30 * 60 * 1000,
+};
 
 // 400 (bad id) and 404 (email / part gone) won't succeed on retry
 const retryUnlessGone = (failureCount: number, error: Error) =>
   !(error instanceof HttpError && (error.status === 400 || error.status === 404)) &&
   failureCount < 3;
-
-export function emailViewCacheKey(id: string, folderPath: string, stableKey: string) {
-  return ['email', 'view', stableKey || id, folderPath] as const;
-}
-
-export function emailAttachmentCacheKey(
-  id: string,
-  folderPath: string,
-  stableKey: string,
-  partId: string
-) {
-  return ['email', 'attachment', stableKey || id, folderPath, partId] as const;
-}
 
 export const blobToBase64 = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -112,17 +101,17 @@ export const emailViewErrorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : 'Failed to load email.';
 };
 
-/** Opens an email: body + attachment list only, marks it as read. */
-export function useEmailView(id: string, folderPath: string, stableKey: string, enabled = true) {
+/** Opens an email (UID of folderPath): body + attachment list only, marks it as read. */
+export function useEmailView(uid: string, folderPath: string, enabled = true) {
   return useQuery({
-    queryKey: emailViewCacheKey(id, folderPath, stableKey),
-    queryFn: () => emailView(id, folderPath, true),
-    enabled: enabled && !!id && !!folderPath,
+    queryKey: emailViewCacheKey(folderPath, uid),
+    queryFn: () => emailView(uid, folderPath, true),
+    enabled: enabled && /^\d+$/.test(uid) && !!folderPath,
     retry: retryUnlessGone,
     retryDelay: () => 500,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    ...cacheTimes(stableKey),
+    ...CACHE_TIMES,
   });
 }
 
@@ -131,10 +120,10 @@ export const useEmailViewPrefetch = () => {
   const queryClient = useQueryClient();
 
   const prefetchEmailView = useCallback(
-    (id: string, folderPath: string, stableKey: string) => {
-      if (!id || !folderPath) return;
+    (uid: string, folderPath: string) => {
+      if (!/^\d+$/.test(uid) || !folderPath) return;
 
-      const queryKey = emailViewCacheKey(id, folderPath, stableKey);
+      const queryKey = emailViewCacheKey(folderPath, uid);
       if (queryClient.getQueryData(queryKey)) return;
 
       // Delay so priority requests (the email being opened) finish first
@@ -143,8 +132,8 @@ export const useEmailViewPrefetch = () => {
         if (!isAnythingFetching) {
           queryClient.prefetchQuery({
             queryKey,
-            queryFn: () => emailView(id, folderPath, false),
-            ...cacheTimes(stableKey),
+            queryFn: () => emailView(uid, folderPath, false),
+            ...CACHE_TIMES,
           });
         }
       }, 600);
@@ -178,26 +167,25 @@ const combineData = (results: { data?: string }[]) => results.map((result) => re
  */
 export function useParsedEmailView(
   view: EmailViewResponse | undefined,
-  id: string,
-  folderPath: string,
-  stableKey: string
+  uid: string,
+  folderPath: string
 ): ParsedEmailView | null {
   const queryClient = useQueryClient();
 
   const fetchPart = useCallback(
     async (partId: string, inline: boolean) =>
-      blobToBase64(await emailAttachment(id, partId, folderPath, inline)),
-    [id, folderPath]
+      blobToBase64(await emailAttachment(uid, partId, folderPath, inline)),
+    [uid, folderPath]
   );
 
   const loadAttachment = useCallback(
     (partId: string) =>
       queryClient.fetchQuery({
-        queryKey: emailAttachmentCacheKey(id, folderPath, stableKey, partId),
+        queryKey: emailAttachmentCacheKey(folderPath, uid, partId),
         queryFn: () => fetchPart(partId, false),
-        ...cacheTimes(stableKey),
+        ...CACHE_TIMES,
       }),
-    [queryClient, id, folderPath, stableKey, fetchPart]
+    [queryClient, uid, folderPath, fetchPart]
   );
 
   const eagerParts = useMemo(
@@ -207,11 +195,11 @@ export function useParsedEmailView(
 
   const eagerContent = useQueries({
     queries: eagerParts.map((attachment) => ({
-      queryKey: emailAttachmentCacheKey(id, folderPath, stableKey, attachment.part_id),
+      queryKey: emailAttachmentCacheKey(folderPath, uid, attachment.part_id),
       queryFn: () => fetchPart(attachment.part_id, true),
       retry: 1,
       refetchOnWindowFocus: false,
-      ...cacheTimes(stableKey),
+      ...CACHE_TIMES,
     })),
     combine: combineData,
   });

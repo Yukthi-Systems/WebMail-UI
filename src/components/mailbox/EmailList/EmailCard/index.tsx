@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { FaPaperclip, FaTrash, FaFlag } from 'react-icons/fa';
 import { MdDriveFileMoveOutline, MdMarkEmailRead, MdMarkEmailUnread } from 'react-icons/md';
 import { decodeWords } from 'postal-mime';
@@ -30,11 +30,9 @@ import { userSettingsAtom } from '../../../../state/settings';
 import EmailHoverCard from './EmailHoverCard';
 import { emailViewCacheKey, useEmailViewPrefetch } from '../../../../hooks/useEmailView';
 import type { EmailViewResponse } from '../../../../api/mailbox';
-import { getMessageId, splitAddressList } from '../../../../utils/emailUtils';
+import { splitAddressList } from '../../../../utils/emailUtils';
 import { useQueryClient } from '@tanstack/react-query';
-import { isFolderThreadEnabled, shouldApplyThreading } from '../../../../utils/emailListUtils';
 import type { SimplifiedEmail } from '../../../../utils/email';
-import type { EmailLike } from '../../../../utils/emailThreading';
 
 interface EmailCardProps {
   email: SimplifiedEmail;
@@ -56,14 +54,15 @@ interface EmailCardProps {
   isActive?: boolean;
   onDragStart?: (emailIds: number[]) => void;
   onDragEnd?: () => void;
-  checkedEmails?: number[];
+  /** The current selection: read when a drag starts, so a selection change doesn't re-render every row */
+  getCheckedEmails?: () => number[];
   isKeyboardFocused?: boolean;
   id?: string;
   showSelection?: boolean;
   myEmail?: string;
   onMoveToFolder?: (emailId: string) => void;
   onToggleFlag?: (emailId: string, currentFlagged: boolean) => void;
-  viewingEmail?: string;
+  hasOpenEmail?: boolean;
 }
 
 // Outside the component, at module level
@@ -84,14 +83,14 @@ const EmailCard = ({
   isActive = false,
   onDragStart,
   onDragEnd,
-  checkedEmails = [],
+  getCheckedEmails,
   id,
   isKeyboardFocused,
   showSelection = true,
   myEmail = '',
   onMoveToFolder,
   onToggleFlag,
-  viewingEmail,
+  hasOpenEmail = false,
 }: EmailCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
@@ -110,7 +109,7 @@ const EmailCard = ({
   const [isWaitingForTooltip, setIsWaitingForTooltip] = useState(false);
   const userSettings = useAtomValue(userSettingsAtom);
   const showRecipientInfo = userSettings?.email?.show_recipient ?? true;
-  const showHoverActions = viewingEmail
+  const showHoverActions = hasOpenEmail
     ? (userSettings?.email.show_quick_hover_actions ?? true)
     : true;
 
@@ -124,7 +123,6 @@ const EmailCard = ({
   const queryClient = useQueryClient();
 
   const [hoverEmailView, setHoverEmailView] = useState<EmailViewResponse | undefined>(undefined);
-  const messageId = getMessageId(email) || '';
   // Only real attachments — inline body images aren't listed
   const hoverAttachments = hoverEmailView?.attachments?.filter((a) => !a.is_inline);
 
@@ -160,20 +158,26 @@ const EmailCard = ({
   const formattedDate = formatEmailDate(email.Date);
   const fullDate = formatUserDateNice(email.Date);
 
-  // Thread indicators — only shown when threading is active in settings
-  const threadedView = userSettings?.email?.mail_thead_view || 'all threads';
-  const folderThreadView = userSettings?.folders;
-  // Folder settings are stored by role ('sent'), not path ("INBOX/Sent")
-  const folderSettingsKey = specialFolders.settingsKey(folder);
-  const isFolderThread = isFolderThreadEnabled(folderThreadView, folderSettingsKey, folderSettingsKey);
-  const threadingActive = shouldApplyThreading(threadedView, isFolderThread, folderSettingsKey);
+  // Conversation rows (conversation view): counts come from the API, which
+  // groups the whole folder
+  const thread = email.thread;
+  const threadCount = thread?.messageCount ?? 1;
+  const threadUnreadCount = thread?.unreadCount ?? 0;
+  const threadHasUnread = threadUnreadCount > 0;
+  const showThreadPill = !!thread && threadCount > 1;
 
-  const emailWithThreadFields = email as unknown as EmailLike;
-  const isThread = !!emailWithThreadFields['Thread-View'];
-  const threadCount = (emailWithThreadFields['Thread-Emails-Count'] as number) || 1;
-  const threadUnreadCount = (emailWithThreadFields['Thread-Unread-Count'] as number) || 0;
-  const threadHasUnread = isThread && threadUnreadCount > 0;
-  const showThreadPill = threadingActive && isThread && threadCount > 1;
+  // "Alice, Bob, me": senders of the conversation in date order
+  const participantsLabel = (() => {
+    if (!showThreadPill || !thread?.participants.length) return '';
+    const names = thread.participants.map((participant) => {
+      const parsed = parseEmail(participant);
+      if (myEmail && parsed.email.toLowerCase() === myEmail.toLowerCase()) return 'me';
+      return (parsed.name || parsed.email).split(' ')[0];
+    });
+    return [...new Set(names)].join(', ');
+  })();
+  const senderLabel = (name: string) =>
+    participantsLabel ? `${participantsLabel} (${threadCount})` : getDisplayName(name);
 
   // Calculate tooltip position when it becomes visible
   useEffect(() => {
@@ -190,7 +194,7 @@ const EmailCard = ({
 
     const pollInterval = setInterval(() => {
       const data = queryClient.getQueryData<EmailViewResponse>(
-        emailViewCacheKey(email.id.toString(), folder || '', messageId)
+        emailViewCacheKey(folder || '', email.id)
       );
       if (data) {
         setHoverEmailView(data);
@@ -199,7 +203,7 @@ const EmailCard = ({
     }, 300);
 
     return () => clearInterval(pollInterval);
-  }, [showEmailTooltip, hoverEmailView, email.id, folder, messageId, queryClient]);
+  }, [showEmailTooltip, hoverEmailView, email.id, folder, queryClient]);
 
   // Cleanup all timers on unmount
   useEffect(() => {
@@ -253,13 +257,13 @@ const EmailCard = ({
     setIsWaitingForTooltip(true);
 
     prefetchTimerRef.current = setTimeout(() => {
-      if (email?.id && folder) prefetchEmailView(email.id.toString(), folder, messageId);
+      if (email?.id && folder) prefetchEmailView(email.id.toString(), folder);
     }, 2150);
 
     showTooltipTimerRef.current = setTimeout(() => {
       setIsWaitingForTooltip(false);
       const cachedData = queryClient.getQueryData<EmailViewResponse>(
-        emailViewCacheKey(email.id.toString(), folder || '', messageId)
+        emailViewCacheKey(folder || '', email.id)
       );
       if (cachedData) setHoverEmailView(cachedData);
       setShowEmailTooltip(true);
@@ -474,6 +478,7 @@ const EmailCard = ({
     setIsWaitingForTooltip(false);
     setShowEmailTooltip(false);
 
+    const checkedEmails = getCheckedEmails?.() ?? [];
     const emailsToDrag = checkedEmails.includes(Number(email.id))
       ? checkedEmails
       : [Number(email.id)];
@@ -710,7 +715,7 @@ const EmailCard = ({
                     >
                       {isSentFolder && recipientDisplay
                         ? `To: ${recipientDisplay.text}`
-                        : getDisplayName(senderName)}
+                        : senderLabel(senderName)}
                     </p>
 
                     <div className="flex items-center gap-1 flex-shrink-0 ml-2">
@@ -868,7 +873,7 @@ const EmailCard = ({
                       <p
                         className={`text-[13px] truncate ${emailSeen ? 'text-[var(--gray-11)] font-medium' : 'text-[var(--gray-12)] font-bold'}`}
                       >
-                        {getDisplayName(senderName)}
+                        {senderLabel(senderName)}
                       </p>
                     )}
                   </div>
@@ -989,4 +994,5 @@ const EmailCard = ({
   );
 };
 
-export default EmailCard;
+// A list holds up to a page of these: only rows whose props changed re-render
+export default memo(EmailCard);

@@ -28,7 +28,7 @@ import { decodeWords } from 'postal-mime';
 import { FiAlertCircle } from 'react-icons/fi';
 import type { ParsedEmailView } from '../../../../hooks/useEmailView';
 import { parseMultipleEmails, normalizeFieldNames } from '../../../../utils/emailUtils';
-import type { EmailLike } from '../../../../utils/emailThreading';
+import type { EmailLike } from '../../../../utils/threads';
 import { useSpecialFolderPaths } from '../../../../hooks/useFolders';
 
 interface SingleEmailViewProps {

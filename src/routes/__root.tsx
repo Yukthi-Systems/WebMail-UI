@@ -16,7 +16,8 @@
  */
 
 // _root.tsx
-import { createRootRoute, Outlet, redirect, useRouter } from '@tanstack/react-router';
+import type { QueryClient } from '@tanstack/react-query';
+import { createRootRouteWithContext, Outlet, redirect, useRouter } from '@tanstack/react-router';
 import { webmailStore } from '../store';
 import { csrfTokenAtom } from '../state/auth';
 import { useEffect } from 'react';
@@ -25,7 +26,7 @@ import { GlobalLoader } from '../components/common/GlobalLoading'; // Add this i
 import { ApiKeyStorageGuard } from '../components/admin/domain/ApiKeyStorageGuard';
 import { getCompanySlugFromPath } from '../utils/routeUtils';
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   beforeLoad: async ({ location }) => {
     if (
       location.pathname === '/' ||
