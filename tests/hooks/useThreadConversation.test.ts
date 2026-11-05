@@ -17,12 +17,12 @@
 
 import { QueryClient } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { threadDetailCacheKey } from '../utils/emailCache';
-import type { ThreadDetail } from '../api/mailbox';
-import type { EmailLike } from '../utils/threads';
-import { addPendingReply } from './useThreadConversation';
+import { threadDetailCacheKey } from '../../src/utils/emailCache';
+import type { ThreadDetail } from '../../src/api/mailbox';
+import type { EmailLike } from '../../src/utils/threads';
+import { addPendingReply } from '../../src/hooks/useThreadConversation';
 
-vi.mock('../api/mailbox', () => ({ emailThread: vi.fn() }));
+vi.mock('../../src/api/mailbox', () => ({ emailThread: vi.fn() }));
 
 const email = (id: string, folderPath = 'INBOX') => ({ id, folderPath }) as unknown as EmailLike;
 const pending = {

@@ -20,10 +20,10 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-vi.mock('../api/config.ts', () => ({ API_URL: 'https://api.test', authCheck: () => {} }));
+vi.mock('../../src/api/config.ts', () => ({ API_URL: 'https://api.test', authCheck: () => {} }));
 
-import { useEmailThreads } from './useEmails';
-import type { EmailFilterBy, EmailSortOrder } from '../state/emailListView';
+import { useEmailThreads } from '../../src/hooks/useEmails';
+import type { EmailFilterBy, EmailSortOrder } from '../../src/state/emailListView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

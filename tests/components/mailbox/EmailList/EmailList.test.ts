@@ -21,7 +21,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider as JotaiProvider } from 'jotai';
 
-vi.mock('../../../api/config.ts', () => ({ API_URL: 'https://api.test', authCheck: () => {} }));
+vi.mock('../../../../src/api/config.ts', () => ({ API_URL: 'https://api.test', authCheck: () => {} }));
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => ({ folder: 'INBOX' }),
   useNavigate: () => () => {},
@@ -33,34 +33,34 @@ const { renders, stub } = vi.hoisted(() => {
   const renders = { count: 0 };
   return { renders, stub: () => ({ default: () => null }) };
 });
-vi.mock('../../../hooks/useToast', () => {
+vi.mock('../../../../src/hooks/useToast', () => {
   const toast = { success: () => {}, error: () => {}, loading: () => '', dismiss: () => {} };
   return { useToast: () => toast };
 });
-vi.mock('./EmailToolbar', () => ({
+vi.mock('../../../../src/components/mailbox/EmailList/EmailToolbar', () => ({
   default: () => {
     renders.count++;
     return null;
   },
 }));
-vi.mock('./EmailCard', () => stub());
-vi.mock('./EmailViewer', () => stub());
-vi.mock('./EmailComposer', () => stub());
-vi.mock('./EmailEmptyState', () => stub());
-vi.mock('./EmailSkeleton', () => stub());
-vi.mock('./MoveEmail', () => stub());
-vi.mock('./PermanentDeleteConfirm', () => stub());
-vi.mock('./EmptyFolderBanner', () => stub());
-vi.mock('./BulkActionDialog', () => stub());
-vi.mock('./BulkSelectBanner', () => stub());
-vi.mock('../../common/ResizeblePanel', () => stub());
-vi.mock('../../composer/CustomModal', () => stub());
-vi.mock('../../common/header/SearchResultBanner', () => stub());
-vi.mock('../../contacts/BulkCreateView', () => ({ BulkCreateView: () => null }));
+vi.mock('../../../../src/components/mailbox/EmailList/EmailCard', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/EmailViewer', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/EmailComposer', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/EmailEmptyState', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/EmailSkeleton', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/MoveEmail', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/PermanentDeleteConfirm', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/EmptyFolderBanner', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/BulkActionDialog', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/BulkSelectBanner', () => stub());
+vi.mock('../../../../src/components/common/ResizeblePanel', () => stub());
+vi.mock('../../../../src/components/composer/CustomModal', () => stub());
+vi.mock('../../../../src/components/common/header/SearchResultBanner', () => stub());
+vi.mock('../../../../src/components/contacts/BulkCreateView', () => ({ BulkCreateView: () => null }));
 
-import EmailList from './index';
-import { webmailStore } from '../../../store';
-import { emailSortAtom, DEFAULT_EMAIL_SORT } from '../../../state/emailListView';
+import EmailList from '../../../../src/components/mailbox/EmailList/index';
+import { webmailStore } from '../../../../src/store';
+import { emailSortAtom, DEFAULT_EMAIL_SORT } from '../../../../src/state/emailListView';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

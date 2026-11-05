@@ -19,8 +19,8 @@ import { Theme } from '@radix-ui/themes';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { listCountLabels } from '../../utils/emailListUtils';
-import Pagination from './Pagination';
+import { listCountLabels } from '../../../src/utils/emailListUtils';
+import Pagination from '../../../src/components/common/Pagination';
 
 const render = (props: { countLabel?: string; countTooltip?: string }) =>
   renderToStaticMarkup(

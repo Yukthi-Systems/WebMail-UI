@@ -26,7 +26,7 @@ import {
   threadToRow,
   unquoteFolder,
   type ApiThread,
-} from './threads';
+} from '../../src/utils/threads';
 
 const apiThread = (overrides: Partial<ApiThread> = {}): ApiThread => ({
   id: '67',

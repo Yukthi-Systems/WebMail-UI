@@ -17,17 +17,17 @@
 
 import { QueryClient } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { foldersFullPath } from '../api/mailbox';
-import { folderDetailsAtom, type FolderDetail } from '../state/folders';
-import { webmailStore } from '../store';
-import { getSentFolderPath } from './folderUtils';
+import { foldersFullPath } from '../../src/api/mailbox';
+import { folderDetailsAtom, type FolderDetail } from '../../src/state/folders';
+import { webmailStore } from '../../src/store';
+import { getSentFolderPath } from '../../src/utils/folderUtils';
 import {
   FOLDERS_FULL_PATH_QUERY_KEY,
   loadWorkspaceFolders,
   mergeFolderDetails,
-} from './workspaceFolders';
+} from '../../src/utils/workspaceFolders';
 
-vi.mock('../api/mailbox', () => ({ foldersFullPath: vi.fn() }));
+vi.mock('../../src/api/mailbox', () => ({ foldersFullPath: vi.fn() }));
 
 const fetchFolders = vi.mocked(foldersFullPath) as unknown as ReturnType<typeof vi.fn>;
 const status = { UIDVALIDITY: 1, MESSAGES: 2, UIDNEXT: 3 };

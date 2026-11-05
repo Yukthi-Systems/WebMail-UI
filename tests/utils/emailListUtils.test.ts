@@ -16,8 +16,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { isConversationView } from './emailListUtils';
-import type { UserSettings } from '../api/user';
+import { isConversationView } from '../../src/utils/emailListUtils';
+import type { UserSettings } from '../../src/api/user';
 
 const settings = (threads: string, folders: Record<string, string>) =>
   ({

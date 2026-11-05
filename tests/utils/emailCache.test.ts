@@ -24,9 +24,9 @@ import {
   removeEmailCaches,
   resetKnownUidValidity,
   threadDetailCacheKey,
-} from './emailCache';
-import { patchCachedFlags } from '../hooks/useEmailCacheUpdater';
-import { threadToRow } from './threads';
+} from '../../src/utils/emailCache';
+import { patchCachedFlags } from '../../src/hooks/useEmailCacheUpdater';
+import { threadToRow } from '../../src/utils/threads';
 
 let queryClient: QueryClient;
 

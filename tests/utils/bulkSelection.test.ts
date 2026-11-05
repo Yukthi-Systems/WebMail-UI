@@ -6,7 +6,7 @@ import {
   bulkSelectedText,
   bulkUnreadChanges,
   runBulkAction,
-} from './bulkSelection';
+} from '../../src/utils/bulkSelection';
 
 const reply = (done: number, remaining: number, unread = 0) => ({
   folder_path: 'INBOX',

@@ -17,7 +17,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./config.ts', () => ({ API_URL: 'https://api.test', authCheck: () => {} }));
+vi.mock('../../src/api/config.ts', () => ({ API_URL: 'https://api.test', authCheck: () => {} }));
 
 import {
   copyEmail,
@@ -33,9 +33,9 @@ import {
   markUnFlaggedEmail,
   moveEmail,
   unmarkReadEmail,
-} from './mailbox';
-import { searchEmails, searchThreads } from './search';
-import { MissingUidError } from '../utils/threads';
+} from '../../src/api/mailbox';
+import { searchEmails, searchThreads } from '../../src/api/search';
+import { MissingUidError } from '../../src/utils/threads';
 
 type Call = { url: URL; init: RequestInit };
 let calls: Call[];

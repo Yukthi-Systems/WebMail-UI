@@ -19,7 +19,7 @@ import { Theme } from '@radix-ui/themes';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { PENDING_REPLY_NOTICE, PendingReplyNotice } from './PendingReplyNotice';
+import { PENDING_REPLY_NOTICE, PendingReplyNotice } from '../../../../../../../src/components/mailbox/EmailList/EmailViewer/ThreadView/ThreadEmailCard/PendingReplyNotice';
 
 describe('PendingReplyNotice', () => {
   it('shows a ! that explains itself to pointer, keyboard and screen reader users', () => {
