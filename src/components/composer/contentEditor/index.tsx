@@ -31,7 +31,8 @@ import { Node, mergeAttributes, Mark, type CommandProps } from '@tiptap/core';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import Blockquote from '@tiptap/extension-blockquote';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { QUOTE_ATTR } from '../../../utils/emailQuote';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../state/settings';
 import { OrderedList } from '@tiptap/extension-ordered-list';
@@ -50,6 +51,21 @@ export type ContentEditorProps = {
   value: string;
   height?: string;
   maxheight?: string;
+  /**
+   * Fills its parent: the toolbar stays fixed on top and only the text scrolls.
+   * height / maxheight are ignored.
+   */
+  fill?: boolean;
+  /**
+   * Called with the editor's html each time content was loaded from outside
+   * (not typed)
+   */
+  onContentLoaded?: (html: string) => void;
+  /**
+   * Puts the cursor on the first line once the content is loaded, so it's clear
+   * where to start writing. Runs again only when this key changes.
+   */
+  focusStartKey?: string;
 };
 
 type EditorMode = 'richtext' | 'code' | 'preview';
@@ -232,12 +248,75 @@ const Div = Node.create({
   },
 });
 
+/** The quoted original of a reply or forward, see utils/emailQuote.ts. */
+const EmailQuote = Node.create({
+  name: 'emailQuote',
+  group: 'block',
+  content: 'block+',
+  // Backspace at the end of the reply doesn't merge it into the quote
+  isolating: true,
+  parseHTML() {
+    return [{ tag: `div[${QUOTE_ATTR}]`, priority: 100 }];
+  },
+  renderHTML() {
+    return ['div', { [QUOTE_ATTR]: '' }, 0];
+  },
+});
+
+/** Attributes emails set on tables, kept so a quoted table keeps its look. */
+const passThroughAttributes = (names: string[]) =>
+  Object.fromEntries(
+    names.map((name) => [
+      name,
+      {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute(name),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          attributes[name] ? { [name]: attributes[name] } : {},
+      },
+    ])
+  );
+
+/**
+ * Style: null means a table made in this editor, which gets the default look. A
+ * table parsed from html keeps what it had, also no style at all: a quoted
+ * layout table must not gain borders.
+ */
+const parsedStyleAttribute = {
+  style: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute('style') ?? '',
+    renderHTML: (attributes: Record<string, unknown>) =>
+      attributes.style ? { style: attributes.style } : {},
+  },
+};
+const CELL_ATTRIBUTES = ['align', 'valign', 'bgcolor', 'width', 'height'];
+
 const CustomTable = Table.extend({
-  renderHTML({ HTMLAttributes }) {
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      ...parsedStyleAttribute,
+      ...passThroughAttributes([
+        'width',
+        'align',
+        'bgcolor',
+        'border',
+        'cellpadding',
+        'cellspacing',
+      ]),
+    };
+  },
+  renderHTML({ node, HTMLAttributes }) {
     return [
       'table',
       {
-        style: 'border-collapse: collapse; width: 100%; margin: 12px 0; border: 1px solid #ddd;',
+        ...(node.attrs.style === null
+          ? {
+              style:
+                'border-collapse: collapse; width: 100%; margin: 12px 0; border: 1px solid #ddd;',
+            }
+          : {}),
         ...HTMLAttributes,
       },
       ['tbody', 0],
@@ -246,11 +325,20 @@ const CustomTable = Table.extend({
 });
 
 const CustomTableCell = TableCell.extend({
-  renderHTML({ HTMLAttributes }) {
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      ...parsedStyleAttribute,
+      ...passThroughAttributes(CELL_ATTRIBUTES),
+    };
+  },
+  renderHTML({ node, HTMLAttributes }) {
     return [
       'td',
       {
-        style: 'border: 1px solid #ddd; padding: 8px; position: relative;',
+        ...(node.attrs.style === null
+          ? { style: 'border: 1px solid #ddd; padding: 8px; position: relative;' }
+          : {}),
         ...HTMLAttributes,
       },
       0,
@@ -259,11 +347,23 @@ const CustomTableCell = TableCell.extend({
 });
 
 const CustomTableHeader = TableHeader.extend({
-  renderHTML({ HTMLAttributes }) {
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      ...parsedStyleAttribute,
+      ...passThroughAttributes(CELL_ATTRIBUTES),
+    };
+  },
+  renderHTML({ node, HTMLAttributes }) {
     return [
       'th',
       {
-        style: 'border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa; font-weight: 600;',
+        ...(node.attrs.style === null
+          ? {
+              style:
+                'border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa; font-weight: 600;',
+            }
+          : {}),
         ...HTMLAttributes,
       },
       0,
@@ -495,12 +595,90 @@ const CustomHeading = Node.create({
 
 // --- MAIN COMPONENT ---
 
+// Long enough for a menu's closing animation
+const FOCUS_RECHECK_MS = [100, 250, 500, 800];
+const USER_FOCUS_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchmove'] as const;
+
+// About 20 KB of text and markup: beyond this, syncing waits for a pause in typing
+const LARGE_DOCUMENT_SIZE = 20_000;
+const TYPING_PAUSE_MS = 200;
+
+/** A card normally; in fill mode the window around it is the frame. */
+const Frame = ({ fill, children }: { fill: boolean; children: React.ReactNode }) =>
+  fill ? (
+    <div className="relative h-full min-h-0 flex flex-col">{children}</div>
+  ) : (
+    <Card style={{ position: 'relative' }}>{children}</Card>
+  );
+
+/**
+ * The editor's schema and behaviour. A function: each editor gets its own
+ * instances.
+ */
+export const createEditorExtensions = () => [
+  StarterKit.configure({
+    paragraph: false,
+    heading: false,
+    blockquote: false,
+    orderedList: false,
+    bulletList: false,
+    listItem: false,
+  }),
+  OrderedList.extend({
+    addInputRules() {
+      return [];
+    },
+  }),
+  BulletList.extend({
+    addInputRules() {
+      return [];
+    },
+  }),
+  ListItem,
+  CustomParagraph,
+  CustomHeading,
+  CustomBlockquote,
+  Underline,
+  SlashCommands,
+  GrammarCheckExtension,
+  CustomTextStyle,
+  Color,
+  EmailQuote,
+  Div,
+  InlineStyle,
+  PreserveBodyStyle,
+  Link.configure({
+    openOnClick: false,
+    HTMLAttributes: {
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    },
+  }),
+  CustomTable.configure({
+    resizable: true,
+    // Matches the td/th min-width below; sets the table's min-width so it scrolls
+    cellMinWidth: 100,
+  }),
+  TableRow,
+  CustomTableHeader,
+  CustomTableCell,
+  CustomImage.configure({
+    inline: true,
+    allowBase64: true,
+  }),
+];
+
 const ContentEditor = ({
   onChange,
   value,
-  height = '100%',
-  maxheight = '300px',
+  height: fixedHeight = '100%',
+  maxheight: fixedMaxHeight = '300px',
+  fill = false,
+  onContentLoaded,
+  focusStartKey,
 }: ContentEditorProps) => {
+  const height = fill ? '100%' : fixedHeight;
+  const maxheight = fill ? 'none' : fixedMaxHeight;
   const userSettings = useAtomValue(userSettingsAtom);
   const { show_insert_table_button = false, default_editor_tab = 'richtext' } =
     userSettings?.compose ?? {};
@@ -508,59 +686,15 @@ const ContentEditor = ({
   const [mode, setMode] = useState<EditorMode>(default_editor_tab);
   // Local HTML string for code mode — kept in sync with value
   const [htmlCode, setHtmlCode] = useState(value || '');
+  const lastKnownValue = useRef<string | null>(null);
+  const pendingSync = useRef<{ timer?: ReturnType<typeof setTimeout>; isPending: boolean }>({
+    isPending: false,
+  });
+  const syncToParentRef = useRef<() => void>(() => {});
+  const syncToParent = useCallback(() => syncToParentRef.current(), []);
 
   const editor: Editor | null = useEditor({
-    extensions: [
-      StarterKit.configure({
-        paragraph: false,
-        heading: false,
-        blockquote: false,
-        orderedList: false,
-        bulletList: false,
-        listItem: false,
-      }),
-      OrderedList.extend({
-        addInputRules() {
-          return [];
-        },
-      }),
-      BulletList.extend({
-        addInputRules() {
-          return [];
-        },
-      }),
-      ListItem,
-      CustomParagraph,
-      CustomHeading,
-      CustomBlockquote,
-      Underline,
-      SlashCommands,
-      GrammarCheckExtension,
-      CustomTextStyle,
-      Color,
-      Div,
-      InlineStyle,
-      PreserveBodyStyle,
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          target: '_blank',
-          rel: 'noopener noreferrer',
-        },
-      }),
-      CustomTable.configure({
-        resizable: true,
-        // Matches the td/th min-width below; sets the table's min-width so it scrolls
-        cellMinWidth: 100,
-      }),
-      TableRow,
-      CustomTableHeader,
-      CustomTableCell,
-      CustomImage.configure({
-        inline: true,
-        allowBase64: true,
-      }),
-    ],
+    extensions: createEditorExtensions(),
     content: value,
     editorProps: {
       attributes: {
@@ -582,21 +716,111 @@ const ContentEditor = ({
       },
     },
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      setHtmlCode(html);
-      onChange({ html, text: editor.getText() });
+      clearTimeout(pendingSync.current.timer);
+      // A long quoted thread is slow to serialize: not on every keystroke
+      if (editor.state.doc.content.size > LARGE_DOCUMENT_SIZE) {
+        pendingSync.current.timer = setTimeout(syncToParent, TYPING_PAUSE_MS);
+        pendingSync.current.isPending = true;
+      } else {
+        syncToParent();
+      }
+    },
+    // Clicking Send takes the focus away first, so it always sees the latest text
+    onBlur: () => {
+      if (pendingSync.current.isPending) syncToParent();
     },
   });
 
+  syncToParentRef.current = () => {
+    clearTimeout(pendingSync.current.timer);
+    pendingSync.current.isPending = false;
+    if (!editor) return;
+    const html = editor.getHTML();
+    lastKnownValue.current = html;
+    setHtmlCode(html);
+    onChange({ html, text: editor.getText() });
+  };
+
+  // Text still waiting when the composer closes isn't lost
+  useEffect(
+    () => () => {
+      if (pendingSync.current.isPending) syncToParent();
+    },
+    [syncToParent]
+  );
+
+  // A value the editor already has needs no work: what was just typed coming back
+  // (comparing it to the document would serialize a long quote again on every
+  // keystroke), or the same value again (StrictMode runs effects twice). Loading it
+  // again would also move the cursor to the end: the editor rewrites most email
+  // html, so the value never equals what the editor reports.
+  const reportContentLoaded = useRef(onContentLoaded);
+  reportContentLoaded.current = onContentLoaded;
   useEffect(() => {
-    if (editor && value !== editor.getHTML()) {
+    if (!editor || value === lastKnownValue.current) return;
+    // New content from outside replaces what was waiting to sync
+    clearTimeout(pendingSync.current.timer);
+    pendingSync.current.isPending = false;
+    if (value !== editor.getHTML()) {
       editor.commands.setContent(value);
       if (mode !== 'code') {
         // ← add this guard
         setHtmlCode(value || '');
       }
     }
+    lastKnownValue.current = value;
+    reportContentLoaded.current?.(editor.getHTML());
   }, [editor, value, mode]);
+
+  const focusedForKey = useRef<string | undefined>(undefined);
+  const stopHoldingFocus = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!editor || !focusStartKey || !value || mode !== 'richtext') return;
+    if (focusedForKey.current === focusStartKey) return;
+    focusedForKey.current = focusStartKey;
+    stopHoldingFocus.current();
+
+    // The first line must be in view, or the cursor blinks where nobody can see it.
+    // No scrollIntoView: on an empty first line it can scroll the wrong way.
+    const showFirstLine = () => {
+      if (!editor.isDestroyed) (editor.view.dom as HTMLElement).scrollTop = 0;
+    };
+    const focusFirstLine = () => {
+      if (editor.isDestroyed) return;
+      editor.commands.focus('start', { scrollIntoView: false });
+      showFirstLine();
+    };
+    focusFirstLine();
+    // The focus itself happens in the next frame
+    const frame = requestAnimationFrame(() => requestAnimationFrame(showFirstLine));
+
+    // Whatever opened the composer may still take the focus: a closing menu keeps it
+    // trapped during its animation, then returns it to its button. Take it back,
+    // until the user does something themselves.
+    const timers = FOCUS_RECHECK_MS.map((ms) =>
+      setTimeout(() => {
+        if (editor.isDestroyed) return;
+        if (editor.isFocused) showFirstLine();
+        else focusFirstLine();
+      }, ms)
+    );
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      timers.forEach(clearTimeout);
+      USER_FOCUS_EVENTS.forEach((type) => window.removeEventListener(type, stop, true));
+    };
+    USER_FOCUS_EVENTS.forEach((type) => window.addEventListener(type, stop, true));
+    stopHoldingFocus.current = stop;
+  }, [editor, value, mode, focusStartKey]);
+
+  useEffect(
+    () => () => {
+      stopHoldingFocus.current();
+      // Effects running again (StrictMode) place the cursor again
+      focusedForKey.current = undefined;
+    },
+    []
+  );
 
   // Server spelling & grammar check (on demand — it can take a few seconds)
   const grammar = useGrammarCheck(editor);
@@ -605,15 +829,19 @@ const ContentEditor = ({
   const handleModeSwitch = (newMode: EditorMode) => {
     // Check results point into the rich-text document, which code mode replaces
     if (newMode !== 'richtext') grammar.clear();
+    // Text still waiting to sync isn't in `value` yet
+    const hadPending = pendingSync.current.isPending;
+    if (hadPending) syncToParent();
+    const currentHtml = hadPending ? (lastKnownValue.current ?? value) : value;
     if (newMode === 'richtext' && mode === 'code' && editor) {
       editor.commands.setContent(htmlCode);
       onChange({ html: htmlCode, text: editor.getText() });
     }
     if (newMode === 'code') {
-      setHtmlCode(value); // ← was: editor.getHTML()
+      setHtmlCode(currentHtml); // ← was: editor.getHTML()
     }
     if (newMode === 'preview' && mode === 'richtext') {
-      setHtmlCode(value); // ← ensure preview uses raw value, not stale htmlCode
+      setHtmlCode(currentHtml); // ← ensure preview uses raw value, not stale htmlCode
     }
     setMode(newMode);
   };
@@ -653,66 +881,88 @@ const ContentEditor = ({
     { mode: 'preview', icon: <FaEye size={10} />, title: 'Preview' },
   ];
 
-  return (
-    <Flex direction="column" gap="2">
-      <Card style={{ position: 'relative' }}>
-        {/* ── mode toggle: small pills overlaid top-right ── */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 2,
-            right: 2,
-            zIndex: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          {/* Info tooltip — separate from the pill group */}
-          <InfoTooltip />
+  // Mode pills: Rich text / HTML / Preview, with the info tooltip
+  const modeControls = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      {/* Info tooltip — separate from the pill group */}
+      <InfoTooltip />
 
-          {/* Mode pills */}
-          <div
+      {/* Mode pills */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 2,
+          background: 'var(--gray-3)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          borderRadius: 6,
+          padding: 2,
+          border: '1px solid var(--gray-6)',
+        }}
+      >
+        {modeButtons.map((btn) => (
+          <button
+            key={btn.mode}
+            type="button"
+            title={btn.title}
+            aria-label={btn.title}
+            onClick={() => handleModeSwitch(btn.mode)}
             style={{
               display: 'flex',
-              gap: 2,
-              background: 'var(--gray-3)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              borderRadius: 6,
-              padding: 2,
-              border: '1px solid var(--gray-6)',
+              alignItems: 'center',
+              gap: 3,
+              padding: '2px 6px',
+              fontSize: 10,
+              fontWeight: 500,
+              borderRadius: 4,
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              background: mode === btn.mode ? 'var(--color-panel-solid)' : 'transparent',
+              color: mode === btn.mode ? 'var(--gray-12)' : 'var(--gray-10)',
+              boxShadow: mode === btn.mode ? '0 1px 3px var(--gray-a4)' : 'none',
+              backdropFilter: mode === btn.mode ? 'blur(4px)' : 'none',
             }}
           >
-            {modeButtons.map((btn) => (
-              <button
-                key={btn.mode}
-                type="button"
-                title={btn.title}
-                onClick={() => handleModeSwitch(btn.mode)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  padding: '2px 6px',
-                  fontSize: 10,
-                  fontWeight: 500,
-                  borderRadius: 4,
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  background: mode === btn.mode ? 'var(--color-panel-solid)' : 'transparent',
-                  color: mode === btn.mode ? 'var(--gray-12)' : 'var(--gray-10)',
-                  boxShadow: mode === btn.mode ? '0 1px 3px var(--gray-a4)' : 'none',
-                  backdropFilter: mode === btn.mode ? 'blur(4px)' : 'none',
-                }}
-              >
-                {btn.icon}
-                {btn.title}
-              </button>
-            ))}
+            {btn.icon}
+            {/* Icons only in the composer's toolbar row, so it fits without scrolling */}
+            {!fill && btn.title}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const toolbar = (
+    <MenuBar
+      editor={editor}
+      afterFont={
+        <GrammarCheckButton onClick={grammar.run} isChecking={grammar.status === 'checking'} />
+      }
+    />
+  );
+
+  return (
+    <Flex direction="column" gap="2" className={fill ? 'h-full min-h-0' : undefined}>
+      <Frame fill={fill}>
+        {fill && (
+          <div className="flex items-center gap-1 shrink-0 min-w-0 px-2 border-b border-[var(--gray-4)] min-h-10">
+            <div className="flex-1 min-w-0">{mode === 'richtext' && toolbar}</div>
+            {modeControls}
           </div>
-        </div>
+        )}
+        {!fill && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 2,
+              right: 2,
+              zIndex: 20,
+            }}
+          >
+            {modeControls}
+          </div>
+        )}
 
         {/* ── rich text ── */}
         {mode === 'richtext' && (
@@ -721,7 +971,7 @@ const ContentEditor = ({
             {/* overflow: clip (not just hidden): scrollIntoView can still scroll an
                 overflow-hidden box, which would shift the docked panel out of place */}
             <div
-              className="relative overflow-hidden"
+              className={`relative overflow-hidden ${fill ? 'flex-1 min-h-0' : ''}`}
               style={{ overflow: 'clip' }}
               onScroll={(e) => {
                 // Fallback for browsers without overflow: clip
@@ -729,18 +979,10 @@ const ContentEditor = ({
                 e.currentTarget.scrollLeft = 0;
               }}
             >
-              <EditorContent editor={editor} />
+              <EditorContent editor={editor} style={fill ? { height: '100%' } : undefined} />
               <GrammarPanel check={grammar} />
             </div>
-            <MenuBar
-              editor={editor}
-              afterFont={
-                <GrammarCheckButton
-                  onClick={grammar.run}
-                  isChecking={grammar.status === 'checking'}
-                />
-              }
-            />
+            {!fill && toolbar}
             {editor && show_insert_table_button && <TableContextMenu editor={editor} />}
           </>
         )}
@@ -757,6 +999,7 @@ const ContentEditor = ({
             style={{
               width: '100%',
               height,
+              flex: fill ? 1 : undefined,
               minHeight: 150,
               maxHeight: maxheight,
               fontFamily: 'monospace',
@@ -780,6 +1023,7 @@ const ContentEditor = ({
             style={{
               width: '100%',
               height,
+              flex: fill ? 1 : undefined,
               minHeight: 150,
               maxHeight: maxheight,
               border: 'none',
@@ -789,7 +1033,7 @@ const ContentEditor = ({
             title="Email Preview"
           />
         )}
-      </Card>
+      </Frame>
       <style>
         {`.grammar-issue {
   text-decoration-line: underline;

@@ -29,7 +29,7 @@ type EmailPriorityFieldProps = {
 const EmailPriorityField = ({ priority, onChange }: EmailPriorityFieldProps) => {
   const priorityConfig: Record<EmailPriority, { label: string; icon: IconType }> = {
     normal: {
-      label: 'Normal Priority',
+      label: 'Priority',
       icon: FaFlag,
     },
     high: {
@@ -44,7 +44,7 @@ const EmailPriorityField = ({ priority, onChange }: EmailPriorityFieldProps) => 
 
   const dropdownItems = (['normal', 'high', 'low'] as EmailPriority[]).map((value) => ({
     key: value,
-    label: priorityConfig[value].label,
+    label: value === 'normal' ? 'Normal Priority' : priorityConfig[value].label,
     icon: priorityConfig[value].icon,
     selected: value === priority,
     onSelect: () => onChange(value),
@@ -53,10 +53,15 @@ const EmailPriorityField = ({ priority, onChange }: EmailPriorityFieldProps) => 
   const currentConfig = priorityConfig[priority];
 
   const trigger = (
-    <Button variant="soft" className="min-w-[160px] justify-between touch-manipulation">
+    <Button
+      variant={priority === 'normal' ? 'ghost' : 'soft'}
+      color={priority === 'normal' ? 'gray' : undefined}
+      className="justify-between whitespace-nowrap touch-manipulation"
+      title="Priority of this email"
+    >
       <div className="flex items-center gap-2">
-        <currentConfig.icon size={14} />
-        <span className="truncate">{currentConfig.label}</span>
+        <currentConfig.icon size={13} />
+        <span>{currentConfig.label}</span>
       </div>
       <DropdownMenu.TriggerIcon />
     </Button>

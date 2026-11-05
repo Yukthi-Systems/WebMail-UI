@@ -25,10 +25,13 @@ type ReadReceiptFieldProps = {
 const ReadReceiptField = ({ checked, onChange }: ReadReceiptFieldProps) => {
   return (
     <Flex asChild align="center" gap="2">
-      <label className="cursor-pointer select-none whitespace-nowrap">
+      <label
+        className="cursor-pointer select-none whitespace-nowrap shrink-0 px-2"
+        title="Request a read receipt"
+      >
         <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true)} />
         <Text size="2" className="text-[var(--gray-11)]">
-          Request read receipt
+          Read receipt
         </Text>
       </label>
     </Flex>
