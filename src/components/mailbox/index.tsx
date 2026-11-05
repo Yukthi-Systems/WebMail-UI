@@ -15,14 +15,12 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { lazy, Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import Folders from './Folders';
 import EmailList from './EmailList';
-import Composer from '../composer';
 import CreateFolder from './CreateFolder';
-import ContactView from '../contacts';
 import { viewContactModel } from '../../state/contact';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { composerOpenAtom } from '../../state/composer';
 import { userSettingsAtom } from '../../state/settings';
 import { sidebarCollapsedAtom } from '../../state/sidebar';
@@ -38,6 +36,12 @@ import { useKeyboardNavigation } from '../../hooks/useKeyboardShortcuts';
 import { usePanelSizes } from '../../hooks/usePanelSizes';
 import { countUnread, type EmailLike } from '../../utils/threads';
 
+// Loaded when needed, so the mail page doesn't download the rich text editor and
+// the spreadsheet libraries of contact import up front
+const loadComposer = () => import('../composer');
+const Composer = lazy(loadComposer);
+const ContactView = lazy(() => import('../contacts'));
+
 const Mailbox = () => {
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const [clearSelectedEmail, setClearSelectedEmail] = useState<(() => void) | null>(null);
@@ -47,7 +51,24 @@ const Mailbox = () => {
   const [viewContact] = useAtom(viewContactModel);
   const userSettings = useAtomValue(userSettingsAtom);
   const { show_sidebar = true } = userSettings?.ui ?? {};
-  const setOpenComposer = useSetAtom(composerOpenAtom);
+  const [composerOpen, setOpenComposer] = useAtom(composerOpenAtom);
+  // Stays mounted after the first open: an undo-send timer lives in the composer
+  const [composerUsed, setComposerUsed] = useState(composerOpen);
+  if (composerOpen && !composerUsed) setComposerUsed(true);
+
+  // Fetched once the page is idle, so the first compose or reply opens right away
+  useEffect(() => {
+    const load = () => {
+      void loadComposer();
+      void import('./EmailList/EmailComposer');
+    };
+    if (typeof requestIdleCallback === 'undefined') {
+      const timer = setTimeout(load, 2000);
+      return () => clearTimeout(timer);
+    }
+    const handle = requestIdleCallback(load, { timeout: 5000 });
+    return () => cancelIdleCallback(handle);
+  }, []);
   const { folder } = useParams({ strict: false });
   const { mutate: moveMutate } = useMoveMail();
   const queryClient = useQueryClient();
@@ -242,9 +263,9 @@ const Mailbox = () => {
 
         <MobileBottomNav onFolderClick={handleFolderClick} />
 
-        <Composer />
+        <Suspense fallback={null}>{composerUsed && <Composer />}</Suspense>
         <CreateFolder />
-        {viewContact && <ContactView />}
+        <Suspense fallback={null}>{viewContact && <ContactView />}</Suspense>
         <div className="md:hidden h-20" />
       </div>
     </>

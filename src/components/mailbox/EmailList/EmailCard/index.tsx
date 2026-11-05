@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { FaPaperclip, FaTrash, FaFlag } from 'react-icons/fa';
 import { MdDriveFileMoveOutline, MdMarkEmailRead, MdMarkEmailUnread } from 'react-icons/md';
 import { decodeWords } from 'postal-mime';
@@ -54,14 +54,15 @@ interface EmailCardProps {
   isActive?: boolean;
   onDragStart?: (emailIds: number[]) => void;
   onDragEnd?: () => void;
-  checkedEmails?: number[];
+  /** The current selection: read when a drag starts, so a selection change doesn't re-render every row */
+  getCheckedEmails?: () => number[];
   isKeyboardFocused?: boolean;
   id?: string;
   showSelection?: boolean;
   myEmail?: string;
   onMoveToFolder?: (emailId: string) => void;
   onToggleFlag?: (emailId: string, currentFlagged: boolean) => void;
-  viewingEmail?: string;
+  hasOpenEmail?: boolean;
 }
 
 // Outside the component, at module level
@@ -82,14 +83,14 @@ const EmailCard = ({
   isActive = false,
   onDragStart,
   onDragEnd,
-  checkedEmails = [],
+  getCheckedEmails,
   id,
   isKeyboardFocused,
   showSelection = true,
   myEmail = '',
   onMoveToFolder,
   onToggleFlag,
-  viewingEmail,
+  hasOpenEmail = false,
 }: EmailCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
@@ -108,7 +109,7 @@ const EmailCard = ({
   const [isWaitingForTooltip, setIsWaitingForTooltip] = useState(false);
   const userSettings = useAtomValue(userSettingsAtom);
   const showRecipientInfo = userSettings?.email?.show_recipient ?? true;
-  const showHoverActions = viewingEmail
+  const showHoverActions = hasOpenEmail
     ? (userSettings?.email.show_quick_hover_actions ?? true)
     : true;
 
@@ -477,6 +478,7 @@ const EmailCard = ({
     setIsWaitingForTooltip(false);
     setShowEmailTooltip(false);
 
+    const checkedEmails = getCheckedEmails?.() ?? [];
     const emailsToDrag = checkedEmails.includes(Number(email.id))
       ? checkedEmails
       : [Number(email.id)];
@@ -992,4 +994,5 @@ const EmailCard = ({
   );
 };
 
-export default EmailCard;
+// A list holds up to a page of these: only rows whose props changed re-render
+export default memo(EmailCard);

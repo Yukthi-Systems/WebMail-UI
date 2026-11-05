@@ -29,9 +29,10 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 // Counts how often the list renders: the toolbar renders once per EmailList render
-const { renders, stub } = vi.hoisted(() => {
+const { renders, stub, cards } = vi.hoisted(() => {
   const renders = { count: 0 };
-  return { renders, stub: () => ({ default: () => null }) };
+  const cards: { email: { id: string } }[] = [];
+  return { renders, cards, stub: () => ({ default: () => null }) };
 });
 vi.mock('../../../../src/hooks/useToast', () => {
   const toast = { success: () => {}, error: () => {}, loading: () => '', dismiss: () => {} };
@@ -43,7 +44,12 @@ vi.mock('../../../../src/components/mailbox/EmailList/EmailToolbar', () => ({
     return null;
   },
 }));
-vi.mock('../../../../src/components/mailbox/EmailList/EmailCard', () => stub());
+vi.mock('../../../../src/components/mailbox/EmailList/EmailCard', () => ({
+  default: (props: { email: { id: string } }) => {
+    cards.push(props);
+    return null;
+  },
+}));
 vi.mock('../../../../src/components/mailbox/EmailList/EmailViewer', () => stub());
 vi.mock('../../../../src/components/mailbox/EmailList/EmailComposer', () => stub());
 vi.mock('../../../../src/components/mailbox/EmailList/EmailEmptyState', () => stub());
@@ -92,7 +98,59 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const row = (uid: string) => ({
+  id: uid,
+  thread_id: uid,
+  email_ids: [uid],
+  message_count: 1,
+  unread_count: 0,
+  is_unread: false,
+  is_flagged: false,
+  has_attachment: false,
+  latest: { id: uid, uid, From: 'a@x.com', To: 'b@x.com', Subject: 's', FLAGS: ['\\Seen'] },
+});
+
 describe('EmailList', () => {
+  it('selecting a row changes the props of that row only, so memo skips the others', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ threads: [row('1'), row('2')], total_count: 2, total_pages: 1, data: {} }),
+          { status: 200 }
+        )
+      )
+    );
+    root.render(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(JotaiProvider, { store: webmailStore } as { store: typeof webmailStore; children?: ReactNode }, createElement(EmailList))
+      )
+    );
+    await wait(200);
+
+    const latest = (id: string) =>
+      [...cards].reverse().find((card) => card.email.id === id) as unknown as Record<string, unknown> & {
+        onSelectionChange: (id: string, selected: boolean, index: number) => void;
+      };
+    const before = { one: latest('1'), two: latest('2') };
+    expect(before.two).toBeTruthy();
+
+    before.one.onSelectionChange('1', true, 0);
+    await wait(50);
+
+    const after = { one: latest('1'), two: latest('2') };
+    const changed = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+      Object.keys({ ...a, ...b }).filter((key) => a[key] !== b[key]);
+
+    expect(after.one.isSelected).toBe(true);
+    expect(changed(before.two, after.two)).not.toContain('isSelected');
+    // Entering selection mode changes these for every row; nothing else may change
+    expect(changed(before.two, after.two).filter((key) => key !== 'isSelectionMode')).toEqual([]);
+  });
+
+
   it('does not re-render in a loop while a list without data is loading', async () => {
     const queryClient = new QueryClient();
     root.render(

@@ -16,7 +16,7 @@
  */
 
 import { Button } from '@radix-ui/themes';
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { FiAlertTriangle, FiEye, FiEyeOff, FiLock } from 'react-icons/fi';
 import { sanitizeHTMLContent } from '../../../../../utils/sanitizeHTMLContent';
 import { inlineCidImages } from '../../../../../utils/emailUtils';
@@ -84,20 +84,17 @@ const EmailHtmlContent = ({
 }: EmailHtmlContentProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeHeight, setIframeHeight] = useState(0);
-  const [blockedSrcDoc, setBlockedSrcDoc] = useState('');
-  const [unblockedSrcDoc, setUnblockedSrcDoc] = useState('');
   const [hoveredLink, setHoveredLink] = useState<{ url: string; rect: DOMRect } | null>(null);
   const hideTimeoutRef = useRef<number | undefined>(undefined);
   const showTimeoutRef = useRef<number | undefined>(undefined);
 
-  useEffect(() => {
+  // Sanitizing a large email is slow: only the version being shown is built
+  const srcDoc = useMemo(() => {
     const processedHTML = attachments?.length
       ? inlineCidImages(htmlContent, attachments)
       : htmlContent;
-
-    setBlockedSrcDoc(buildSrcDoc(sanitizeHTMLContent(processedHTML, true)));
-    setUnblockedSrcDoc(buildSrcDoc(sanitizeHTMLContent(processedHTML, false)));
-  }, [htmlContent, attachments]);
+    return buildSrcDoc(sanitizeHTMLContent(processedHTML, !allowExternalContent));
+  }, [htmlContent, attachments, allowExternalContent]);
 
   const syncHeight = useCallback(() => {
     const iframe = iframeRef.current;
@@ -135,7 +132,13 @@ const EmailHtmlContent = ({
     const iframe = iframeRef.current;
     if (!iframe) return;
     if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(syncHeight);
+    // syncHeight itself changes the height: react to the width only
+    let lastWidth = iframe.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (iframe.clientWidth === lastWidth) return;
+      lastWidth = iframe.clientWidth;
+      syncHeight();
+    });
     ro.observe(iframe);
     return () => ro.disconnect();
   }, [syncHeight]);
@@ -208,8 +211,6 @@ const EmailHtmlContent = ({
       // sandboxed
     }
   }, [syncHeight]);
-
-  const srcDoc = allowExternalContent ? unblockedSrcDoc : blockedSrcDoc;
 
   return (
     <div className="space-y-4 !mt-4">

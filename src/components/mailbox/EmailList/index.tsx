@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   useDeleteMail,
   useEmails,
@@ -33,7 +33,6 @@ import EmailToolbar from './EmailToolbar';
 import EmailViewer from './EmailViewer';
 import { type Email, emailRaw } from '../../../api/mailbox';
 import { useEmailRaw } from '../../../hooks/useEmailRaw';
-import EmailComposer from './EmailComposer';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { selectedEmailAtom } from '../../../state/emailAddress';
 import { useToast } from '../../../hooks/useToast';
@@ -65,6 +64,7 @@ import FolderDialog from './MoveEmail';
 import BulkActionDialog from './BulkActionDialog';
 import BulkSelectBanner from './BulkSelectBanner';
 import { useBulkSelection } from '../../../hooks/useBulkSelection';
+import { useStableCallback } from '../../../hooks/useStableCallback';
 import {
   bulkConfirmText,
   bulkOfferText,
@@ -95,7 +95,7 @@ import { isConversationView } from '../../../utils/emailListUtils';
 interface EmailListProps {
   onRegisterClearCallback?: (callback: () => void) => void;
   onRegisterClearSelectionCallback?: (callback: () => void) => void;
-  /** UIDs being dragged and the folder they are in */
+  /** UIDs being dragged and the folder they are in. */
   onDragStart?: (emailIds: number[], sourceFolder?: string) => void;
   onDragEnd?: () => void;
   onFocusFolders?: () => void;
@@ -105,6 +105,11 @@ interface EmailListProps {
 // to the effects below, which then re-render forever while a list is loading.
 const NO_EMAILS: Email[] = [];
 const NO_FLAGS: string[] = [];
+const NO_SELECTION: number[] = [];
+const IGNORE_SELECTION = () => {};
+
+// Only needed once a reply is started (Mailbox fetches the editor while idle)
+const EmailComposer = lazy(() => import('./EmailComposer'));
 
 const EmailList = ({
   onRegisterClearCallback,
@@ -154,10 +159,10 @@ const EmailList = ({
   const isMobile = useIsMobile();
   const folderDetails = useAtomValue(folderDetailsAtom);
   const folderQuota = useAtomValue(folderQuotaAtom);
-  
+
   const permanentDeleteThreshold = userSettings?.email?.permanent_delete_threshold ?? 90;
   const isQuotaNearFull = (folderQuota?.used_percent ?? 0) >= permanentDeleteThreshold;
-  
+
   const [isPermanentDeleteDialogOpen, setIsPermanentDeleteDialogOpen] = useState(false);
   const [permanentDeleteEmails, setPermanentDeleteEmails] = useState<number[]>([]);
   const [permanentDeleteFolder, setPermanentDeleteFolder] = useState<string>('');
@@ -463,13 +468,19 @@ const EmailList = ({
   // Rows in API order: emails, or conversations (grouped and sorted by the API)
   const emailArray = simpleEmailArray;
 
-  /** Rows to look ids up in: the list, plus the open email (it may come from search) */
+  /**
+   * Rows to look ids up in: the list, plus the open email (it may come from
+   * search)
+   */
   const knownRows = (): EmailLike[] =>
     viewingEmail
       ? [...(emailArray as unknown as EmailLike[]), viewingEmail as unknown as EmailLike]
       : (emailArray as unknown as EmailLike[]);
 
-  /** Row ids → UIDs to act on: a conversation row means all its emails in this folder */
+  /**
+   * Row ids → UIDs to act on: a conversation row means all its emails in this
+   * folder.
+   */
   const toEmailUids = (rowIds: number[]) => expandRowIds(knownRows(), rowIds);
 
   /** The open email: same UID and same folder (UIDs repeat across folders) */
@@ -510,9 +521,7 @@ const EmailList = ({
       emailArray.some((email) => !checkedEmails.includes(Number(email.id)))
         ? expandRowIds(
             emailArray as unknown as EmailLike[],
-            emailArray
-              .map((email) => Number(email.id))
-              .filter((id) => !checkedEmails.includes(id))
+            emailArray.map((email) => Number(email.id)).filter((id) => !checkedEmails.includes(id))
           )
         : [],
     [emailArray, checkedEmails]
@@ -837,7 +846,10 @@ const EmailList = ({
     );
   };
 
-  /** Delete rows: permanently in Trash, else to Trash (asks first when the quota is nearly full) */
+  /**
+   * Delete rows: permanently in Trash, else to Trash (asks first when the quota
+   * is nearly full)
+   */
   const deleteRows = (rowIds: number[]) => {
     // A conversation row deletes the whole conversation (in its folder)
     const uids = toEmailUids(rowIds);
@@ -886,7 +898,12 @@ const EmailList = ({
       uids: markRead
         ? toEmailUids(rows.map((row) => Number(row.id)))
         : rows.map((row) => Number(row.id)),
-      count: markRead ? countUnread(rows as unknown as EmailLike[], rows.map((r) => Number(r.id))) : rows.length,
+      count: markRead
+        ? countUnread(
+            rows as unknown as EmailLike[],
+            rows.map((r) => Number(r.id))
+          )
+        : rows.length,
     };
   };
 
@@ -1119,7 +1136,6 @@ const EmailList = ({
     }
   };
 
-  
   const handleManualRefresh = async () => {
     const loadingId = toast.loading({ description: 'Refreshing…' });
     try {
@@ -1177,7 +1193,10 @@ const EmailList = ({
     );
 
     if (searchState.isActive) {
-      await queryClient.invalidateQueries({ queryKey: ['search-emails'] }, { cancelRefetch: false });
+      await queryClient.invalidateQueries(
+        { queryKey: ['search-emails'] },
+        { cancelRefetch: false }
+      );
     }
 
     toast.dismiss(loadingId);
@@ -1601,12 +1620,27 @@ const EmailList = ({
     );
   };
 
+  // Stable props for the memoized rows: selecting one row re-renders that row only
+  const onRowSelectionChange = useStableCallback(handleSelectionChange);
+  const onRowClick = useStableCallback(handleEmailClick as (email: unknown) => void);
+  const onRowMarkAsRead = useStableCallback(handleSingleEmailMarkAsRead);
+  const onRowDelete = useStableCallback(handleSingleEmailDelete);
+  const onRowDragStart = useStableCallback(handleCardDragStart);
+  const onRowEnterSelectionMode = useStableCallback(handleEnterSelectionMode);
+  const onRowMove = useStableCallback(handleQuickMove);
+  const onRowToggleFlag = useStableCallback(handleSingleEmailMarkAsFlagged);
+  const getCheckedEmails = useStableCallback(() => (viewingEmail ? NO_SELECTION : checkedEmails));
+
+  // Runs when the element is attached, not on each render: an inline ref would be
+  // called every time and pull the list back to the saved scroll position
+  const attachEmailList = useCallback((node: HTMLDivElement | null) => {
+    emailListScrollRef.current = node;
+    if (node) node.scrollTop = savedScrollPositionRef.current;
+  }, []);
+
   const renderEmailList = () => (
     <div
-      ref={(node) => {
-        emailListScrollRef.current = node;
-        if (node) node.scrollTop = savedScrollPositionRef.current;
-      }}
+      ref={attachEmailList}
       className={`h-full overflow-x-hidden bg-[var(--gray-1)] transition-opacity duration-200 ${isFetching ? 'opacity-80' : 'opacity-100'}`}
     >
       {renderEmptyFolderBanner()}
@@ -1620,25 +1654,25 @@ const EmailList = ({
             email={email}
             isSelected={!viewingEmail && checkedEmails.includes(Number(email.id))}
             isSelectionMode={!viewingEmail && isSelectionMode}
-            onEnterSelectionMode={viewingEmail ? undefined : handleEnterSelectionMode}
-            onSelectionChange={viewingEmail ? () => {} : handleSelectionChange}
-            checkedEmails={viewingEmail ? [] : checkedEmails}
-            onEmailClick={handleEmailClick}
+            onEnterSelectionMode={viewingEmail ? undefined : onRowEnterSelectionMode}
+            onSelectionChange={viewingEmail ? IGNORE_SELECTION : onRowSelectionChange}
+            getCheckedEmails={getCheckedEmails}
+            onEmailClick={onRowClick}
             total={emailArray.length}
-            onMarkAsRead={handleSingleEmailMarkAsRead}
-            onDelete={handleSingleEmailDelete}
+            onMarkAsRead={onRowMarkAsRead}
+            onDelete={onRowDelete}
             folder={folder}
             isActive={isViewing(email)}
-            onDragStart={handleCardDragStart}
+            onDragStart={onRowDragStart}
             onDragEnd={onDragEnd}
             showSelection={!viewingEmail}
             isKeyboardFocused={
               currentEmailIndex === index && isKeyboardNavigating && !isViewing(email)
             }
             myEmail={userDetails?.email}
-            onMoveToFolder={handleQuickMove}
-            onToggleFlag={(id, isFlagged) => handleSingleEmailMarkAsFlagged(id, isFlagged)}
-            viewingEmail={viewingEmail?.id}
+            onMoveToFolder={onRowMove}
+            onToggleFlag={onRowToggleFlag}
+            hasOpenEmail={!!viewingEmail}
           />
         ))}
       </div>
@@ -1873,21 +1907,21 @@ const EmailList = ({
                 id={`email-card-${email.id}`}
                 email={email}
                 isSelected={checkedEmails.includes(Number(email.id))}
-                onSelectionChange={handleSelectionChange}
-                onEmailClick={handleEmailClick}
+                onSelectionChange={onRowSelectionChange}
+                onEmailClick={onRowClick}
                 total={emailArray.length}
                 isSelectionMode={isSelectionMode}
-                onEnterSelectionMode={handleEnterSelectionMode}
-                onMarkAsRead={handleSingleEmailMarkAsRead}
-                onDelete={handleSingleEmailDelete}
+                onEnterSelectionMode={onRowEnterSelectionMode}
+                onMarkAsRead={onRowMarkAsRead}
+                onDelete={onRowDelete}
                 folder={folder}
-                onDragStart={handleCardDragStart}
+                onDragStart={onRowDragStart}
                 onDragEnd={onDragEnd}
-                checkedEmails={checkedEmails}
+                getCheckedEmails={getCheckedEmails}
                 isKeyboardFocused={currentEmailIndex === index && isKeyboardNavigating}
                 myEmail={userDetails?.email}
-                onMoveToFolder={handleQuickMove}
-                onToggleFlag={(id, isFlagged) => handleSingleEmailMarkAsFlagged(id, isFlagged)}
+                onMoveToFolder={onRowMove}
+                onToggleFlag={onRowToggleFlag}
               />
             ))}
           </div>
@@ -1897,35 +1931,41 @@ const EmailList = ({
       {/* ─── EmailComposer lives here at the top level ──────────────────────────
           Rendering it outside the viewer means it stays mounted across folder
           changes and regardless of whether an email is being viewed.           */}
-      {(composerOpen || composerKeepMounted) && (
-        <EmailComposer
-          email={
-            replyingEmail || replyingAllEmail || forwardingEmail || sendDraftEmail || editAsNewEmail
-          }
-          mode={
-            replyingEmail
-              ? 'reply'
-              : replyingAllEmail
-                ? 'replyAll'
-                : forwardingEmail
-                  ? 'forward'
-                  : sendDraftEmail
-                    ? 'draft'
-                    : editAsNewEmail
-                      ? 'editAsNew'
-                      : 'new'
-          }
-          onClose={() => {
-            handleRefresh();
-            handleCloseComposer();
-          }}
-          onSend={() => {
-            handleCloseComposer();
-            handleRefresh();
-          }}
-          onSendDraft={handleSendDraft}
-        />
-      )}
+      <Suspense fallback={null}>
+        {(composerOpen || composerKeepMounted) && (
+          <EmailComposer
+            email={
+              replyingEmail ||
+              replyingAllEmail ||
+              forwardingEmail ||
+              sendDraftEmail ||
+              editAsNewEmail
+            }
+            mode={
+              replyingEmail
+                ? 'reply'
+                : replyingAllEmail
+                  ? 'replyAll'
+                  : forwardingEmail
+                    ? 'forward'
+                    : sendDraftEmail
+                      ? 'draft'
+                      : editAsNewEmail
+                        ? 'editAsNew'
+                        : 'new'
+            }
+            onClose={() => {
+              handleRefresh();
+              handleCloseComposer();
+            }}
+            onSend={() => {
+              handleCloseComposer();
+              handleRefresh();
+            }}
+            onSendDraft={handleSendDraft}
+          />
+        )}
+      </Suspense>
       {/* ──────────────────────────────────────────────────────────────────────── */}
 
       {bulkSelection.pending && (

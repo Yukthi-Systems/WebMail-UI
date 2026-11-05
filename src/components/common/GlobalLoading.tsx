@@ -18,20 +18,28 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from '@tanstack/react-router';
 
+// A quick navigation shows nothing: covering the screen for it reads as a stall
+const SHOW_AFTER_MS = 300;
+
 export const GlobalLoader = () => {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     const unsubscribeBeforeLoad = router.subscribe('onBeforeLoad', () => {
-      setIsLoading(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setIsLoading(true), SHOW_AFTER_MS);
     });
 
     const unsubscribeResolved = router.subscribe('onResolved', () => {
+      clearTimeout(timer);
       setIsLoading(false);
     });
 
     return () => {
+      clearTimeout(timer);
       unsubscribeBeforeLoad();
       unsubscribeResolved();
     };
@@ -40,7 +48,7 @@ export const GlobalLoader = () => {
   if (!isLoading) return null;
 
   return (
-    <div className="fixed inset-0 bg-[var(--gray-1)]/80 backdrop-blur-md flex items-center justify-center z-[9999]">
+    <div className="fixed inset-0 bg-[var(--gray-1)]/80 flex items-center justify-center z-[9999]">
       <div className="relative">
         <div className="absolute inset-0 rounded-full">
           <div className="w-16 h-16 border-4 border-[var(--accent-3)] rounded-full animate-ping opacity-75"></div>
