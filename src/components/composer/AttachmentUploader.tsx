@@ -262,16 +262,13 @@ const AttachmentUploader = forwardRef<AttachmentUploaderHandle, AttachmentUpload
                     role="button"
                     tabIndex={0}
                     aria-label={`Preview ${file.filename}`}
-                    title={`${file.filename}\n${getFileTypeLabel(mimeType)} • ${formatFileSize(file.size || 0)}\nClick to preview, F2 to rename`}
+                    title={`${file.filename}\n${getFileTypeLabel(mimeType)} • ${formatFileSize(file.size || 0)}\nClick to preview`}
                     onClick={() => setPreviewIndex(idx)}
                     onKeyDown={(e) => {
                       if (e.target !== e.currentTarget) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         setPreviewIndex(idx);
-                      } else if (e.key === 'F2') {
-                        e.preventDefault();
-                        setRenamingIndex(idx);
                       } else if (e.key === 'Delete') {
                         e.preventDefault();
                         removeAttachment(idx);
@@ -289,23 +286,27 @@ const AttachmentUploader = forwardRef<AttachmentUploaderHandle, AttachmentUpload
                     <span className="min-w-0 truncate text-xs font-medium text-[var(--gray-12)]">
                       {file.filename}
                     </span>
-                    <span className="flex-shrink-0 text-[11px] text-[var(--gray-10)]">
-                      {formatFileSize(file.size || 0)}
+                    {/* The pencil takes the place of the size on hover, over it rather than
+                        beside it, so the chip keeps its width and the close button stays put.
+                        Touch screens have no hover: there it's simply always next to the size. */}
+                    <span className="relative flex-shrink-0 inline-flex items-center">
+                      <span className="text-[11px] text-[var(--gray-10)] [@media(hover:hover)]:group-hover:invisible [@media(hover:hover)]:group-focus-within:invisible">
+                        {formatFileSize(file.size || 0)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenamingIndex(idx);
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto p-1 [@media(pointer:coarse)]:p-2 rounded hover:bg-[var(--gray-4)] text-[var(--gray-11)] hover:text-[var(--gray-12)] transition-colors"
+                        title="Rename"
+                        aria-label={`Rename ${file.filename}`}
+                      >
+                        <FaPen size={10} />
+                      </button>
                     </span>
-                    {/* Rename on hover/focus, always on touch screens */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setRenamingIndex(idx);
-                      }}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      className="hidden group-hover:block group-focus-within:block [@media(hover:none)]:block p-1 [@media(pointer:coarse)]:p-2 rounded hover:bg-[var(--gray-4)] text-[var(--gray-11)] hover:text-[var(--gray-12)] transition-colors"
-                      title="Rename (F2)"
-                      aria-label={`Rename ${file.filename}`}
-                    >
-                      <FaPen size={10} />
-                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
