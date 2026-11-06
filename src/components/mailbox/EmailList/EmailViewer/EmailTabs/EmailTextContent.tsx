@@ -24,7 +24,10 @@ interface EmailTextContentProps {
   maxHeight?: number;
 }
 
-const linkRegex = /(https?:\/\/[^\s]+|[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/g;
+// The address parts have a maximum length (64 before the @, 255 after it): without one, a long
+// line with no spaces (e.g. pasted base64) takes minutes, because every position is scanned to its end
+export const linkRegex =
+  /(https?:\/\/[^\s]+|[a-zA-Z0-9._-]{1,64}@[a-zA-Z0-9._-]{1,255}\.[a-zA-Z0-9_-]{1,63})/g;
 
 const LinkWithPreview = ({ href, children }: { href: string; children: React.ReactNode }) => {
   const [tooltipData, setTooltipData] = useState<{ url: string; rect: DOMRect } | null>(null);
