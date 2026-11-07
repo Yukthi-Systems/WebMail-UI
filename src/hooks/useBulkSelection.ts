@@ -19,7 +19,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { bulkEmails, folderUidValidity, type BulkAction } from '../api/mailbox';
 import type { SearchRequest } from '../api/search';
-import { bulkDoneText, bulkUnreadChanges, runBulkAction } from '../utils/bulkSelection';
+import {
+  bulkDoneText,
+  bulkExcludedUids,
+  bulkUnreadChanges,
+  NO_EXCLUSIONS,
+  runBulkAction,
+  type BulkExclusions,
+} from '../utils/bulkSelection';
 import { invalidateFolderLists } from './useEmails';
 import { useUpdateAnyFolderUnreadCount } from './useFolders';
 import { useToast } from './useToast';
@@ -35,8 +42,6 @@ interface UseBulkSelectionOptions {
   filterBy: string;
   search: SearchRequest | null;
   conversations: boolean;
-  /** UIDs of the rows the user unselected */
-  excludedUids: number[];
   /** Clears the selected rows; called before the lists reload */
   onFinished: () => void;
 }
@@ -44,21 +49,26 @@ interface UseBulkSelectionOptions {
 /**
  * Select all in a folder, filter or search, not only the loaded page.
  * Remembers the newest email at that moment (mail arriving later is not
- * touched) and the folder's UIDVALIDITY.
+ * touched), the folder's UIDVALIDITY, the total at that moment and the rows
+ * unticked since, on any page.
  */
 export function useBulkSelection({
   folder,
   filterBy,
   search,
   conversations,
-  excludedUids,
   onFinished,
 }: UseBulkSelectionOptions) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const updateUnreadCount = useUpdateAnyFolderUnreadCount();
 
-  const [selection, setSelection] = useState<{ maxUid: number; uidValidity: string } | null>(null);
+  const [selection, setSelection] = useState<{
+    maxUid: number;
+    uidValidity: string;
+    totalAtSelectAll: number;
+  } | null>(null);
+  const [exclusions, setExclusions] = useState<BulkExclusions>(NO_EXCLUSIONS);
   const [isSelecting, setIsSelecting] = useState(false);
   const [pending, setPending] = useState<PendingBulkAction | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -69,15 +79,21 @@ export function useBulkSelection({
     selectRequest.current += 1;
     setIsSelecting(false);
     setSelection(null);
+    setExclusions(NO_EXCLUSIONS);
   };
 
-  const selectAll = async () => {
+  const selectAll = async (totalAtSelectAll: number) => {
     const request = ++selectRequest.current;
+    setExclusions(NO_EXCLUSIONS);
     setIsSelecting(true);
     try {
       const { data } = await folderUidValidity(folder);
       if (request !== selectRequest.current) return;
-      setSelection({ maxUid: data.UIDNEXT - 1, uidValidity: String(data.UIDVALIDITY) });
+      setSelection({
+        maxUid: data.UIDNEXT - 1,
+        uidValidity: String(data.UIDVALIDITY),
+        totalAtSelectAll,
+      });
     } catch (error) {
       if (request !== selectRequest.current) return;
       toast.error({
@@ -107,6 +123,7 @@ export function useBulkSelection({
     if (!pending || !selection) return;
     const { action, destFolder, destName } = pending;
     setProgress({ done: 0, total: 0 });
+    const excludeUids = bulkExcludedUids(exclusions);
 
     const result = await runBulkAction(
       () =>
@@ -116,7 +133,7 @@ export function useBulkSelection({
           max_uid: selection.maxUid,
           uid_validity: selection.uidValidity,
           dest_folder: destFolder,
-          exclude_uids: excludedUids,
+          exclude_uids: excludeUids,
           filter_by: filterBy,
           search: search ?? undefined,
           conversations,
@@ -145,6 +162,8 @@ export function useBulkSelection({
 
   return {
     selection,
+    exclusions,
+    setExclusions,
     isSelecting,
     selectAll,
     clear,

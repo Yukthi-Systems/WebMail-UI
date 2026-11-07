@@ -1,12 +1,133 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   bulkConfirmText,
+  bulkCounts,
+  bulkExcludedUids,
   bulkOfferText,
   bulkProgressTitle,
   bulkSelectedText,
   bulkUnreadChanges,
+  isRowBulkSelected,
+  isRowInBulkRange,
+  NO_EXCLUSIONS,
+  refreshExclusions,
   runBulkAction,
+  setRowsExcluded,
 } from '../../src/utils/bulkSelection';
+import type { EmailLike, ThreadInfo } from '../../src/utils/threads';
+
+const email = (id: number): EmailLike => ({ id: String(id) });
+
+/** A conversation row: its id is the latest UID, its thread id the oldest */
+const conversation = (...emailIds: number[]): EmailLike => ({
+  id: String(emailIds[emailIds.length - 1]),
+  thread: { threadId: String(emailIds[0]), emailIds } as ThreadInfo,
+});
+
+describe('exclusions across pages', () => {
+  const MAX_UID = 1000;
+
+  it('excludes a row and includes it again', () => {
+    const row = email(5);
+    const excluded = setRowsExcluded(NO_EXCLUSIONS, [row], true);
+    expect(isRowBulkSelected(row, MAX_UID, excluded)).toBe(false);
+    expect(bulkExcludedUids(excluded)).toEqual([5]);
+
+    const included = setRowsExcluded(excluded, [row], false);
+    expect(isRowBulkSelected(row, MAX_UID, included)).toBe(true);
+    expect(bulkExcludedUids(included)).toEqual([]);
+  });
+
+  it('keeps exclusions of pages that are no longer loaded', () => {
+    const pageTwo = [email(20), email(21)];
+    const pageThree = [email(30), email(31)];
+    const exclusions = setRowsExcluded(NO_EXCLUSIONS, [pageTwo[0]], true);
+
+    // Page three on screen: its rows are ticked, page two's exclusion is still sent
+    expect(pageThree.every((row) => isRowBulkSelected(row, MAX_UID, exclusions))).toBe(true);
+    expect(refreshExclusions(exclusions, pageThree)).toBe(exclusions);
+    expect(bulkExcludedUids(exclusions)).toEqual([20]);
+
+    // Back on page two: still unticked, and only that row
+    expect(isRowBulkSelected(pageTwo[0], MAX_UID, exclusions)).toBe(false);
+    expect(isRowBulkSelected(pageTwo[1], MAX_UID, exclusions)).toBe(true);
+  });
+
+  it('doing a whole page only touches that page', () => {
+    const pageOne = [email(10), email(11)];
+    const pageTwo = [email(20), email(21)];
+    const exclusions = setRowsExcluded(NO_EXCLUSIONS, [...pageOne, ...pageTwo], true);
+    expect(bulkExcludedUids(setRowsExcluded(exclusions, pageTwo, false))).toEqual([10, 11]);
+  });
+
+  it('sends all UIDs of a conversation and recognises it after a new reply', () => {
+    const excluded = setRowsExcluded(NO_EXCLUSIONS, [conversation(7, 9, 12)], true);
+    expect(bulkExcludedUids(excluded)).toEqual([7, 9, 12]);
+
+    // The row id changes from 12 to 15, the conversation stays unticked
+    expect(isRowBulkSelected(conversation(7, 9, 12, 15), MAX_UID, excluded)).toBe(false);
+  });
+
+  it('adds UIDs that a reload revealed in an unticked conversation', () => {
+    const excluded = setRowsExcluded(NO_EXCLUSIONS, [conversation(7, 9)], true);
+    const refreshed = refreshExclusions(excluded, [conversation(7, 9, 12), conversation(3, 4)]);
+    expect(bulkExcludedUids(refreshed)).toEqual([7, 9, 12]);
+    expect(refreshExclusions(refreshed, [conversation(7, 9, 12)])).toBe(refreshed);
+  });
+
+  it('leaves rows newer than max_uid unselected', () => {
+    expect(isRowInBulkRange(email(1001), MAX_UID)).toBe(false);
+    expect(isRowBulkSelected(email(1001), MAX_UID, NO_EXCLUSIONS)).toBe(false);
+    expect(isRowBulkSelected(conversation(1001, 1002), MAX_UID, NO_EXCLUSIONS)).toBe(false);
+  });
+
+  it('selects a conversation with both older and newer emails', () => {
+    expect(isRowBulkSelected(conversation(999, 1001), MAX_UID, NO_EXCLUSIONS)).toBe(true);
+  });
+});
+
+describe('bulkCounts', () => {
+  const MAX_UID = 1000;
+
+  it('keeps a running total across pages', () => {
+    const exclusions = setRowsExcluded(
+      setRowsExcluded(NO_EXCLUSIONS, [email(20)], true),
+      [conversation(30, 31, 32)],
+      true
+    );
+    expect(bulkCounts(14937, 14937, exclusions, MAX_UID)).toEqual({
+      total: 14937,
+      excluded: 4,
+      selected: 14933,
+    });
+  });
+
+  it('does not count mail that arrived after select all', () => {
+    expect(bulkCounts(100, 105, NO_EXCLUSIONS, MAX_UID).selected).toBe(100);
+  });
+
+  it('follows the list when emails have left it', () => {
+    expect(bulkCounts(100, 97, NO_EXCLUSIONS, MAX_UID).selected).toBe(97);
+  });
+
+  it('counts only the older emails of an unticked conversation', () => {
+    const exclusions = setRowsExcluded(NO_EXCLUSIONS, [conversation(999, 1000, 1001)], true);
+    expect(bulkExcludedUids(exclusions)).toEqual([999, 1000, 1001]);
+    expect(bulkCounts(100, 101, exclusions, MAX_UID)).toEqual({
+      total: 100,
+      excluded: 2,
+      selected: 98,
+    });
+  });
+
+  it('counts a UID once and never goes below zero', () => {
+    const exclusions = {
+      'thread-1': [1, 2],
+      'thread-2': [2, 3],
+    };
+    expect(bulkCounts(2, 2, exclusions, MAX_UID)).toEqual({ total: 2, excluded: 3, selected: 0 });
+  });
+});
 
 const reply = (done: number, remaining: number, unread = 0) => ({
   folder_path: 'INBOX',

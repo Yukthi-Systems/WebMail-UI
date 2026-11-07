@@ -67,9 +67,14 @@ import { useBulkSelection } from '../../../hooks/useBulkSelection';
 import { useStableCallback } from '../../../hooks/useStableCallback';
 import {
   bulkConfirmText,
+  bulkCounts,
   bulkOfferText,
   bulkProgressTitle,
   bulkSelectedText,
+  isRowBulkSelected,
+  isRowInBulkRange,
+  refreshExclusions,
+  setRowsExcluded,
   type BulkScope,
 } from '../../../utils/bulkSelection';
 import type { CreateContactData } from '../../../utils/contact';
@@ -300,7 +305,7 @@ const EmailList = ({
   const { mutate: deleteMutate } = useDeleteMail();
 
   const layout = userSettings?.ui?.layout || 'side-by-side';
-  const [checkedEmails, setCheckedEmails] = useState<number[]>([]);
+  const [pageCheckedEmails, setCheckedEmails] = useState<number[]>([]);
   const [viewingEmail, setViewingEmail] = useState<Email | null>(null);
   const [viewingEmailFolder, setViewingEmailFolder] = useState<string | undefined>(undefined);
   const [viewingEmailFlag, setViewingEmailFlag] = useAtom(flagAtom);
@@ -511,42 +516,67 @@ const EmailList = ({
     }
   }, [viewingEmail, emails, emailArray, setViewingEmailFlag]);
 
-  const totalSelectedCount = emailArray.length;
-  const checkedCount = checkedEmails.length;
-
-  // Select all in the folder, filter or search. Rows of this page that aren't
-  // checked are left out, so a row that arrives while selected isn't touched.
-  const bulkExcludedUids = useMemo(
-    () =>
-      emailArray.some((email) => !checkedEmails.includes(Number(email.id)))
-        ? expandRowIds(
-            emailArray as unknown as EmailLike[],
-            emailArray.map((email) => Number(email.id)).filter((id) => !checkedEmails.includes(id))
-          )
-        : [],
-    [emailArray, checkedEmails]
-  );
+  // Select all in the folder, filter or search. It stays active across pages:
+  // ticks are worked out from each row, so a page shows them as soon as its rows
+  // arrive, and only unticking a row excludes it.
   const bulkSelection = useBulkSelection({
     folder: listFolder,
     filterBy: searchState.isActive ? 'all' : emailFilter,
     search: searchState.isActive ? searchRequest : null,
     conversations: conversationView,
-    excludedUids: bulkExcludedUids,
     onFinished: () => handleDeselectAll(),
   });
-  const isBulkSelected = !!bulkSelection.selection && checkedCount > 0 && !viewingEmail;
+  const bulkMaxUid = bulkSelection.selection?.maxUid;
+  const bulkExclusions = bulkSelection.exclusions;
+  const checkedEmails = useMemo(
+    () =>
+      bulkMaxUid === undefined
+        ? pageCheckedEmails
+        : emailArray
+            .filter((email) =>
+              isRowBulkSelected(email as unknown as EmailLike, bulkMaxUid, bulkExclusions)
+            )
+            .map((email) => Number(email.id)),
+    [emailArray, pageCheckedEmails, bulkMaxUid, bulkExclusions]
+  );
+  const checkedCount = checkedEmails.length;
+  // What the toolbar checkbox counts as "all": rows newer than max_uid can't be ticked
+  const totalSelectedCount =
+    bulkMaxUid === undefined
+      ? emailArray.length
+      : emailArray.filter((email) => isRowInBulkRange(email as unknown as EmailLike, bulkMaxUid))
+          .length;
+  const isBulkSelected = !!bulkSelection.selection && !viewingEmail;
   const bulkTotal = total_emails ?? total_count;
   const bulkScope: BulkScope = searchState.isActive
     ? 'search'
     : emailFilter !== 'all'
       ? 'filter'
       : 'folder';
-  const bulkSelectedCount = Math.max(0, bulkTotal - bulkExcludedUids.length);
+  const bulkCount = bulkSelection.selection
+    ? bulkCounts(
+        bulkSelection.selection.totalAtSelectAll,
+        bulkTotal,
+        bulkExclusions,
+        bulkSelection.selection.maxUid
+      )
+    : null;
 
+  // Opening an email ends select all; the ticks of this page stay
   useEffect(() => {
-    if (checkedCount === 0 || viewingEmail) bulkSelection.clear();
+    if (!viewingEmail) return;
+    if (bulkSelection.selection) setCheckedEmails(checkedEmails);
+    bulkSelection.clear();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkedCount, viewingEmail]);
+  }, [viewingEmail]);
+
+  // Reloaded rows can hold UIDs an unticked conversation didn't have before
+  useEffect(() => {
+    bulkSelection.setExclusions((current) =>
+      refreshExclusions(current, emailArray as unknown as EmailLike[])
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailArray]);
 
   useEffect(() => {
     setCheckedEmails([]);
@@ -748,12 +778,20 @@ const EmailList = ({
 
   const handleSelectAll = () => {
     setCheckedEmails(emailArray.map((email) => Number(email.id)));
+    // Select all stays on: this page is ticked again, other pages keep their exclusions
+    bulkSelection.setExclusions((current) =>
+      setRowsExcluded(current, emailArray as unknown as EmailLike[], false)
+    );
   };
 
+  // Also the one way to end select all, besides opening an email: a page without
+  // ticks doesn't end it. Called through callbacks kept from the first render,
+  // which is fine as it only uses state setters.
   const handleDeselectAll = () => {
     setCheckedEmails([]);
     setIsSelectionMode(false);
     setLastSelectedIndex(null);
+    bulkSelection.clear();
   };
 
   const handleEditAsNew = (email: Email) => {
@@ -1264,6 +1302,21 @@ const EmailList = ({
   ) => {
     const idNum = Number(emailId);
 
+    // Also while select all waits for the server: its ticks apply once it's active
+    if (bulkSelection.selection || bulkSelection.isSelecting) {
+      const rows =
+        shiftKey && lastSelectedIndex !== null && index !== undefined
+          ? emailArray.slice(Math.min(lastSelectedIndex, index), Math.max(lastSelectedIndex, index) + 1)
+          : emailArray.filter((email) => Number(email.id) === idNum);
+      bulkSelection.setExclusions((current) =>
+        setRowsExcluded(current, rows as unknown as EmailLike[], !isSelected)
+      );
+      if (bulkSelection.selection) {
+        if (index !== undefined) setLastSelectedIndex(index);
+        return;
+      }
+    }
+
     setCheckedEmails((prev) => {
       let newSelection;
 
@@ -1452,6 +1505,7 @@ const EmailList = ({
     if (onRegisterClearSelectionCallback) {
       onRegisterClearSelectionCallback(handleDeselectAll);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onRegisterClearSelectionCallback]);
 
   const handlePrint = () => {
@@ -1533,7 +1587,12 @@ const EmailList = ({
       setRegularPage(page);
     }
     setCurrentEmailIndex(0);
-    handleDeselectAll();
+    if (bulkSelection.selection) {
+      // Select all stays active; a shift-click range must not span two pages
+      setLastSelectedIndex(null);
+    } else {
+      handleDeselectAll();
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1599,10 +1658,10 @@ const EmailList = ({
 
   const renderBulkBanner = () => {
     if (viewingEmail || emailArray.length === 0 || total_pages <= 1) return null;
-    if (isBulkSelected) {
+    if (isBulkSelected && bulkCount) {
       return (
         <BulkSelectBanner
-          message={bulkSelectedText(bulkTotal, bulkExcludedUids.length, bulkScope)}
+          message={bulkSelectedText(bulkCount.total, bulkCount.excluded, bulkScope)}
           actionLabel="Clear selection"
           onAction={handleDeselectAll}
         />
@@ -1614,7 +1673,7 @@ const EmailList = ({
       <BulkSelectBanner
         message={offer.message}
         actionLabel={bulkSelection.isSelecting ? 'Selecting…' : offer.action}
-        onAction={bulkSelection.selectAll}
+        onAction={() => bulkSelection.selectAll(bulkTotal)}
         disabled={bulkSelection.isSelecting}
       />
     );
@@ -1772,7 +1831,7 @@ const EmailList = ({
         actionFolder={folderOf(viewingEmail ? [Number(viewingEmail.id)] : checkedEmails)}
         selectedCount={checkedCount}
         totalSelectedCount={totalSelectedCount}
-        bulkSelectedCount={isBulkSelected ? bulkSelectedCount : undefined}
+        bulkSelectedCount={isBulkSelected ? bulkCount?.selected : undefined}
         onBulkMove={(destination) =>
           bulkSelection.request('move', destination.path, destination.name)
         }
@@ -1978,7 +2037,7 @@ const EmailList = ({
           )}
           {...bulkConfirmText(
             bulkSelection.pending.action,
-            bulkSelectedCount,
+            bulkCount?.selected ?? 0,
             conversationView,
             bulkSelection.pending.destName
           )}

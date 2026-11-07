@@ -15,9 +15,83 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-// Select all in a folder, filter or search: texts and the request loop.
+// Select all in a folder, filter or search: exclusions, texts and the request loop.
 
 import type { BulkAction, BulkEmailResponse } from '../api/mailbox';
+import { rowKey, type EmailLike } from './threads';
+
+/**
+ * Rows unticked while everything is selected: rowKey → the row's UIDs. Keyed by
+ * rowKey because a conversation's row id changes when a reply arrives. The UIDs
+ * are kept because rows of other pages aren't loaded when the request is sent.
+ */
+export type BulkExclusions = Readonly<Record<string, readonly number[]>>;
+
+export const NO_EXCLUSIONS: BulkExclusions = {};
+
+const rowUids = (row: EmailLike) => row.thread?.emailIds ?? [Number(row.id)];
+
+/** A row with only emails newer than max_uid can't be part of the selection */
+export const isRowInBulkRange = (row: EmailLike, maxUid: number) =>
+  rowUids(row).some((uid) => uid <= maxUid);
+
+export const isRowBulkSelected = (row: EmailLike, maxUid: number, exclusions: BulkExclusions) =>
+  !exclusions[rowKey(row)] && isRowInBulkRange(row, maxUid);
+
+/** Unticks (excluded) or ticks these rows */
+export const setRowsExcluded = (
+  exclusions: BulkExclusions,
+  rows: EmailLike[],
+  excluded: boolean
+): BulkExclusions => {
+  const next: Record<string, readonly number[]> = { ...exclusions };
+  rows.forEach((row) => {
+    if (excluded) next[rowKey(row)] = rowUids(row);
+    else delete next[rowKey(row)];
+  });
+  return next;
+};
+
+/**
+ * Adds UIDs that a reload revealed in an unticked conversation, so a reply the
+ * cached row didn't know about stays out of the action too. Returns the same
+ * object when nothing changed.
+ */
+export const refreshExclusions = (
+  exclusions: BulkExclusions,
+  rows: EmailLike[]
+): BulkExclusions => {
+  let next = exclusions;
+  rows.forEach((row) => {
+    const key = rowKey(row);
+    const stored = exclusions[key];
+    if (!stored) return;
+    const added = rowUids(row).filter((uid) => !stored.includes(uid));
+    if (added.length > 0) next = { ...next, [key]: [...stored, ...added] };
+  });
+  return next;
+};
+
+/** exclude_uids of the request: every UID of every unticked row, on any page */
+export const bulkExcludedUids = (exclusions: BulkExclusions): number[] => [
+  ...new Set(Object.values(exclusions).flat()),
+];
+
+/**
+ * The running total across pages. Starts from the total at the moment of select
+ * all, as mail arriving later is newer than max_uid and not selected. The current
+ * total only counts when it is lower: emails have left the list since then.
+ */
+export const bulkCounts = (
+  totalAtSelectAll: number,
+  totalNow: number,
+  exclusions: BulkExclusions,
+  maxUid: number
+) => {
+  const total = Math.min(totalAtSelectAll, totalNow);
+  const excluded = bulkExcludedUids(exclusions).filter((uid) => uid <= maxUid).length;
+  return { total, excluded, selected: Math.max(0, total - excluded) };
+};
 
 export const countEmails = (count: number) =>
   `${count.toLocaleString('en-US')} email${count === 1 ? '' : 's'}`;

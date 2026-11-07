@@ -174,7 +174,8 @@ const EmailToolbar = ({
   const [isFlagged, setIsFlagged] = useState<boolean>(false);
   const isAllSelected = selectedCount === totalSelectedCount && totalSelectedCount > 0;
   const isPartialSelected = selectedCount > 0 && selectedCount < totalSelectedCount;
-  const hasSelection = selectedCount > 0 || showBackButton;
+  // With select all active, every row of this page can be unticked while others stay selected
+  const hasSelection = selectedCount > 0 || bulkSelectedCount !== undefined || showBackButton;
   const { mutate: moveMutate } = useMoveMail();
   const { mutate: copyMutate } = useCopyMail();
   const updateAnyFolderUnreadCount = useUpdateAnyFolderUnreadCount();
