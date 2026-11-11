@@ -60,8 +60,10 @@ export default defineConfig(({ mode }) => {
       react(),
       svgr(),
       VitePWA({
-        // Registered by src/utils/appUpdate.ts, not the plugin
-        registerType: 'autoUpdate',
+        // Own service worker (src/sw/sw.ts), registered by src/utils/appUpdate.ts
+        strategies: 'injectManifest',
+        srcDir: 'src/sw',
+        filename: 'sw.ts',
         injectRegister: false,
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
         manifest: {
@@ -126,17 +128,9 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
-        workbox: {
+        injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff}'],
-          // Serve cached index.html for all navigation requests (SPA routing)
-          navigateFallback: 'index.html',
-          // Take control immediately on first install, no waiting for reload
-          clientsClaim: true,
-          skipWaiting: true,
-          // Purge caches from previous deploys so Cache Storage doesn't grow forever
-          cleanupOutdatedCaches: true,
-          // Exclude API calls from SW interception
-          navigateFallbackDenylist: [/^\/api\//],
+          rollupFormat: 'iife', // sw.js is registered as a classic script
         },
       }),
     ],
