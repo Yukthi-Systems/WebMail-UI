@@ -60,7 +60,7 @@ export default defineConfig(({ mode }) => {
       react(),
       svgr(),
       VitePWA({
-        // Own service worker (src/sw/sw.ts), registered by src/utils/appUpdate.ts
+        // Custom service worker: src/sw/sw.ts
         strategies: 'injectManifest',
         srcDir: 'src/sw',
         filename: 'sw.ts',
@@ -73,7 +73,7 @@ export default defineConfig(({ mode }) => {
           theme_color: '#f97316',
           background_color: '#ffffff',
           display: 'standalone',
-          start_url: '/', // ← add this
+          start_url: '/', 
           scope: '/',
           icons: [
             {
@@ -130,7 +130,7 @@ export default defineConfig(({ mode }) => {
         },
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff}'],
-          rollupFormat: 'iife', // sw.js is registered as a classic script
+          rollupFormat: 'iife',
         },
       }),
     ],

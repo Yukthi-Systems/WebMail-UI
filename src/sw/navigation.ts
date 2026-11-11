@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-// Page loads: fresh index.html from the server, cached copy if it is slow or down.
+// Page loads: server first, cached copy as fallback.
 
 export const NETWORK_TIMEOUT_MS = 3_000;
 
@@ -25,11 +25,11 @@ type NavigationDeps = {
   timeoutMs?: number;
 };
 
-// Redirects and 4xx are real answers; only network errors and 5xx (e.g. mid-deploy) fall back
+// Only network errors and 5xx fall back to the cache
 const isUsable = (response: Response | null): response is Response =>
   !!response && (response.type === 'opaqueredirect' || response.status < 500);
 
-/** Never rejects: server → cached page → server error response → offline page. */
+/** Never fails: server, then cache, then offline page. */
 export const handleNavigation = async (
   request: Request,
   { fetch, getCachedPage, timeoutMs = NETWORK_TIMEOUT_MS }: NavigationDeps
@@ -47,7 +47,6 @@ export const handleNavigation = async (
   const cached = await getCachedPage().catch(() => undefined);
   if (cached) return cached;
 
-  // No cached copy: keep waiting for the server
   const late = first === 'timeout' ? await network : first;
   return late ?? offlinePage();
 };

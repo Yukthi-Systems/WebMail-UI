@@ -23,15 +23,15 @@ import { handleNavigation } from './navigation';
 
 declare const self: ServiceWorkerGlobalScope;
 
-// New version takes over right away (src/utils/appUpdate.ts handles reload / banner)
+// Activate new versions right away
 self.skipWaiting();
 clientsClaim();
 
-// JS, CSS, icons: served from cache (file names change on every build)
+// Cache JS, CSS and icons
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// Browser starts the page request while the service worker wakes up
+// Start page requests early
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.registration.navigationPreload?.enable() ?? Promise.resolve());
 });
