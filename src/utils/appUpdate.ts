@@ -20,12 +20,12 @@
  *
  * 1. Stale build check: env-config.js is never cached and carries the id of the
  *    deployed build. If it differs from the id compiled into the running code,
- *    the browser served an old cached app: clear the service worker + caches
- *    and reload (once).
- * 2. Service worker updates are checked while the app stays open (timer, tab
- *    focus, back online). When a new version takes over: reload on the login
- *    page, otherwise show the "new version" banner so an email being written is
- *    not lost.
+ *    the browser served an old cached app: let the service worker update, then
+ *    reload (once).
+ * 2. Service worker updates are checked while the app stays open (timer, tab or
+ *    window focus, back online). When a new version takes over: reload on the
+ *    login page, otherwise show the "new version" banner so an email being
+ *    written is not lost.
  * 3. A lazy-loaded chunk that no longer exists on the server (old tab after a
  *    deploy) triggers a reload instead of a broken page.
  * 4. The "Reset app" button (resetApp). Removes service workers, caches and
@@ -262,6 +262,37 @@ const announceUpdate = () => {
 
 // ─── Registration ────────────────────────────────────────────────────────────
 
+/**
+ * Reads the build id deployed on the server right now (null if it cannot be
+ * read).
+ */
+export const fetchServerBuildId = async (): Promise<string | null> => {
+  try {
+    const response = await fetch('/env-config.js', { cache: 'no-store' });
+    if (!response.ok) return null;
+    const match = (await response.text()).match(/VITE_BUILD_ID:\s*"([^"]*)"/);
+    return match?.[1] || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * A new service worker took control of the page: is the page now running an old
+ * build? Compares build ids, so it is right however the page was opened (also
+ * for a page opened without a service worker, e.g. first visit, after "Reset
+ * app" or a hard refresh). If the server id cannot be read, a takeover of a
+ * page that was already controlled counts as an update and one of an
+ * uncontrolled page as the first install.
+ */
+export const isTakeoverAnUpdate = async (wasControlled: boolean): Promise<boolean> => {
+  const serverBuildId = await fetchServerBuildId();
+  if (serverBuildId && API_CONFIG.bundleBuildId) {
+    return serverBuildId !== API_CONFIG.bundleBuildId;
+  }
+  return wasControlled;
+};
+
 /** Reload when a lazy-loaded chunk fails (it was removed by a newer deploy). */
 const handleChunkLoadErrors = () => {
   window.addEventListener('vite:preloadError', (event) => {
@@ -276,12 +307,13 @@ const handleChunkLoadErrors = () => {
 const registerServiceWorker = () => {
   if (!('serviceWorker' in navigator)) return;
 
-  // Without a controller this is the first install, not an update
-  const hadController = Boolean(navigator.serviceWorker.controller);
+  let controlled = Boolean(navigator.serviceWorker.controller);
   let reloading = false;
 
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || reloading) return;
+  navigator.serviceWorker.addEventListener('controllerchange', async () => {
+    const wasControlled = controlled;
+    controlled = true;
+    if (reloading || !(await isTakeoverAnUpdate(wasControlled))) return;
     if (isLoginPath(window.location.pathname)) {
       reloading = true;
       window.location.reload();
@@ -304,6 +336,8 @@ const registerServiceWorker = () => {
       };
       setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
       document.addEventListener('visibilitychange', checkForUpdate);
+      // Switching between two visible windows does not change visibility, only focus
+      window.addEventListener('focus', checkForUpdate);
       window.addEventListener('online', checkForUpdate);
     })
     .catch((error) => console.error('[appUpdate] service worker registration failed', error));

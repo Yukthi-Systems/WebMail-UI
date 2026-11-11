@@ -22,7 +22,7 @@ vi.mock('../../src/constants/config', () => ({
   API_CONFIG: { serverBuildId: 'new', bundleBuildId: 'old' },
 }));
 
-const { reloadIfStaleBuild, waitForServiceWorkerUpdate } = await import(
+const { isTakeoverAnUpdate, reloadIfStaleBuild, waitForServiceWorkerUpdate } = await import(
   '../../src/utils/appUpdate'
 );
 
@@ -107,5 +107,31 @@ describe('reloadIfStaleBuild', () => {
 
     await expect(reloadIfStaleBuild()).resolves.toBe(false);
     expect(lastWarning()).toContain('Continuing');
+  });
+});
+
+describe('isTakeoverAnUpdate', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const serverReturns = (body: string, ok = true) =>
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok, text: () => Promise.resolve(body) }));
+
+  it('is an update when the server has a different build, even for a page opened without a service worker', async () => {
+    serverReturns('window._env_ = {\n  VITE_BUILD_ID: "new",\n}');
+    await expect(isTakeoverAnUpdate(false)).resolves.toBe(true);
+  });
+
+  it('is not an update when the server has the build this page runs', async () => {
+    serverReturns('window._env_ = {\n  VITE_BUILD_ID: "old",\n}');
+    await expect(isTakeoverAnUpdate(true)).resolves.toBe(false);
+  });
+
+  it('falls back to whether the page was controlled when the server id is unknown', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    await expect(isTakeoverAnUpdate(true)).resolves.toBe(true);
+    await expect(isTakeoverAnUpdate(false)).resolves.toBe(false);
+
+    serverReturns('window._env_ = {\n  VITE_BUILD_ID: "",\n}');
+    await expect(isTakeoverAnUpdate(false)).resolves.toBe(false);
   });
 });
