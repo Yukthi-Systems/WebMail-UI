@@ -430,7 +430,11 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
         >
           Having trouble? Reset app
         </button>
-        v{API_CONFIG.version}
+        <span title={`Build ${API_CONFIG.bundleBuildId}`}>
+          v{API_CONFIG.version}
+          {/* Build id identifies the exact deployed build (support / cache checks) */}
+          {API_CONFIG.bundleBuildId && ` · ${API_CONFIG.bundleBuildId.split('-')[0]}`}
+        </span>
       </p>
     </div>
   );
