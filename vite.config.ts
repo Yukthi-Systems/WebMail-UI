@@ -21,18 +21,51 @@ import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import svgr from 'vite-plugin-svgr';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { Plugin } from 'vite';
+
+// Unique per build. Compiled into the bundle (__BUILD_ID__) and written to dist/build-id,
+// which env.sh copies into env-config.js. env-config.js is never cached, so the app can
+// compare the two at startup and detect that it is running an old cached build.
+const gitHash = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'nogit'; // The Docker build image has no git binary
+  }
+})();
+const BUILD_ID = `${Date.now().toString(36)}-${gitHash}`;
+
+const writeBuildId = (): Plugin => ({
+  name: 'write-build-id',
+  apply: 'build',
+  closeBundle() {
+    writeFileSync(resolve(process.cwd(), 'dist/build-id'), BUILD_ID);
+  },
+});
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
+    define: {
+      __BUILD_ID__: JSON.stringify(BUILD_ID),
+    },
     plugins: [
+      writeBuildId(),
       tailwindcss(),
       TanStackRouterVite({ target: 'react', autoCodeSplitting: true }),
       react(),
       svgr(),
       VitePWA({
-        registerType: 'autoUpdate', // Automatically update the service worker
+        // The new service worker activates immediately (skipWaiting below). The page is
+        // registered by our own code (src/utils/appUpdate.ts), which reloads right away
+        // on the login page and otherwise shows a "new version" banner.
+        registerType: 'autoUpdate',
         injectRegister: false,
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
         manifest: {

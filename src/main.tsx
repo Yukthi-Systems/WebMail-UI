@@ -16,7 +16,6 @@
  */
 
 import { StrictMode } from 'react';
-import { registerSW } from 'virtual:pwa-register';
 import { createRoot } from 'react-dom/client';
 import {
   QueryClient,
@@ -36,6 +35,8 @@ import { resetLayoutCache } from './utils/resetLayoutCache.ts';
 import { NotFound } from './components/common/NotFound.tsx';
 import { MinimizedModalsProvider } from './components/common/MinimizedModalContext.tsx';
 import { getCompanySlugFromPath } from './utils/routeUtils.ts';
+import { initAppUpdates, reloadIfStaleBuild } from './utils/appUpdate.ts';
+import { UpdateBanner } from './components/common/UpdateBanner.tsx';
 
 
 (window as Window & { recaptchaOptions?: { useRecaptchaNet?: boolean } }).recaptchaOptions = {
@@ -133,10 +134,9 @@ declare module '@tanstack/react-router' {
   }
 }
 
-registerSW({ immediate: true });
-
-const rootElement = document.getElementById('root')!;
-if (!rootElement.innerHTML) {
+const renderApp = () => {
+  const rootElement = document.getElementById('root')!;
+  if (rootElement.innerHTML) return;
   const root = createRoot(rootElement);
   root.render(
     <StrictMode>
@@ -149,10 +149,18 @@ if (!rootElement.innerHTML) {
               <MinimizedModalsProvider>
                 <RouterProvider router={router} />
               </MinimizedModalsProvider>
+              <UpdateBanner />
             </ThemeWrapper>
           </QueryClientProvider>
         </JotaiProvider>
       </Toasts>
     </StrictMode>
   );
-}
+};
+
+// An old cached build reloads itself before rendering (see utils/appUpdate.ts)
+reloadIfStaleBuild().then((reloading) => {
+  if (reloading) return;
+  initAppUpdates();
+  renderApp();
+});

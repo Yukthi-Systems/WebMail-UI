@@ -38,6 +38,7 @@ import {
   FaLock,
 } from 'react-icons/fa'; // Added service icons
 import { API_CONFIG } from '../../constants/config';
+import { confirmAndResetApp } from '../../utils/appUpdate';
 
 // Primary color configuration
 const PRIMARY_COLOR = {
@@ -299,7 +300,17 @@ const Login = () => {
           </p>
         </div>
       </div>
-      <p className="absolute right-14 bottom-8 text-[11px] text-gray-400">v{API_CONFIG.version}</p>
+      <p className="absolute right-14 bottom-8 text-[11px] text-gray-400">
+        <button
+          type="button"
+          onClick={confirmAndResetApp}
+          className="mr-3 underline hover:text-orange-600"
+          title="Clears cached files and saved data in this browser"
+        >
+          Having trouble? Reset app
+        </button>
+        v{API_CONFIG.version}
+      </p>
     </div>
   );
 };

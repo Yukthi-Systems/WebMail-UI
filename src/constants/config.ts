@@ -25,6 +25,7 @@ declare global {
       VITE_RECAPTCHA_KEY?: string;
       VITE_DNS_API_URL?: string;
       VITE_PASSWORD_RESET_URL?: string;
+      VITE_BUILD_ID?: string;
     };
   }
 }
@@ -47,4 +48,9 @@ export const API_CONFIG = {
     window._env_?.VITE_PASSWORD_RESET_URL ||
     import.meta.env.VITE_PASSWORD_RESET_URL ||
     'https://admin.mailservice25.com/reset/admin?mode=identity',
+  // Build currently deployed on the server (env-config.js is never cached). Empty in dev.
+  serverBuildId: window._env_?.VITE_BUILD_ID || '',
+  // Build of the code that is running. Differs from serverBuildId when the browser
+  // or service worker served an old cached copy of the app.
+  bundleBuildId: typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '',
 } as const;
