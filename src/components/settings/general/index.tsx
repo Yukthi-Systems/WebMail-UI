@@ -32,6 +32,7 @@ import { ToggleGroup } from './ToggleGroup';
 import { SignatureSelector } from './SignatureSelector';
 import type { UserSettings } from '../../../api/user';
 import { Section } from './Section';
+import { confirmAndResetApp } from '../../../utils/appUpdate';
 import { Settings } from './Settings';
 import { useAtomValue } from 'jotai';
 import {
@@ -1996,6 +1997,21 @@ const General = ({ data }: GeneralProps) => {
                           )}
                         </div>
                       ))}
+                </Section>
+
+                <Section
+                  title="Troubleshooting"
+                  description="If WebMail looks outdated or something does not load correctly, reset the app on this device."
+                >
+                  <Flex align="center" justify="between" gap="3" wrap="wrap">
+                    <Text size="2" color="gray">
+                      Clears cached files and saved data in this browser and signs you out. Your
+                      emails and settings on the server are not affected.
+                    </Text>
+                    <Button type="button" color="red" variant="soft" onClick={confirmAndResetApp}>
+                      Reset app
+                    </Button>
+                  </Flex>
                 </Section>
               </div>
             </div>

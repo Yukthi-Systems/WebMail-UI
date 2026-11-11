@@ -17,7 +17,7 @@
 
 import { useRouter } from '@tanstack/react-router';
 import type { ErrorComponentProps } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   FiAlertTriangle,
   FiRefreshCw,
@@ -25,13 +25,21 @@ import {
   FiChevronDown,
   FiChevronUp,
   FiHome,
+  FiTrash2,
 } from 'react-icons/fi';
 import './css/ErrorBoundary.css';
 import { resetLayoutCache } from '../../utils/resetLayoutCache';
+import { claimAutoReload, confirmAndResetApp, isChunkLoadError } from '../../utils/appUpdate';
 
 export function ErrorBoundary({ error }: ErrorComponentProps) {
   const router = useRouter();
   const [showDetails, setShowDetails] = useState<boolean>(false);
+
+  // A page file from an older deploy is gone: reload to get the current version
+  // (at most once in a short window, so this cannot loop)
+  useEffect(() => {
+    if (isChunkLoadError(error) && claimAutoReload()) window.location.reload();
+  }, [error]);
 
   // Simulate logout function
   const handleLogout = () => {
@@ -91,6 +99,11 @@ export function ErrorBoundary({ error }: ErrorComponentProps) {
           <button className="btn btn-home" onClick={() => router.navigate({ to: '/' })}>
             <FiHome className="btn-icon" />
             Go Home
+          </button>
+
+          <button className="btn btn-reset" onClick={confirmAndResetApp}>
+            <FiTrash2 className="btn-icon" />
+            Reset App
           </button>
         </div>
 

@@ -115,6 +115,16 @@
   transform: translateY(-2px);
 }
 
+.btn-reset {
+  background-color: #495057;
+  color: white;
+}
+
+.btn-reset:hover {
+  background-color: #343a40;
+  transform: translateY(-2px);
+}
+
 .error-details {
   text-align: left;
   background: #f8f9fa;

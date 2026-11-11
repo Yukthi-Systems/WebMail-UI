@@ -17,3 +17,6 @@
 
 /// <reference types="vite/client" />
 /// <reference types="vite-plugin-pwa/client" />
+
+/** Unique id of this build, set in vite.config.ts */
+declare const __BUILD_ID__: string;

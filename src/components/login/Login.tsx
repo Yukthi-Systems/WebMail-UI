@@ -40,6 +40,7 @@ import {
 import { API_CONFIG } from '../../constants/config';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { csrfTokenAtom } from '../../state/auth';
+import { confirmAndResetApp } from '../../utils/appUpdate';
 
 export interface LoginBranding {
   logoUrl: string | null;
@@ -309,15 +310,38 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
 
               {/* reCAPTCHA Component */}
               <div className="flex justify-center pt-4">
-                <ReCAPTCHA
-                  ref={recaptchaRef}
-                  sitekey={RECAPTCHA_SITE_KEY}
-                  size="normal"
-                  theme="light"
-                  onChange={onRecaptchaChange}
-                  onExpired={onRecaptchaExpired}
-                  onErrored={onRecaptchaErrored}
-                />
+                {RECAPTCHA_SITE_KEY ? (
+                  <ReCAPTCHA
+                    ref={recaptchaRef}
+                    sitekey={RECAPTCHA_SITE_KEY}
+                    size="normal"
+                    theme="light"
+                    onChange={onRecaptchaChange}
+                    onExpired={onRecaptchaExpired}
+                    onErrored={onRecaptchaErrored}
+                  />
+                ) : (
+                  // Without a site key reCAPTCHA throws and breaks the whole page
+                  <div className="w-full rounded-lg border border-red-200 bg-red-50 p-3 text-center text-sm text-red-700">
+                    <p>Couldn't load the sign-in configuration.</p>
+                    <div className="mt-2 flex justify-center gap-4">
+                      <button
+                        type="button"
+                        onClick={() => window.location.reload()}
+                        className="font-medium underline"
+                      >
+                        Reload
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmAndResetApp}
+                        className="font-medium underline"
+                      >
+                        Reset app
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
@@ -398,6 +422,14 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
       <p
         className={`absolute right-14 bottom-8 text-[11px] ${bgImageUrl ? 'text-white/80 drop-shadow' : 'text-gray-400'}`}
       >
+        <button
+          type="button"
+          onClick={confirmAndResetApp}
+          className="mr-3 underline hover:text-orange-600"
+          title="Clears cached files and saved data in this browser"
+        >
+          Having trouble? Reset app
+        </button>
         v{API_CONFIG.version}
       </p>
     </div>
