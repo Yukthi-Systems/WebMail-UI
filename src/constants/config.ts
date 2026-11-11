@@ -48,9 +48,7 @@ export const API_CONFIG = {
     window._env_?.VITE_PASSWORD_RESET_URL ||
     import.meta.env.VITE_PASSWORD_RESET_URL ||
     'https://admin.mailservice25.com/reset/admin?mode=identity',
-  // Build currently deployed on the server (env-config.js is never cached). Empty in dev.
+  // Deployed build (from env-config.js) vs the build of the running code
   serverBuildId: window._env_?.VITE_BUILD_ID || '',
-  // Build of the code that is running. Differs from serverBuildId when the browser
-  // or service worker served an old cached copy of the app.
   bundleBuildId: typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '',
 } as const;

@@ -35,8 +35,7 @@ export function ErrorBoundary({ error }: ErrorComponentProps) {
   const router = useRouter();
   const [showDetails, setShowDetails] = useState<boolean>(false);
 
-  // A page file from an older deploy is gone: reload to get the current version
-  // (at most once in a short window, so this cannot loop)
+  // Page file removed by a newer deploy: reload once
   useEffect(() => {
     if (isChunkLoadError(error) && claimAutoReload()) window.location.reload();
   }, [error]);

@@ -26,16 +26,14 @@ import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
 
-// Unique per build. Compiled into the bundle (__BUILD_ID__) and written to dist/build-id,
-// which env.sh copies into env-config.js. env-config.js is never cached, so the app can
-// compare the two at startup and detect that it is running an old cached build.
+// Unique per build: compiled in as __BUILD_ID__ and written to dist/build-id for env.sh
 const gitHash = (() => {
   try {
     return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .trim();
   } catch {
-    return 'nogit'; // The Docker build image has no git binary
+    return 'nogit'; // No git in the Docker build image
   }
 })();
 const BUILD_ID = `${Date.now().toString(36)}-${gitHash}`;
@@ -62,9 +60,7 @@ export default defineConfig(({ mode }) => {
       react(),
       svgr(),
       VitePWA({
-        // The new service worker activates immediately (skipWaiting below). The page is
-        // registered by our own code (src/utils/appUpdate.ts), which reloads right away
-        // on the login page and otherwise shows a "new version" banner.
+        // Registered by src/utils/appUpdate.ts, not the plugin
         registerType: 'autoUpdate',
         injectRegister: false,
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],

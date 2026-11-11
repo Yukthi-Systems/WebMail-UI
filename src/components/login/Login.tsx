@@ -321,7 +321,7 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
                     onErrored={onRecaptchaErrored}
                   />
                 ) : (
-                  // Without a site key reCAPTCHA throws and breaks the whole page
+                  // reCAPTCHA crashes the page without a site key
                   <div className="w-full rounded-lg border border-red-200 bg-red-50 p-3 text-center text-sm text-red-700">
                     <p>Couldn't load the sign-in configuration.</p>
                     <div className="mt-2 flex justify-center gap-4">
@@ -432,7 +432,6 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
         </button>
         <span title={`Build ${API_CONFIG.bundleBuildId}`}>
           v{API_CONFIG.version}
-          {/* Build id identifies the exact deployed build (support / cache checks) */}
           {API_CONFIG.bundleBuildId && ` · ${API_CONFIG.bundleBuildId.split('-')[0]}`}
         </span>
       </p>

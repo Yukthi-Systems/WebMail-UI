@@ -15,38 +15,17 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-/**
- * Keeps users on the latest deployed UI.
- *
- * 1. Stale build check: env-config.js is never cached and carries the id of the
- *    deployed build. If it differs from the id compiled into the running code,
- *    the browser served an old cached app: let the service worker update, then
- *    reload (once).
- * 2. Service worker updates are checked while the app stays open (timer, tab or
- *    window focus, back online). When a new version takes over: reload on the
- *    login page, otherwise show the "new version" banner so an email being
- *    written is not lost.
- * 3. A lazy-loaded chunk that no longer exists on the server (old tab after a
- *    deploy) triggers a reload instead of a broken page.
- * 4. The "Reset app" button (resetApp). Removes service workers, caches and
- *    storage.
- */
+// Keeps users on the latest deployed UI: stale build check, update checks, chunk reloads, reset.
 
 import { API_CONFIG } from '../constants/config';
 import { getCompanySlugFromPath } from './routeUtils';
 
 const AUTO_RELOAD_KEY = 'app-last-auto-reload';
-// Separate guard for the cache wipe that runs when a normal update reload did not help
 const HARD_RESET_KEY = 'app-last-hard-reset';
-// Automatic reloads closer together than this are skipped, so a problem the reload does
-// not fix can never turn into a reload loop
-const AUTO_RELOAD_GUARD_MS = 30_000;
+const AUTO_RELOAD_GUARD_MS = 30_000; // Min gap between automatic reloads (prevents loops)
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60_000;
-// Tab focus / back online checks are skipped if the last check was this recent
-const UPDATE_CHECK_MIN_GAP_MS = 5 * 60_000;
-// Longest time an old cached build waits for the service worker update before reloading
+const UPDATE_CHECK_MIN_GAP_MS = 5 * 60_000; // Throttle for focus / online checks
 const STALE_UPDATE_TIMEOUT_MS = 8_000;
-// Never let cleanup block the reload (e.g. a service worker that does not unregister)
 const CLEANUP_TIMEOUT_MS = 3_000;
 
 // ─── Checks ──────────────────────────────────────────────────────────────────
@@ -65,20 +44,14 @@ export const isChunkLoadError = (error: unknown): boolean => {
   );
 };
 
-/**
- * Login pages (/login and the company login /<slug>) have no unsaved work to
- * lose.
- */
+/** /login or a company login page /<slug>. */
 export const isLoginPath = (pathname: string): boolean => {
   const segments = pathname.split('/').filter(Boolean);
   if (segments[0]?.toLowerCase() === 'login') return true;
   return segments.length === 1 && getCompanySlugFromPath(pathname) !== null;
 };
 
-/**
- * Records an automatic reload and returns true, or returns false when one
- * already happened within the guard window (or sessionStorage is unavailable).
- */
+/** False if an automatic reload ran within the guard window. */
 export const claimAutoReload = (
   now: number = Date.now(),
   key: string = AUTO_RELOAD_KEY
@@ -123,10 +96,7 @@ const deleteIndexedDb = (name: string) =>
     request.onsuccess = request.onerror = request.onblocked = () => resolve();
   });
 
-/**
- * Clears localStorage, sessionStorage and IndexedDB. Logs the user out of the
- * UI.
- */
+/** Clears localStorage, sessionStorage and IndexedDB (logs the user out). */
 export const clearAppStorage = async (): Promise<void> => {
   try {
     localStorage.clear();
@@ -138,7 +108,6 @@ export const clearAppStorage = async (): Promise<void> => {
   } catch {
     /* storage blocked */
   }
-  // indexedDB.databases() is missing in older browsers; there is nothing to clear then
   if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
     await withTimeout(
       indexedDB
@@ -154,11 +123,7 @@ const loginPathFor = (pathname: string) => {
   return slug ? `/${slug}` : '/login';
 };
 
-/**
- * Reset app. keepSession: true → remove cached app files only and reload (stays
- * logged in). keepSession: false → also clear all stored data and go to the
- * login page (logs out).
- */
+/** Clears app files and reloads; without keepSession also logs out. */
 export const resetApp = async ({ keepSession }: { keepSession: boolean }): Promise<void> => {
   await clearAppCaches();
   if (keepSession) {
@@ -166,11 +131,10 @@ export const resetApp = async ({ keepSession }: { keepSession: boolean }): Promi
     return;
   }
   await clearAppStorage();
-  // Query parameter makes the browser fetch the page again instead of using any copy
   window.location.replace(`${loginPathFor(window.location.pathname)}?r=${Date.now()}`);
 };
 
-/** "Reset app" button handler: asks first, then clears everything and logs out. */
+/** "Reset app" button handler. */
 export const confirmAndResetApp = (): void => {
   const confirmed = window.confirm(
     'Reset WebMail on this device?\n\n' +
@@ -180,11 +144,7 @@ export const confirmAndResetApp = (): void => {
   if (confirmed) void resetApp({ keepSession: false });
 };
 
-/**
- * Lets the service worker install the new version (it downloads only the files
- * that changed) and resolves once it controls the page, when there is nothing
- * to wait for, or after the timeout.
- */
+/** Waits for the updated service worker to take over (or timeout). */
 export const waitForServiceWorkerUpdate = async (
   timeoutMs: number = STALE_UPDATE_TIMEOUT_MS
 ): Promise<void> => {
@@ -204,23 +164,13 @@ export const waitForServiceWorkerUpdate = async (
     registration
       .update()
       .then(() => {
-        // No new worker installing: the update already took over (the browser checks on
-        // every page load) or there is none. Either way, a reload loads what it has.
         if (!registration.installing && !registration.waiting) finish();
       })
       .catch(finish);
   });
 };
 
-/**
- * Run before the first render. Returns true when the app is reloading because
- * the running code is an old cached build (the caller should not render).
- *
- * First try: let the service worker update normally, then reload. If the page
- * is still old right after that, remove the service worker and caches and
- * reload. If even that did not help, give up and run (the update banner still
- * works).
- */
+/** Before first render: update, then clear caches, then give up. */
 export const reloadIfStaleBuild = async (): Promise<boolean> => {
   if (!isStaleBuild()) return false;
   const builds = `running ${API_CONFIG.bundleBuildId}, server has ${API_CONFIG.serverBuildId}`;
@@ -240,7 +190,7 @@ export const reloadIfStaleBuild = async (): Promise<boolean> => {
   return false;
 };
 
-// ─── "New version available" state (read by UpdateBanner) ───────────────────
+// ─── Update banner state ─────────────────────────────────────────────────────
 
 let updateAvailable = false;
 const listeners = new Set<() => void>();
@@ -262,10 +212,7 @@ const announceUpdate = () => {
 
 // ─── Registration ────────────────────────────────────────────────────────────
 
-/**
- * Reads the build id deployed on the server right now (null if it cannot be
- * read).
- */
+/** Build id currently deployed on the server, or null. */
 export const fetchServerBuildId = async (): Promise<string | null> => {
   try {
     const response = await fetch('/env-config.js', { cache: 'no-store' });
@@ -277,14 +224,7 @@ export const fetchServerBuildId = async (): Promise<string | null> => {
   }
 };
 
-/**
- * A new service worker took control of the page: is the page now running an old
- * build? Compares build ids, so it is right however the page was opened (also
- * for a page opened without a service worker, e.g. first visit, after "Reset
- * app" or a hard refresh). If the server id cannot be read, a takeover of a
- * page that was already controlled counts as an update and one of an
- * uncontrolled page as the first install.
- */
+/** True if a service worker takeover left this page on an old build. */
 export const isTakeoverAnUpdate = async (wasControlled: boolean): Promise<boolean> => {
   const serverBuildId = await fetchServerBuildId();
   if (serverBuildId && API_CONFIG.bundleBuildId) {
@@ -293,11 +233,11 @@ export const isTakeoverAnUpdate = async (wasControlled: boolean): Promise<boolea
   return wasControlled;
 };
 
-/** Reload when a lazy-loaded chunk fails (it was removed by a newer deploy). */
+/** Reload when a lazy-loaded chunk is gone after a deploy. */
 const handleChunkLoadErrors = () => {
   window.addEventListener('vite:preloadError', (event) => {
     if (claimAutoReload()) {
-      event.preventDefault(); // Do not throw, the page is reloading
+      event.preventDefault();
       window.location.reload();
     }
   });
@@ -325,18 +265,16 @@ const registerServiceWorker = () => {
   navigator.serviceWorker
     .register('/sw.js', { scope: '/' })
     .then((registration) => {
-      let lastCheck = Date.now(); // The browser just checked while registering
+      let lastCheck = Date.now();
       const checkForUpdate = () => {
         if (document.visibilityState !== 'visible' || !navigator.onLine) return;
         if (Date.now() - lastCheck < UPDATE_CHECK_MIN_GAP_MS) return;
         lastCheck = Date.now();
-        registration.update().catch(() => {
-          /* offline or server busy, the next check retries */
-        });
+        registration.update().catch(() => {});
       };
       setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
       document.addEventListener('visibilitychange', checkForUpdate);
-      // Switching between two visible windows does not change visibility, only focus
+      // Focus covers switching between two visible windows
       window.addEventListener('focus', checkForUpdate);
       window.addEventListener('online', checkForUpdate);
     })
@@ -346,6 +284,5 @@ const registerServiceWorker = () => {
 /** Call once at startup. */
 export const initAppUpdates = (): void => {
   handleChunkLoadErrors();
-  // sw.js only exists in production builds
   if (import.meta.env.PROD) registerServiceWorker();
 };

@@ -19,11 +19,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { FiRefreshCw, FiX } from 'react-icons/fi';
 import { isUpdateAvailable, subscribeToUpdate } from '../../utils/appUpdate';
 
-/**
- * Shown when a new version of WebMail was deployed while the app was open.
- * Stays until the user reloads or dismisses it (a reload is not forced, so an
- * email being written is not lost).
- */
+/** "New version available" banner; never forces a reload. */
 export const UpdateBanner = () => {
   const available = useSyncExternalStore(subscribeToUpdate, isUpdateAvailable);
   const [dismissed, setDismissed] = useState(false);
