@@ -148,6 +148,69 @@ export const parseEmailAddresses = (emailString: string | undefined): Address[] 
   }
 };
 
+// ────────────────────────────────────────────────
+// Reply / Reply All recipients
+// ────────────────────────────────────────────────
+
+const addressKey = (a: Address) => a.address.trim().toLowerCase();
+
+type ReplySource = {
+  from?: string;
+  replyTo?: string;
+  to?: string;
+  cc?: string;
+  /** Address of the logged-in user. */
+  me: string;
+};
+
+/**
+ *
+ * - Reply: Reply-To, else the sender. On your own sent message: its recipients.
+ * - Reply All: the same plus original To in To, original Cc in Cc. Your own
+ *   address is never included, case-insensitively, and nobody appears twice.
+ */
+export const buildReplyRecipients = (
+  mode: 'reply' | 'replyAll',
+  { from, replyTo, to, cc, me }: ReplySource
+): { to: Address[]; cc: Address[] } => {
+  const myKey = me.trim().toLowerCase();
+  const isMe = (a: Address) => !!myKey && addressKey(a) === myKey;
+
+  const fromList = parseEmailAddresses(from).slice(0, 1);
+  const replyToList = parseEmailAddresses(replyTo);
+  const toList = parseEmailAddresses(to);
+  const ccList = parseEmailAddresses(cc);
+  const sentByMe = fromList.some(isMe);
+
+  const seen = new Set<string>();
+  // Drops me and repeats; malformed entries (no address) are kept for the send check
+  const unique = (list: Address[]) =>
+    list.filter((a) => {
+      if (isMe(a)) return false;
+      const key = addressKey(a) || `raw:${a.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  // Replying to a message you sent continues the conversation with its recipients
+  const primary = sentByMe ? [] : replyToList.length > 0 ? replyToList : fromList;
+
+  if (mode === 'reply') {
+    const replyTo = unique(sentByMe ? toList : primary);
+    // A message only to yourself: reply to yourself
+    return { to: replyTo.length > 0 ? replyTo : fromList, cc: [] };
+  }
+
+  let toOut = unique([...primary, ...toList]);
+  let ccOut = unique(ccList);
+  if (toOut.length === 0) {
+    toOut = ccOut;
+    ccOut = [];
+  }
+  return { to: toOut.length > 0 ? toOut : fromList, cc: ccOut };
+};
+
 export const extractHeadersFromRawEmail = (rawEmail: string): EmailHeaders => {
   const headers: EmailHeaders = {};
   if (!rawEmail) return headers;

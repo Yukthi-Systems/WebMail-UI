@@ -72,6 +72,7 @@ import {
   formatComposedEmailData,
   htmlToPlainText,
   parseEmailAddresses,
+  buildReplyRecipients,
   convertPostalMimeAttachments,
   extractHeadersFromRawEmail,
   buildReplyHeaders,
@@ -458,44 +459,20 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
           } else {
             basicData.subject = decodeWords(email.Subject) || '';
           }
-        } else if (mode === 'reply') {
-          const replyToHeader = basicData.headers?.['Reply-To'] || basicData.headers?.['reply-to'];
-          const replyAddress = replyToHeader
-            ? parseEmailAddresses(replyToHeader as string)
-            : parseEmailAddresses(email?.From || '');
+        } else if (mode === 'reply' || mode === 'replyAll') {
+          const recipients = buildReplyRecipients(mode, {
+            from: email.From,
+            replyTo: (basicData.headers?.['Reply-To'] || basicData.headers?.['reply-to']) as
+              | string
+              | undefined,
+            to: normalizedEmails?.to as string | undefined,
+            cc: normalizedEmails?.cc as string | undefined,
+            me: currentEmail?.address || '',
+          });
 
-          basicData.to = replyAddress;
-          basicData.subject = formatReplySubject(email.Subject);
-        } else if (mode === 'replyAll') {
-          const replyToHeader = basicData.headers?.['Reply-To'] || basicData.headers?.['reply-to'];
-
-          let primaryRecipients;
-          if (replyToHeader) {
-            primaryRecipients = parseEmailAddresses(replyToHeader as string);
-          } else {
-            primaryRecipients = [parseEmailAddresses(email.From || '')[0]].filter(Boolean);
-          }
-
-          const toAddresses = parseEmailAddresses((normalizedEmails?.to as string) || '');
-          const ccAddresses = parseEmailAddresses((normalizedEmails?.cc as string) || '');
-
-          const currentAddress =
-            typeof currentEmail === 'string' ? currentEmail : currentEmail?.address;
-
-          const allRecipients = [...toAddresses];
-          const filteredRecipients = allRecipients.filter(
-            (recipient) => recipient?.address !== currentAddress
-          );
-
-          basicData.to = [
-            ...primaryRecipients,
-            ...filteredRecipients.filter(
-              (r) => !primaryRecipients.some((p) => p.address === r.address)
-            ),
-          ];
-
-          basicData.cc = [...ccAddresses];
-          if (ccAddresses.length > 0) {
+          basicData.to = recipients.to;
+          basicData.cc = recipients.cc;
+          if (recipients.cc.length > 0) {
             setFieldVisibility((prev) => ({ ...prev, cc: true }));
           }
           basicData.subject = formatReplySubject(email.Subject);
