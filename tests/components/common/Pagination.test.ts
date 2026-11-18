@@ -38,12 +38,12 @@ const render = (props: { countLabel?: string; countTooltip?: string }) =>
   ).replace(/<!-- -->/g, '');
 
 describe('Pagination count', () => {
-  it('shows the emails of a conversation list, not the conversations', () => {
+  it('shows the conversations of a conversation list, the emails on hover', () => {
     const { label, tooltip } = listCountLabels(14937, 28136);
     const html = render({ countLabel: label, countTooltip: tooltip });
-    expect(html).toContain('• 28136 emails');
-    expect(html).not.toContain('14937 emails');
-    expect(tooltip).toBe('14937 conversations');
+    expect(html).toContain('• 14937 conversations');
+    expect(html).not.toContain('28136 emails');
+    expect(tooltip).toBe('28136 emails');
   });
 
   it('keeps the old text for other lists', () => {
@@ -57,6 +57,6 @@ describe('listCountLabels', () => {
   });
 
   it('uses the singular for one', () => {
-    expect(listCountLabels(1, 1)).toEqual({ label: '1 email', tooltip: '1 conversation' });
+    expect(listCountLabels(1, 1)).toEqual({ label: '1 conversation', tooltip: '1 email' });
   });
 });
