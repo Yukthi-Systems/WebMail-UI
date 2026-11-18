@@ -1,0 +1,87 @@
+/*
+ * Copyright (C) 2026 Yukthi Systems Private Limited
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * version 3 along with this program. If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+
+const markRead = vi.fn();
+const patchEmailFlags = vi.fn();
+const updateUnread = vi.fn();
+vi.mock('../../src/hooks/useEmails', () => ({ useSeenMail: () => ({ mutate: markRead }) }));
+vi.mock('../../src/hooks/useEmailCacheUpdater', () => ({
+  useEmailCacheUpdater: () => ({ patchEmailFlags }),
+}));
+vi.mock('../../src/hooks/useFolders', () => ({ useUpdateFolderUnreadCount: () => updateUnread }));
+
+const { useMarkSeenOnOpen } = await import('../../src/hooks/useMarkSeenOnOpen');
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+type State = { isLoaded: boolean; isLoading: boolean; seenOnServer: boolean; isUnread?: boolean };
+
+const Probe = (state: State) => {
+  useMarkSeenOnOpen({ uid: '42', folder: 'INBOX', isUnread: true, active: true, ...state });
+  return null;
+};
+
+describe('useMarkSeenOnOpen', () => {
+  let root: Root;
+  const show = (state: State) => act(async () => root.render(createElement(Probe, state)));
+
+  beforeEach(() => {
+    root = createRoot(document.createElement('div'));
+    vi.clearAllMocks();
+  });
+  afterEach(() => act(() => root.unmount()));
+
+  it('opened and fetched with mark_as_read: server already marked it, only the cache', async () => {
+    await show({ isLoaded: false, isLoading: true, seenOnServer: false });
+    await show({ isLoaded: true, isLoading: false, seenOnServer: true });
+    expect(markRead).not.toHaveBeenCalled();
+    expect(patchEmailFlags).toHaveBeenCalledWith([42], '\\Seen');
+    expect(updateUnread).toHaveBeenCalledWith(-1);
+  });
+
+  it('opened while the hover prefetch was loading: marks it on the server', async () => {
+    // Joined the prefetch (mark_as_read=false): it comes back without \Seen
+    await show({ isLoaded: false, isLoading: true, seenOnServer: false });
+    await show({ isLoaded: true, isLoading: false, seenOnServer: false });
+    expect(markRead).toHaveBeenCalledWith(
+      { path: 'INBOX', body: [42] },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it('shown from an older cached view: marks it on the server even if that said \\Seen', async () => {
+    await show({ isLoaded: true, isLoading: false, seenOnServer: true });
+    expect(markRead).toHaveBeenCalledOnce();
+  });
+
+  it('counts it only once the server confirmed', async () => {
+    await show({ isLoaded: true, isLoading: false, seenOnServer: false });
+    expect(updateUnread).not.toHaveBeenCalled();
+    markRead.mock.calls[0][1].onSuccess();
+    expect(updateUnread).toHaveBeenCalledWith(-1);
+  });
+
+  it('does nothing for an email already read', async () => {
+    await show({ isLoaded: true, isLoading: false, seenOnServer: true, isUnread: false });
+    expect(markRead).not.toHaveBeenCalled();
+    expect(updateUnread).not.toHaveBeenCalled();
+  });
+});

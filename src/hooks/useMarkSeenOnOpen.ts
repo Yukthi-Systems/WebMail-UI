@@ -24,9 +24,9 @@ import { useUpdateFolderUnreadCount } from './useFolders';
  * Marks an opened email as read, once, and updates the cached lists and the
  * folder's unread count.
  *
- * - Fetched now by useEmailView (mark_as_read=true): the server already marked
- *   it, only the cache is updated.
- * - Shown from the hover prefetch (mark_as_read=false): it is marked here.
+ * Only skipped when the view was fetched during this open and came back \Seen
+ * (the server marked it). A hover prefetch (mark_as_read=false, maybe still in
+ * flight when opened) or an older cached view gets marked here.
  *
  * Used by the single email view and by each card of a conversation; `active`
  * tells which one shows the email, so it is counted once.
@@ -37,6 +37,7 @@ export function useMarkSeenOnOpen({
   isUnread,
   isLoaded,
   isLoading,
+  seenOnServer,
   active,
 }: {
   uid: string;
@@ -44,6 +45,8 @@ export function useMarkSeenOnOpen({
   isUnread: boolean;
   isLoaded: boolean;
   isLoading: boolean;
+  /** The loaded view's flags include \Seen. */
+  seenOnServer: boolean;
   active: boolean;
 }) {
   const { mutate: markRead } = useSeenMail();
@@ -51,7 +54,7 @@ export function useMarkSeenOnOpen({
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folder);
 
   const key = `${folder}:${uid}`;
-  // Whether this email's view was fetched while open (the API then marked it read)
+  // Whether this email's view was fetched while open
   const fetchedRef = useRef({ key, fetched: false });
   if (fetchedRef.current.key !== key) fetchedRef.current = { key, fetched: false };
   if (isLoading) fetchedRef.current.fetched = true;
@@ -68,7 +71,7 @@ export function useMarkSeenOnOpen({
       updateFolderUnreadCount(-1);
     };
 
-    if (fetchedRef.current.fetched) {
+    if (fetchedRef.current.fetched && seenOnServer) {
       syncCache();
     } else {
       markRead({ path: folder, body: [Number(uid)] }, { onSuccess: syncCache });
@@ -78,6 +81,7 @@ export function useMarkSeenOnOpen({
     isLoaded,
     isLoading,
     isUnread,
+    seenOnServer,
     uid,
     folder,
     key,

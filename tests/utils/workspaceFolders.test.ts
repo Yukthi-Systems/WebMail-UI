@@ -25,6 +25,7 @@ import {
   FOLDERS_FULL_PATH_QUERY_KEY,
   loadWorkspaceFolders,
   mergeFolderDetails,
+  withFolderStatus,
 } from '../../src/utils/workspaceFolders';
 
 vi.mock('../../src/api/mailbox', () => ({ foldersFullPath: vi.fn() }));
@@ -120,5 +121,30 @@ describe('mergeFolderDetails', () => {
 
   it('handles an empty stored list', () => {
     expect(mergeFolderDetails(undefined, [folder('INBOX')])).toEqual([folder('INBOX')]);
+  });
+});
+
+describe('withFolderStatus', () => {
+  const status = { UIDVALIDITY: 1, UIDNEXT: 51, MESSAGES: 50 };
+  const list: FolderDetail[] = [
+    { name: 'Inbox', folder_name: 'INBOX', unread_count: 0 },
+    { name: 'Sent', folder_name: 'Sent', unread_count: 0 },
+  ];
+
+  it('sets the status of that folder only', () => {
+    const next = withFolderStatus(list, 'INBOX', status);
+    expect(next[0].status).toEqual(status);
+    expect(next[1]).toBe(list[1]);
+  });
+
+  it('keeps the current unread counts', () => {
+    // An older snapshot had 1 unread; the current list (already read) has 0
+    const current = [{ ...list[0], unread_count: 0 }, list[1]];
+    expect(withFolderStatus(current, 'INBOX', status)[0].unread_count).toBe(0);
+  });
+
+  it('leaves a list that is not an array alone', () => {
+    const notLoaded = null as unknown as FolderDetail[];
+    expect(withFolderStatus(notLoaded, 'INBOX', status)).toBe(notLoaded);
   });
 });

@@ -43,6 +43,16 @@ export const mergeFolderDetails = (
   );
 };
 
+/** Sets one folder's UID status; unread counts and other folders stay as they are. */
+export const withFolderStatus = (
+  folders: FolderDetail[],
+  folderName: string,
+  status: FolderDetail['status']
+): FolderDetail[] =>
+  Array.isArray(folders)
+    ? folders.map((f) => (f.folder_name === folderName ? { ...f, status } : f))
+    : folders;
+
 /**
  * Loads the folder list before the app renders (route loader, while the loading
  * screen is up), so everything derived from it is right on the first request:

@@ -303,6 +303,7 @@ const EmailViewer = ({
     isUnread: !email?.FLAGS?.includes('\\Seen'),
     isLoaded: !!emailViewData,
     isLoading,
+    seenOnServer: !!emailViewData?.flags?.includes('\\Seen'),
     active: isThreadSettled && !isThreadedViewActive,
   });
 
