@@ -26,6 +26,13 @@ export interface FolderNode {
 }
 
 /**
+ * A folder that can't hold emails (IMAP \Noselect), only subfolders, e.g. a
+ * parent that exists just because of its children. Opening it fails.
+ */
+export const isPlaceholderFolder = (flags?: string[]) =>
+  (flags ?? []).some((flag) => /^\\?(noselect|nonexistent)$/i.test(flag));
+
+/**
  * Some servers keep every folder under "INBOX/" (INBOX/Sent, INBOX/Trash,
  * INBOX/AIRTEL...). Like Roundcube, show those at the top level instead of
  * nesting everything under Inbox. Returns that prefix (e.g. "INBOX/") when

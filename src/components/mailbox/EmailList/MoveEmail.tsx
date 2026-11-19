@@ -29,6 +29,7 @@ import { buildFolderTree, type FolderNode } from '../../../utils/folderTree';
 import { useParams } from '@tanstack/react-router';
 import { useAtomValue } from 'jotai';
 import { folderDetailsAtom } from '../../../state/folders';
+import { isPlaceholderFolder } from '../../../utils/folderUtils';
 
 interface Folder {
   id: string;
@@ -119,7 +120,7 @@ const FolderDialog: React.FC<FolderDialogProps> = ({
   };
 
   const isFolderSelectable = (folder: Folder) => {
-    if (folder.unread_count === -1) return false;
+    if (folder.unread_count === -1 || isPlaceholderFolder(folder.flags)) return false;
     if (isSourceFolder(folder)) return false;
     return true;
   };
@@ -137,6 +138,10 @@ const FolderDialog: React.FC<FolderDialogProps> = ({
   };
 
   const handleFolderClick = (folder: Folder) => {
+    if (isPlaceholderFolder(folder.flags) && folder.children?.length) {
+      toggleFolder(folder.id);
+      return;
+    }
     if (!isFolderSelectable(folder)) return;
 
     // If folder has children, expand/collapse it
@@ -161,7 +166,7 @@ const FolderDialog: React.FC<FolderDialogProps> = ({
 
   const renderFolder = (folder: Folder, level: number = 0) => {
     const isSelected = selectedFolder?.id === folder.id;
-    const isDeleted = folder.unread_count === -1;
+    const isDeleted = folder.unread_count === -1 || isPlaceholderFolder(folder.flags);
     const isCurrent = isSourceFolder(folder);
     const isDisabled = showQuotaWarning || isDeleted || isCurrent;
     const hasUnread = folder.unread_count > 0;

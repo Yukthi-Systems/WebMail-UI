@@ -21,6 +21,7 @@ import FolderItem from '../FolderItem';
 import DropdownWrapper, { type DropdownItem } from '../../../common/DropdownWrapper';
 import type { IconType } from 'react-icons/lib';
 import { FaEllipsisH } from 'react-icons/fa';
+import { isPlaceholderFolder } from '../../../../utils/folderUtils';
 
 // The only real caller (CustomFolder.tsx) passes a FolderNode here, which has
 // no show_unread_count/show_label fields — those checks below always fall
@@ -29,6 +30,7 @@ interface FolderPopsShape {
   unread_count?: number;
   show_unread_count?: boolean;
   show_label?: boolean;
+  flags?: string[];
 }
 
 interface FolderRowProps {
@@ -65,7 +67,11 @@ const FolderRow = ({
   folderPops,
   isSidebarCollapsed = false,
 }: FolderRowProps) => {
-  const isSystemFolder = folderPops?.unread_count === -1;
+  const isPlaceholder = isPlaceholderFolder(folderPops?.flags);
+  // Can't be opened, dropped on or edited
+  const isSystemFolder = folderPops?.unread_count === -1 || isPlaceholder;
+  // Subfolders are hidden while the sidebar is collapsed
+  const expandsOnClick = isPlaceholder && hasChildren && !isSidebarCollapsed;
 
   // Drag handlers specifically for the row wrapper
   const handleDragOver = (e: React.DragEvent) => {
@@ -109,7 +115,11 @@ const FolderRow = ({
         )}
 
         {/* Folder Content */}
-        <Box className="flex-1 min-w-0">
+        {/* A placeholder only holds subfolders: its name expands it */}
+        <Box
+          className={`flex-1 min-w-0 ${expandsOnClick ? '[&_*]:!cursor-pointer' : ''}`}
+          onClick={expandsOnClick ? onToggleExpand : undefined}
+        >
           <FolderItem
             folderPath={folderPath}
             displayName={displayName}

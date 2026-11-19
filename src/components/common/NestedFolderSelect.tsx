@@ -18,12 +18,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { FaChevronDown, FaChevronRight, FaFolder, FaFolderOpen } from 'react-icons/fa6';
 import type { FolderDetail } from '../../state/folders';
+import { isPlaceholderFolder } from '../../utils/folderUtils';
 
 interface FolderNode {
   name: string;
   path: string;
   children: FolderNode[];
   level: number;
+  selectable: boolean;
 }
 
 interface NestedFolderSelectProps {
@@ -50,6 +52,7 @@ const buildFolderTree = (folders: FolderDetail[]): FolderNode[] => {
       path: folderPath,
       children: [],
       level: parts.length - 1,
+      selectable: !isPlaceholderFolder(folder.flags),
     };
 
     folderMap.set(folderPath, node);
@@ -117,9 +120,12 @@ const NestedFolderDropdown: React.FC<{
             flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
             hover:bg-[var(--gray-3)] text-sm
             ${isSelected ? 'bg-[var(--accent-3)] text-[var(--accent-11)]' : 'text-[var(--gray-12)]'}
+            ${folder.selectable ? '' : 'opacity-60'}
           `}
           style={{ paddingLeft: `${12 + folder.level * 16}px` }}
-          onClick={() => handleSelect(folder.path)}
+          onClick={(e) =>
+            folder.selectable ? handleSelect(folder.path) : toggleExpanded(folder.path, e)
+          }
         >
           {hasChildren ? (
             <button
