@@ -29,7 +29,7 @@ import AdvancedFilters from './AdvancedFilters';
 import type { FilterState, SearchDropdownProps } from './types';
 import { convertToBytes, getActiveFilterBadges, hasActiveFilters, mapComparator } from './utils';
 import { useDebounce } from 'use-debounce';
-import { csrfTokenAtom, isVersionTwoUserAtom } from '../../../../state/auth';
+import { csrfTokenAtom } from '../../../../state/auth';
 import { API_URL } from '../../../../api/config';
 
 const MAX_VISIBLE_BADGES = 2;
@@ -89,7 +89,6 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
   const [debouncedEmailValue] = useDebounce(emailValue, 300);
   const [suggestions, setSuggestions] = useState<ContactSuggestion[]>([]);
   const csrfToken = useAtomValue(csrfTokenAtom);
-  const isVersionTwoUser = useAtomValue(isVersionTwoUserAtom);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   // Fetch email suggestions
@@ -111,37 +110,10 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
           const data1 = await response1.json();
           const contacts1 = data1?.contacts || [];
 
-          let contacts2 = [];
-          if (isVersionTwoUser && contacts1.length < 15) {
-            const response2 = await fetch(
-              `${API_URL}/contacts/search/v2?partial_email=${debouncedEmailValue}`,
-              {
-                method: 'GET',
-                credentials: 'include',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-                },
-              }
-            );
-            const data2 = await response2.json();
-            contacts2 = data2?.contacts || [];
-          }
-
           const seenEmails = new Set<string>();
           const mergedContacts: ContactSuggestion[] = [];
 
           contacts1.forEach((c: ContactSuggestion) => {
-            if (c.email) {
-              const emailLower = c.email.toLowerCase();
-              if (!seenEmails.has(emailLower)) {
-                seenEmails.add(emailLower);
-                mergedContacts.push(c);
-              }
-            }
-          });
-
-          contacts2.forEach((c: ContactSuggestion) => {
             if (c.email) {
               const emailLower = c.email.toLowerCase();
               if (!seenEmails.has(emailLower)) {
@@ -162,7 +134,7 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
       }
     };
     fetchSuggestions();
-  }, [debouncedEmailValue, csrfToken, isVersionTwoUser]);
+  }, [debouncedEmailValue, csrfToken]);
 
   const handleSelectSuggestion = (email: string) => {
     const newFilters = {

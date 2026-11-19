@@ -386,7 +386,7 @@ function DomainList() {
                             Status
                           </th>
                           <th className="py-3 px-6 text-left text-xs font-bold text-[var(--gray-11)] uppercase tracking-wide text-center">
-                            V2 User
+                            External User
                           </th>
                           <th className="py-3 px-6 text-left text-xs font-bold text-[var(--gray-11)] uppercase tracking-wide">
                             Created

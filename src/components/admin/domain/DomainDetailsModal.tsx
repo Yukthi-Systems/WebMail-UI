@@ -112,7 +112,7 @@ const DomainDetailsModal = ({ isOpen, onClose, data }: DomainDetailsModalProps) 
               )}
               {data.is_v2_user && (
                 <span className="px-4 py-2 text-xs font-bold rounded-full bg-[var(--green-9)] text-white shadow-lg shadow-[var(--green-9)]/20 uppercase tracking-wide">
-                  V2 User
+                  External User
                 </span>
               )}
             </div>
