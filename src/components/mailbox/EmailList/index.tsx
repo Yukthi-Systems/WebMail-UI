@@ -49,6 +49,7 @@ import {
 } from '../../../state/emailComposer';
 import { rawEmailCacheKey } from '../../../utils/emailCache';
 import { userSettingsAtom } from '../../../state/settings';
+import { composerOpenAtom } from '../../../state/composer';
 import { flagAtom } from '../../../state/flags';
 import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../utils/emailPrint';
 import { formatForwardSubject } from '../../../utils/replyForwardHelper';
@@ -342,6 +343,7 @@ const EmailList = ({
   const [, setShowKeyboardHelp] = useState(false);
   const [isKeyboardNavigating, setIsKeyboardNavigating] = useState(false);
   const [composerOpen, setComposerOpen] = useAtom(emailComposerOpenAtom);
+  const newMailOpen = useAtomValue(composerOpenAtom);
   const composerKeepMounted = useAtomValue(emailComposerKeepMountedAtom);
   const setComposerData = useSetAtom(emailComposerDataAtom);
   const resetComposerData = useSetAtom(resetEmailComposerDataAtom);
@@ -668,22 +670,9 @@ const EmailList = ({
     onReply: () => viewingEmail && handleReply(viewingEmail),
     onReplyAll: () => viewingEmail && handleReplyAll(viewingEmail),
     onForward: () => viewingEmail && handleForward(viewingEmail),
-    onMarkAsRead: () => {
-      if (viewingEmail || checkedEmails.length > 0) {
-        handleMarkAsRead(false);
-      } else if (emailArray[currentEmailIndex]) {
-        const email = emailArray[currentEmailIndex];
-        handleSingleEmailMarkAsRead(email.id.toString(), true);
-      }
-    },
-    onMarkAsUnread: () => {
-      if (viewingEmail || checkedEmails.length > 0) {
-        handleMarkAsRead(true);
-      } else if (emailArray[currentEmailIndex]) {
-        const email = emailArray[currentEmailIndex];
-        handleSingleEmailMarkAsRead(email.id.toString(), false);
-      }
-    },
+    // Only emails not already in that state; nothing to do sends nothing
+    onMarkAsRead: () => handleMarkAsRead(false),
+    onMarkAsUnread: () => handleMarkAsRead(true),
     onCompose: () => {},
     onRefresh: () => handleManualRefresh(),
     onSearch: () => {
@@ -710,7 +699,8 @@ const EmailList = ({
         handlePageChange(currentPage - 1);
       }
     },
-    isComposerOpen: composerOpen,
+    // Reply/forward composer or the New mail window
+    isComposerOpen: composerOpen || newMailOpen,
     isEmailViewerOpen: !!viewingEmail,
     onCloseViewer: () => handleBackToList(),
   });
@@ -886,6 +876,7 @@ const EmailList = ({
    * is nearly full)
    */
   const deleteRows = (rowIds: number[]) => {
+    if (rowIds.length === 0) return;
     // A conversation row deletes the whole conversation (in its folder)
     const uids = toEmailUids(rowIds);
     const sourceFolder = folderOf(rowIds);
@@ -942,9 +933,17 @@ const EmailList = ({
     };
   };
 
-  /** Flag: the row's latest email. Unflag: every email of a conversation. */
-  const flagTargets = (rowIds: number[], unflag: boolean) =>
-    unflag ? toEmailUids(rowIds) : rowIds;
+  /**
+   * Flag: the row's latest email. Unflag: every email of a conversation.
+   * Rows already in that state are skipped (a conversation shows flagged if any email is).
+   */
+  const flagTargets = (rowIds: number[], unflag: boolean) => {
+    const rows = rowIds.filter((id) => {
+      const flagged = findRow(id)?.FLAGS?.includes('\\Flagged');
+      return flagged === undefined || flagged === unflag;
+    });
+    return unflag ? toEmailUids(rows) : rows;
+  };
 
   const handleMarkAsRead = (isSeen: boolean) => {
     // isSeen: the selection is read and should become unread
@@ -1060,6 +1059,7 @@ const EmailList = ({
     const rowIds = getEmailsToActOn();
     const emailsFolder = folderOf(rowIds);
     const emailsToActOn = flagTargets(rowIds, action);
+    if (emailsToActOn.length === 0) return;
     const loadingId = toast.loading({
       description: action ? 'Unflagging email(s)...' : 'Flagging email(s)...',
     });
@@ -1116,6 +1116,7 @@ const EmailList = ({
 
   const handleSingleEmailMarkAsFlagged = (emailId: string, action: boolean) => {
     const targetIds = flagTargets([Number(emailId)], action);
+    if (targetIds.length === 0) return;
     const emailsFolder = folderOf([Number(emailId)]);
     const loadingId = toast.loading({
       description: action ? 'Unflagging email...' : 'Flagging email...',

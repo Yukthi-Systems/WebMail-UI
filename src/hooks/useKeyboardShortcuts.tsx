@@ -101,6 +101,9 @@ export const useKeyboardNavigation = (options: KeyboardNavigationOptions) => {
       // Allow Escape to work in inputs (to close things), otherwise block inputs
       if (isInputField && event.key !== 'Escape') return;
 
+      // Holding a key repeats only movement, never actions like flag or delete
+      if (event.repeat && !['j', 'k', 'ArrowDown', 'ArrowUp'].includes(event.key)) return;
+
       const now = Date.now();
       if (now - lastActionTimeRef.current < debounceDelay) return;
       lastActionTimeRef.current = now;
