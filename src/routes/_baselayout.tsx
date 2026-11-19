@@ -20,6 +20,7 @@ import Layout from '../components/common/Layout';
 import { webmailStore } from '../store';
 import { csrfTokenAtom } from '../state/auth';
 import { loadWorkspaceFolders } from '../utils/workspaceFolders';
+import { loadUserSettings } from '../utils/workspaceSettings';
 
 export const Route = createFileRoute('/_baselayout')({
   beforeLoad: () => {
@@ -28,9 +29,14 @@ export const Route = createFileRoute('/_baselayout')({
       throw redirect({ to: '/login' });
     }
   },
-  // Runs while the loading screen is up, so the app renders with the folder list.
-  // Once per entry: the app keeps the list updated itself (e.g. unread counts).
-  loader: ({ context }) => loadWorkspaceFolders(context.queryClient),
+  // Runs while the loading screen is up, so the app renders with the folder list
+  // and settings (both requests in parallel). Once per entry: the app keeps them updated.
+  loader: async ({ context }) => {
+    await Promise.all([
+      loadWorkspaceFolders(context.queryClient),
+      loadUserSettings(context.queryClient),
+    ]);
+  },
   shouldReload: false,
   component: Layout,
 });

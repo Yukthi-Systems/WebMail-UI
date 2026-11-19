@@ -16,12 +16,8 @@
  */
 
 import { useMutation, useQuery } from '@tanstack/react-query';
-import {
-  updateUserSettings,
-  userSettings,
-  type UpdateResponse,
-  type UserSettings,
-} from '../api/user';
+import { userSettingsQuery } from '../utils/workspaceSettings';
+import { updateUserSettings, type UpdateResponse, type UserSettings } from '../api/user';
 
 export function useUpdateUserSettings() {
   return useMutation<UpdateResponse, Error, UserSettings>({
@@ -32,12 +28,7 @@ export function useUpdateUserSettings() {
 
 export function useGetUserSettings() {
   return useQuery<UserSettings, Error>({
-    queryKey: ['getting_user_settings'],
-    queryFn: userSettings,
-    staleTime: 10 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
-    retry: 5,
-    retryDelay: () => 500,
+    ...userSettingsQuery,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });

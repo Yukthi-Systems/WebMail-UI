@@ -23,7 +23,7 @@ import { webmailStore } from '../store';
 export const FOLDERS_FULL_PATH_QUERY_KEY = ['foldersFullPath'] as const;
 
 /** A slow mail server must not keep the user out: after this the app opens anyway. */
-const WORKSPACE_FOLDERS_TIMEOUT_MS = 10000;
+export const WORKSPACE_FOLDERS_TIMEOUT_MS = 10000;
 
 /**
  * /folder/path has no UID status, so the stored one is kept. Otherwise the "new
@@ -77,15 +77,24 @@ export const loadWorkspaceFolders = async (
       }
     });
 
+  await waitAtMost(load, timeoutMs, 'Could not load the folder list before opening the app:');
+};
+
+/** Waits for `load`, but no longer than `timeoutMs`. Never rejects; failures are logged. */
+export const waitAtMost = async (
+  load: Promise<unknown>,
+  timeoutMs: number,
+  failureMessage: string
+): Promise<void> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, timeoutMs);
   });
 
+  // Caught here, so a failure after the timeout is not an unhandled rejection
+  const settled = load.catch((error) => console.warn(failureMessage, error));
   try {
-    await Promise.race([load, timeout]);
-  } catch (error) {
-    console.warn('Could not load the folder list before opening the app:', error);
+    await Promise.race([settled, timeout]);
   } finally {
     clearTimeout(timer);
   }
