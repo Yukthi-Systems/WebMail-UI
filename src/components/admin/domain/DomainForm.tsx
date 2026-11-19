@@ -225,11 +225,11 @@ function DomainForm() {
                           htmlFor="is_v2_user"
                           className="text-sm font-medium text-[var(--gray-12)] cursor-pointer"
                         >
-                          Is V2 User
+                          Is External User
                         </label>
                         <Text size="1" color="gray">
                           {' '}
-                          Enable V2 user features for this domain
+                          Users of this domain come from an external system
                         </Text>
                       </div>
                     </Flex>

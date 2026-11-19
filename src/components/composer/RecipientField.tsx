@@ -15,17 +15,16 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { Box, Flex, IconButton, Separator, Text, TextField } from '@radix-ui/themes';
+import { Box, Flex, IconButton, Text, TextField } from '@radix-ui/themes';
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { type EmailAddress } from '../../state/composer';
 import { FaX, FaCheck } from 'react-icons/fa6';
 import { addressParser } from 'postal-mime';
 import { useDebounce } from 'use-debounce';
 import { API_URL } from '../../api/config';
-import { csrfTokenAtom, isVersionTwoUserAtom } from '../../state/auth';
+import { csrfTokenAtom } from '../../state/auth';
 import { webmailStore } from '../../store';
 import BIMIAvatar from '../common/BimiAvatar';
-import { useAtomValue } from 'jotai';
 
 type RecipientFieldProps = {
   label: 'To' | 'Cc' | 'Bcc';
@@ -329,8 +328,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
     const inputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [inputValue, setInputValue] = useState('');
-    const [suggestionsOne, setSuggestionsOne] = useState<ContactSuggestion[]>([]);
-    const [suggestionsTwo, setSuggestionsTwo] = useState<ContactSuggestion[]>([]);
+    const [suggestions, setSuggestions] = useState<ContactSuggestion[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
     const [isFocused, setIsFocused] = useState(false);
@@ -342,7 +340,6 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
     useEffect(() => {
       valueRef.current = value;
     }, [value]);
-    const isVersionTwoUser = useAtomValue(isVersionTwoUserAtom);
 
     const fieldId = `email-composer-${label.toLowerCase()}-field`;
     const fieldName = `composer_${label.toLowerCase()}_recipients`;
@@ -392,60 +389,28 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
             const data1 = await response1.json();
             const contacts1: ContactSuggestion[] = data1?.contacts || [];
 
-            let contacts2: ContactSuggestion[] = [];
-            if (isVersionTwoUser && contacts1.length < 15) {
-              const response2 = await fetch(
-                `${API_URL}/contacts/search/v2?partial_email=${debouncedInput}`,
-                {
-                  method: 'GET',
-                  credentials: 'include',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-                  },
-                }
-              );
-              const data2 = await response2.json();
-              contacts2 = data2?.contacts || [];
-            }
-
             const seenEmails = new Set<string>();
-            const mergedContactsOne: ContactSuggestion[] = [];
-            const mergedContactsTwo: ContactSuggestion[] = [];
+            const mergedContacts: ContactSuggestion[] = [];
 
-            // Add contacts from the first API (v1)
             contacts1.forEach((c) => {
               if (c.email) {
                 const emailLower = c.email.toLowerCase();
                 if (!seenEmails.has(emailLower)) {
                   seenEmails.add(emailLower);
-                  mergedContactsOne.push(c);
-                }
-              }
-            });
-
-            // Add contacts from the second API (v2) only if email not seen
-            contacts2.forEach((c) => {
-              if (c.email) {
-                const emailLower = c.email.toLowerCase();
-                if (!seenEmails.has(emailLower)) {
-                  seenEmails.add(emailLower);
-                  mergedContactsTwo.push(c);
+                  mergedContacts.push(c);
                 }
               }
             });
 
             if (cancelled) return;
-            setSuggestionsOne(mergedContactsOne);
-            setSuggestionsTwo(mergedContactsTwo);
+            setSuggestions(mergedContacts);
             setShowSuggestions(true);
             setActiveIndex(-1);
           } catch (error) {
             console.error('Failed to fetch suggestions:', error);
           }
         } else {
-          setSuggestionsOne([]);
-          setSuggestionsTwo([]);
+          setSuggestions([]);
           setShowSuggestions(false);
           setActiveIndex(-1);
         }
@@ -454,7 +419,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
       return () => {
         cancelled = true;
       };
-    }, [debouncedInput, csrfToken, isVersionTwoUser]);
+    }, [debouncedInput, csrfToken]);
 
     useEffect(() => {
       if (inputValue.trim() && validationError) setValidationError(false);
@@ -521,14 +486,13 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      const allSuggestions = [...suggestionsOne, ...suggestionsTwo];
-      const dropdownOpen = showSuggestions && allSuggestions.length > 0;
+      const dropdownOpen = showSuggestions && suggestions.length > 0;
 
       if (e.key === 'ArrowDown') {
         if (!dropdownOpen) return;
         e.preventDefault();
         setActiveIndex((prev) => {
-          const next = prev < allSuggestions.length - 1 ? prev + 1 : 0;
+          const next = prev < suggestions.length - 1 ? prev + 1 : 0;
           scrollActiveIntoView(next);
           return next;
         });
@@ -539,7 +503,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
         if (!dropdownOpen) return;
         e.preventDefault();
         setActiveIndex((prev) => {
-          const next = prev > 0 ? prev - 1 : allSuggestions.length - 1;
+          const next = prev > 0 ? prev - 1 : suggestions.length - 1;
           scrollActiveIntoView(next);
           return next;
         });
@@ -549,7 +513,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
       if (e.key === 'Enter') {
         if (dropdownOpen && activeIndex >= 0) {
           e.preventDefault();
-          const selected = allSuggestions[activeIndex];
+          const selected = suggestions[activeIndex];
           if (selected) handleSuggestionClick(selected);
           return;
         }
@@ -607,7 +571,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
     const handleFocus = () => {
       setIsFocused(true);
       setValidationError(false);
-      if (suggestionsOne.length > 0 || suggestionsTwo.length > 0) setShowSuggestions(true);
+      if (suggestions.length > 0) setShowSuggestions(true);
     };
 
     const handleSuggestionClick = (suggestion: ContactSuggestion) => {
@@ -751,7 +715,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
           </Text>
         )}
 
-        {showSuggestions && (suggestionsOne.length > 0 || suggestionsTwo.length > 0) && (
+        {showSuggestions && suggestions.length > 0 && (
           <Box
             ref={dropdownRef}
             style={{
@@ -770,28 +734,12 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
               padding: '4px 0',
             }}
           >
-            {suggestionsOne.map((suggestion, idx) => (
+            {suggestions.map((suggestion, idx) => (
               <div key={suggestion.contact_id} data-suggestion-item>
                 <SuggestionRow
                   suggestion={suggestion}
                   isSelected={isSuggestionSelected(suggestion.email)}
                   isKeyboardFocused={activeIndex === idx}
-                  onClick={() => handleSuggestionClick(suggestion)}
-                  onMouseDown={(e) => {
-                    if (!isSuggestionSelected(suggestion.email)) e.preventDefault();
-                  }}
-                />
-              </div>
-            ))}
-            {suggestionsTwo.length > 0 && suggestionsOne.length > 0 && (
-              <Separator size="1" my="1" />
-            )}
-            {suggestionsTwo.map((suggestion, idx) => (
-              <div key={suggestion.contact_id} data-suggestion-item>
-                <SuggestionRow
-                  suggestion={suggestion}
-                  isSelected={isSuggestionSelected(suggestion.email)}
-                  isKeyboardFocused={activeIndex === suggestionsOne.length + idx}
                   onClick={() => handleSuggestionClick(suggestion)}
                   onMouseDown={(e) => {
                     if (!isSuggestionSelected(suggestion.email)) e.preventDefault();

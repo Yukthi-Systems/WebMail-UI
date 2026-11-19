@@ -26,7 +26,6 @@ export type LoginCredentials = {
 };
 export type LoginResponse = {
   csrfToken: string | null;
-  isVersionTwoUser: boolean;
 };
 
 export class LoginError extends Error {
@@ -62,7 +61,6 @@ export const login = async (credentials: {
 
   return {
     csrfToken: res.headers.get('X-Csrf-Token'),
-    isVersionTwoUser: res.headers.get('X-V2-User')?.toLowerCase() === 'true',
   };
 };
 

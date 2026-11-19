@@ -21,10 +21,6 @@ export const csrfTokenAtom = atomWithStorage<string | null>('auth', null, undefi
   getOnInit: true,
 });
 
-export const isVersionTwoUserAtom = atomWithStorage<boolean>('isVersionTwoUser', false, undefined, {
-  getOnInit: true,
-});
-
 type ApiKeyState = string | null;
 
 const sessionStorageAdapter = {
