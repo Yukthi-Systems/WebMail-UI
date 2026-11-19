@@ -38,7 +38,7 @@ import {
   FaLock,
 } from 'react-icons/fa'; // Added service icons
 import { API_CONFIG } from '../../constants/config';
-import { confirmAndResetApp } from '../../utils/appUpdate';
+import { LoginAppInfo } from './LoginAppInfo';
 
 // Primary color configuration
 const PRIMARY_COLOR = {
@@ -299,21 +299,12 @@ const Login = () => {
             © {new Date().getFullYear()} MAIL25 SYSTEMS
           </p>
         </div>
+
+        {/* Small screens: under the footer, so it never overlaps it */}
+        <LoginAppInfo className="lg:hidden mt-3 text-center text-gray-400" />
       </div>
-      <p className="absolute right-14 bottom-8 text-[11px] text-gray-400">
-        <button
-          type="button"
-          onClick={confirmAndResetApp}
-          className="mr-3 underline hover:text-orange-600"
-          title="Clears cached files and saved data in this browser"
-        >
-          Having trouble? Reset app
-        </button>
-        <span title={`Build ${API_CONFIG.bundleBuildId}`}>
-          v{API_CONFIG.version}
-          {API_CONFIG.bundleBuildId && ` · ${API_CONFIG.bundleBuildId.split('-')[0]}`}
-        </span>
-      </p>
+      {/* Large screens: bottom-right corner, clear of the centered form */}
+      <LoginAppInfo className="hidden lg:block absolute right-14 bottom-8 text-gray-400" />
     </div>
   );
 };

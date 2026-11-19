@@ -28,45 +28,22 @@ import {
   HiOutlineDocumentText,
   HiOutlineFunnel,
   HiOutlineCursorArrowRays,
+  HiOutlinePaperClip,
+  HiOutlineCalendarDays,
+  HiOutlineShieldCheck,
+  HiOutlineArrowPath,
+  HiOutlineSun,
 } from 'react-icons/hi2';
 import { LuKeyboard } from 'react-icons/lu';
 import { HiOutlineMail } from 'react-icons/hi';
 import { FaEnvelope } from 'react-icons/fa';
 import { API_CONFIG } from '../../constants/config';
-
-// --- Shortcut Data Definitions ---
-interface ShortcutItem {
-  keys: string[];
-  description: string;
-}
-
-const navigationShortcuts: ShortcutItem[] = [
-  { description: 'Next email', keys: ['j', '↓'] },
-  { description: 'Previous email', keys: ['k', '↑'] },
-  { description: 'Open email', keys: ['Enter', 'o'] },
-  { description: 'Back to list', keys: ['Esc'] },
-  { description: 'Go to next page', keys: ['n'] },
-  { description: 'Go to previous page', keys: ['p'] },
-  { description: 'Focus folders', keys: ['Shift', 'g'] },
-];
-
-const actionShortcuts: ShortcutItem[] = [
-  { description: 'Compose', keys: ['c'] },
-  { description: 'Reply', keys: ['r'] },
-  { description: 'Reply All', keys: ['a'] },
-  { description: 'Forward', keys: ['f'] },
-  { description: 'Show shortcuts', keys: ['Ctrl', '?'] },
-];
-
-const selectionShortcuts: ShortcutItem[] = [
-  { description: 'Select conversation', keys: ['x'] },
-  { description: 'Select all', keys: ['Shift', '*'] },
-  { description: 'Mark as read', keys: ['Shift', 'i'] },
-  { description: 'Mark as unread', keys: ['Shift', 'u'] },
-  { description: 'Delete', keys: ['#'] },
-  { description: 'Mark as Flagged', keys: ['e'] },
-  { description: 'Mark as UnFlagged', keys: ['s'] },
-];
+import {
+  actionShortcuts,
+  navigationShortcuts,
+  selectionShortcuts,
+  type ShortcutItem,
+} from '../../constants/keyboardShortcuts';
 
 // --- Custom Components Built from Scratch ---
 
@@ -174,17 +151,17 @@ const Help = () => {
             <FeatureCard
               icon={HiOutlineMail}
               title="Smart Mailbox"
-              description="Organize emails with custom folders, drag-and-drop actions, and powerful threading to keep conversations together."
+              description="Read mail as conversations or as a plain list, filter by unread or flagged, sort by date, sender, subject or size, and drag emails into folders."
             />
             <FeatureCard
               icon={HiOutlinePencilSquare}
               title="Rich Editor"
-              description="Compose beautiful emails using our Tiptap-powered editor with support for attachments, formatting, and templates."
+              description="Format text, add links, images and tables, attach files and check spelling and grammar. Your default signature is added for you, and templates and read receipts are one click away."
             />
             <FeatureCard
               icon={HiOutlineUsers}
               title="Contact Management"
-              description="Manage your address book efficiently. Create, edit, and search for contacts instantly from the sidebar."
+              description="Create, edit and search your contacts, and save any sender as a contact straight from an email."
             />
             <FeatureCard
               icon={HiOutlineVideoCamera}
@@ -192,30 +169,54 @@ const Help = () => {
               description="Start instant meetings directly from your mailbox without needing external applications."
             />
             <FeatureCard
-              icon={HiOutlineDevicePhoneMobile}
-              title="Mobile Responsive"
-              description="Fully optimized for mobile devices with touch-friendly interfaces and responsive layouts that work seamlessly on any screen size."
-            />
-
-            <FeatureCard
               icon={HiOutlineFolder}
-              title="Smart Organization"
-              description="Create nested folders with custom colors and icons to organize your emails exactly how you want."
+              title="Folders & Sharing"
+              description="Create nested folders with their own colors, choose which ones show an unread count, and share folders with other people."
             />
             <FeatureCard
               icon={HiOutlineDocumentText}
               title="Email Templates"
-              description="Create and save reusable email templates in Settings. Quickly insert templates while composing to save time on repetitive emails."
+              description="Save reusable templates in Settings → Templates, or turn any email into a template from its menu, and insert them while composing."
             />
             <FeatureCard
               icon={HiOutlineFunnel}
-              title="Sieve Filters"
-              description="Set up powerful server-side filters using Sieve scripts to automatically sort, label, and manage incoming mail based on custom rules."
+              title="Filters"
+              description="Create rules in Settings → Filter that sort, flag or move incoming mail automatically, or write your own Sieve scripts."
+            />
+            <FeatureCard
+              icon={HiOutlineSun}
+              title="Vacation Reply"
+              description="Going away? Set up an automatic reply in Settings → Vacation, sent to people who email you while you're away."
+            />
+            <FeatureCard
+              icon={HiOutlinePaperClip}
+              title="Attachment Preview"
+              description="Open PDFs, images, videos, Word and Excel files, CSV and text attachments right in the browser, without downloading them."
+            />
+            <FeatureCard
+              icon={HiOutlineCalendarDays}
+              title="Calendar Invites"
+              description="Meeting invitations show the event details, and you can accept, decline or answer tentatively right from the email."
+            />
+            <FeatureCard
+              icon={HiOutlineShieldCheck}
+              title="Privacy Protection"
+              description="Remote images and trackers in emails are blocked until you choose Load content, so senders can't see when you open their mail."
             />
             <FeatureCard
               icon={HiOutlineCursorArrowRays}
               title="Quick Preview"
-              description="Hover over any sender name in the email list to see a quick preview dropdown with sender info and recent emails. Toggle this feature in General Settings."
+              description="Hover over a sender in the email list to see who sent it and who else received it. Turn it on or off with Show Recipient in Settings → General."
+            />
+            <FeatureCard
+              icon={HiOutlineDevicePhoneMobile}
+              title="Mobile & App"
+              description="Works on phones, tablets and desktops. Install it as an app with Install App in your profile menu."
+            />
+            <FeatureCard
+              icon={HiOutlineArrowPath}
+              title="Always Up to Date"
+              description="When a new version is released, a banner asks you to reload. If something ever looks outdated, Reset app clears this device's copy."
             />
           </div>
         </section>
@@ -256,36 +257,72 @@ const Help = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
             <TipCard
+              title="Select Across Pages"
+              description="Tick the checkbox above the list to select the page, then choose to select every email in the folder. The selection stays as you move between pages: untick any email to leave it out, then move, delete or mark them all at once."
+            />
+            <TipCard
+              title="Conversations or List"
+              description="Each folder can show conversations or a plain list (Settings → General → View Mode). In conversation view the count shows conversations; hover over it to see how many emails they contain."
+            />
+            <TipCard
+              title="Unread Emails in Conversations"
+              description="Opening a conversation reads only the email you open. The blue “unread” badge at the top shows how many are left; click it to jump to the first one."
+            />
+            <TipCard
+              title="Keep an Email Unread"
+              description="Mark an open email as unread and it stays unread until you open it again, so you can come back to it later."
+            />
+            <TipCard
+              title="Reply All"
+              description="Reply All goes to the sender and everyone else on the email, never to yourself. Replying to an email you sent goes to the people you sent it to."
+            />
+            <TipCard
+              title="Filter & Sort"
+              description="Use the filter button above the list to show only Unread, Read, Flagged or Unflagged emails, and to sort by date, received time, sender, subject or size."
+            />
+            <TipCard
+              title="Mark All as Read"
+              description="The double-tick button above the list marks every email in the folder as read in one click."
+            />
+            <TipCard
+              title="Empty Trash & Spam"
+              description="In Trash or Spam, use the Empty now bar at the top to permanently delete everything in the folder."
+            />
+            <TipCard
+              title="Choose Your Layout"
+              description="Use the layout button in the top bar to switch between Side-by-Side, Vertical Split, Focused View, Immersive and Modal View."
+            />
+            <TipCard
+              title="Undo Send"
+              description="Set a delay in Settings → General → Undo Send to get a few seconds to cancel an email after clicking Send."
+            />
+            <TipCard
+              title="Several Drafts at Once"
+              description="Minimize the compose window to keep writing later. Several drafts can stay open at the bottom of the screen, and drafts are saved automatically."
+            />
+            <TipCard
+              title="More Email Actions"
+              description="The ⋮ menu on an email lets you print it, view its source, download it as .eml, forward it as an attachment, edit it as a new email, save it as a template or save the sender as a contact."
+            />
+            <TipCard
               title="Drag & Drop to Folders"
-              description="Click and drag any email from the list and drop it into a folder in the sidebar to move it instantly. A quick way to organize without opening menus."
+              description="Click and drag any email from the list and drop it into a folder in the sidebar to move it instantly."
             />
             <TipCard
-              title="Theme Personalization"
-              description="Navigate to Settings → General to switch between Light, Dark, or System themes. Choose your preferred accent color and adjust UI density for comfort."
+              title="Search"
+              description="Type in the search bar to search by subject, add a sender in the From box, and use the filter icon for more options."
             />
             <TipCard
-              title="Email Templates"
-              description="Go to Settings → Templates to create and manage reusable email templates. When composing, click the template button to insert pre-written content and save time."
+              title="Theme & Appearance"
+              description="In Settings → General, Theme switches between light and dark mode, Color Scheme sets the accent color and Font Size adjusts text size."
             />
             <TipCard
-              title="Sieve Filter Rules"
-              description="Set up automated email filtering in Settings → Filters. Use Sieve script syntax to create rules that sort, flag, or move emails automatically based on sender, subject, or content."
+              title="Keyboard Shortcuts"
+              description="Press Ctrl + / anywhere in your mailbox to see all keyboard shortcuts."
             />
             <TipCard
-              title="Quick Sender Preview"
-              description="Hover your mouse over any sender's name in the email list to see a popup with their contact information and other recipients. You can disable this feature in Settings → General → Hover Preview."
-            />
-            <TipCard
-              title="Advanced Search"
-              description="Use the search bar at the top to filter emails by sender, subject, or content. Combine with folder navigation to find exactly what you need quickly."
-            />
-            <TipCard
-              title="Conversation Threading"
-              description="Related emails are automatically grouped into threads. Click any email to see the full conversation history with all replies and forwards in chronological order."
-            />
-            <TipCard
-              title="Mobile-Optimized"
-              description="Access your email on any device. The interface automatically adapts to your screen size with touch-friendly buttons and swipe gestures for mobile users."
+              title="Something Not Working?"
+              description="If WebMail looks outdated or a page won't load, use Reset app: on the sign-in page, on the error screen or in Settings → General → Troubleshooting. It clears this device's copy and signs you out; your emails aren't affected."
             />
           </div>
         </section>
