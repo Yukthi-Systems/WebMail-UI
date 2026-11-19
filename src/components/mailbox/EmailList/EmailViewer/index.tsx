@@ -103,14 +103,6 @@ const EmailViewer = ({
   const uid = messageId;
   const viewFolder = folderPath ?? '';
 
-  // Body + attachment list only; attachments are downloaded on demand
-  const {
-    data: emailViewData,
-    isLoading,
-    error: viewError,
-  } = useEmailView(uid, viewFolder, true);
-  const parsedEmail = useParsedEmailView(emailViewData, uid, viewFolder);
-  const headers = useMemo(() => parsedEmail?.headers ?? {}, [parsedEmail?.headers]);
   const queryClient = useQueryClient();
   const [folderDetails] = useAtom(folderDetailsAtom);
   const [isHeaderPopoverOpen, setIsHeaderPopoverOpen] = useState(false);
@@ -120,6 +112,25 @@ const EmailViewer = ({
   const userSettings = useAtomValue(userSettingsAtom);
   // Resolved Sent/Drafts/Trash/Spam (e.g. "INBOX/Trash" on servers nesting folders under INBOX)
   const specialFolders = useSpecialFolderPaths();
+
+  const conversationView = isConversationView(
+    userSettings,
+    specialFolders.settingsKey(folderPath || folder)
+  );
+  // A list row known to be a single email needs no lookup
+  const isKnownSingle = email?.thread ? email.thread.messageCount <= 1 : false;
+  const shouldFetchThread = conversationView && !isKnownSingle;
+
+  // Body + attachment list only; attachments are downloaded on demand.
+  // In a conversation its card marks it read (and updates list and counts), so
+  // this first load must not, or the conversation would arrive already read.
+  const {
+    data: emailViewData,
+    isLoading,
+    error: viewError,
+  } = useEmailView(uid, viewFolder, true, !shouldFetchThread);
+  const parsedEmail = useParsedEmailView(emailViewData, uid, viewFolder);
+  const headers = useMemo(() => parsedEmail?.headers ?? {}, [parsedEmail?.headers]);
   const [undoTime, setUndoTime] = useState<number>(5000);
   const { formatUserDateNice } = useUserTimezone();
   const { mutate: deleteMutate } = useDeleteMail();
@@ -261,13 +272,6 @@ const EmailViewer = ({
   // CONVERSATION (from the API: GET /email/thread/{uid})
   // ------------------------------------------------------------------
 
-  const conversationView = isConversationView(
-    userSettings,
-    specialFolders.settingsKey(folderPath || folder)
-  );
-  // A list row known to be a single email needs no lookup
-  const isKnownSingle = email?.thread ? email.thread.messageCount <= 1 : false;
-  const shouldFetchThread = conversationView && !isKnownSingle;
 
   // Your replies are added from the Sent folder (resolved by its IMAP flags)
   const sentFolderName = useMemo(() => getSentFolderPath(folderDetails), [folderDetails]);

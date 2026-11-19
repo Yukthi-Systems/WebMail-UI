@@ -102,10 +102,10 @@ export const emailViewErrorMessage = (error: unknown): string => {
 };
 
 /** Opens an email (UID of folderPath): body + attachment list only, marks it as read. */
-export function useEmailView(uid: string, folderPath: string, enabled = true) {
+export function useEmailView(uid: string, folderPath: string, enabled = true, markAsRead = true) {
   return useQuery({
     queryKey: emailViewCacheKey(folderPath, uid),
-    queryFn: () => emailView(uid, folderPath, true),
+    queryFn: () => emailView(uid, folderPath, markAsRead),
     enabled: enabled && /^\d+$/.test(uid) && !!folderPath,
     retry: retryUnlessGone,
     retryDelay: () => 500,

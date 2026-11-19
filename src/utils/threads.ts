@@ -242,3 +242,7 @@ export function patchRowFlags<T extends EmailLike>(
 
   return { ...row, FLAGS: flags, thread: { ...thread, unreadCount, isFlagged } };
 }
+
+/** An email of an open conversation not read yet (a reply still being sent doesn't count). */
+export const isUnreadThreadEmail = (email: EmailLike): boolean =>
+  !email.pending && !email.FLAGS?.includes('\\Seen');

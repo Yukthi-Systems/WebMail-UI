@@ -19,6 +19,7 @@ import { useEffect, useRef } from 'react';
 import { useSeenMail } from './useEmails';
 import { useEmailCacheUpdater } from './useEmailCacheUpdater';
 import { useUpdateFolderUnreadCount } from './useFolders';
+import { forgetKeptUnread, isKeptUnread } from '../utils/keptUnread';
 
 /**
  * Marks an opened email as read, once, and updates the cached lists and the
@@ -49,7 +50,7 @@ export function useMarkSeenOnOpen({
   seenOnServer: boolean;
   active: boolean;
 }) {
-  const { mutate: markRead } = useSeenMail();
+  const { mutateAsync: markRead } = useSeenMail();
   const { patchEmailFlags } = useEmailCacheUpdater(folder);
   const updateFolderUnreadCount = useUpdateFolderUnreadCount(folder);
 
@@ -61,9 +62,16 @@ export function useMarkSeenOnOpen({
 
   const doneRef = useRef('');
 
+  // Opening it (again) reads it, even if it was kept unread before
+  useEffect(() => {
+    forgetKeptUnread(folder, uid);
+  }, [folder, uid]);
+
   useEffect(() => {
     if (!active || !isLoaded || isLoading || !isUnread || !/^\d+$/.test(uid)) return;
     if (doneRef.current === key) return;
+    // Marked unread by the user while open: leave it
+    if (isKeptUnread(folder, uid)) return;
     doneRef.current = key;
 
     const syncCache = () => {
@@ -74,7 +82,13 @@ export function useMarkSeenOnOpen({
     if (fetchedRef.current.fetched && seenOnServer) {
       syncCache();
     } else {
-      markRead({ path: folder, body: [Number(uid)] }, { onSuccess: syncCache });
+      // A promise, not mutate's onSuccess: that one is dropped when the component
+      // unmounts first (closed quickly, or StrictMode's remount in development)
+      markRead({ path: folder, body: [Number(uid)] })
+        .then(syncCache)
+        .catch(() => {
+          /* still unread on the server: nothing to update */
+        });
     }
   }, [
     active,

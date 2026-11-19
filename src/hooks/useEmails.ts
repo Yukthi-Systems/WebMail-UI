@@ -51,6 +51,7 @@ import { useRef } from 'react';
 import { HttpError } from '../api/fetchWrapper';
 import { DEFAULT_EMAIL_SORT } from '../state/emailListView';
 import { noteUidValidity, removeEmailCaches } from '../utils/emailCache';
+import { keepUnread } from '../utils/keptUnread';
 
 /**
  * After any change to a folder, every cached list view of it (all filters,
@@ -263,6 +264,8 @@ export function useUnseenMail() {
   return useMutation<EmailFolders, Error, UnReadEmailPayload>({
     mutationKey: ['mark_unread_mails'],
     mutationFn: (payload: UnReadEmailPayload) => unmarkReadEmail(payload.path, payload.body),
+    // An open email the user marks unread must stay unread (see useMarkSeenOnOpen)
+    onMutate: (payload) => keepUnread(payload.path, payload.body),
     onSuccess: (_data, payload) =>
       invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
     retry: 5,
