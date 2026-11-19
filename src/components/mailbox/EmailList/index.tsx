@@ -96,6 +96,7 @@ import { countUnread, expandRowIds, rowKey, type EmailLike } from '../../../util
 import { type ViewAttachment } from '../../../hooks/useEmailView';
 import { emailFilterAtom, emailSortAtom } from '../../../state/emailListView';
 import { isConversationView } from '../../../utils/emailListUtils';
+import { withFolderStatus } from '../../../utils/workspaceFolders';
 
 interface EmailListProps {
   onRegisterClearCallback?: (callback: () => void) => void;
@@ -232,12 +233,8 @@ const EmailList = ({
       stored.UIDNEXT !== liveUidValidity.UIDNEXT;
 
     // Always sync atom so next visit sees the current values and doesn't re-fetch unnecessarily
-    if (currentFolderDetail && Array.isArray(folderDetails)) {
-      setFolderDetails(
-        folderDetails.map((f) =>
-          f.folder_name === (folder || 'INBOX') ? { ...f, status: liveUidValidity } : f
-        )
-      );
+    if (currentFolderDetail) {
+      setFolderDetails((prev) => withFolderStatus(prev, folder || 'INBOX', liveUidValidity));
     }
 
     // On folder open the list and the status are fetched together: a list that
@@ -1198,12 +1195,9 @@ const EmailList = ({
     try {
       const { data: response } = await refetchUidValidity();
 
-      // Update the atom with the new status
+      // Only the status: this function may run from an old render, its unread counts are stale
       if (currentFolderDetail) {
-        const newDetails = folderDetails.map((f) =>
-          f.folder_name === (folder || 'INBOX') ? { ...f, status: response } : f
-        );
-        setFolderDetails(newDetails);
+        setFolderDetails((prev) => withFolderStatus(prev, folder || 'INBOX', response));
       }
 
       // If we have current values and they all match, skip the heavy refresh

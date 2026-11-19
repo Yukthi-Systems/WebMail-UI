@@ -23,8 +23,6 @@ import { useAtomValue } from 'jotai';
 import { FaSignOutAlt, FaTimes, FaMobileAlt, FaShareAlt } from 'react-icons/fa';
 import { userDetailsAtom } from '../../../state/userDetails';
 import { userSettingsAtom } from '../../../state/settings';
-import { webmailStore } from '../../../store';
-import { csrfTokenAtom } from '../../../state/auth';
 import { useLocation } from '@tanstack/react-router';
 import { getCompanySlugFromPath } from '../../../utils/routeUtils';
 
@@ -67,28 +65,8 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose }) =>
   };
 
   const handleLogout = () => {
-    logoutMutation.mutate(undefined, {
-      onSuccess: () => {
-        webmailStore.set(csrfTokenAtom, null);
-        localStorage.clear();
-        if (slug) {
-          navigate({ to: '/$slug', params: { slug } });
-        } else {
-          navigate({ to: '/login' });
-        }
-        onClose();
-      },
-      onError: () => {
-        webmailStore.set(csrfTokenAtom, null);
-        localStorage.clear();
-        if (slug) {
-          navigate({ to: '/$slug', params: { slug } });
-        } else {
-          navigate({ to: '/login' });
-        }
-        onClose();
-      },
-    });
+    onClose();
+    logoutMutation.mutate(slug ? `/${slug}` : '/login');
   };
 
   const handleManageAccount = () => {

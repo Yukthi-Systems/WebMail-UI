@@ -26,6 +26,7 @@ import {
   threadToRow,
   unquoteFolder,
   type ApiThread,
+  isUnreadThreadEmail,
 } from '../../src/utils/threads';
 
 const apiThread = (overrides: Partial<ApiThread> = {}): ApiThread => ({
@@ -175,5 +176,22 @@ describe('patchRowFlags', () => {
   it('leaves a conversation alone when none of its emails is hit', () => {
     const row = threadToRow(apiThread(), 'INBOX');
     expect(patchRowFlags(row, uids(999), '\\Seen')).toBe(row);
+  });
+});
+
+describe('isUnreadThreadEmail', () => {
+  it('counts an email without \\Seen', () => {
+    expect(isUnreadThreadEmail({ id: '1', FLAGS: [] })).toBe(true);
+    expect(isUnreadThreadEmail({ id: '1' })).toBe(true);
+  });
+
+  it('does not count a read email', () => {
+    expect(isUnreadThreadEmail({ id: '1', FLAGS: ['\\Seen'] })).toBe(false);
+  });
+
+  it('does not count a reply still being sent', () => {
+    expect(isUnreadThreadEmail({ id: '1', FLAGS: [], pending: { html: '', text: '' } })).toBe(
+      false
+    );
   });
 });

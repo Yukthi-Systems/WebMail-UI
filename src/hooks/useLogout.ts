@@ -15,25 +15,21 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSetAtom } from 'jotai';
-import { csrfTokenAtom } from '../state/auth';
+import { useMutation } from '@tanstack/react-query';
 import { logout } from '../api/auth.ts';
-import { resetLayoutCache } from '../utils/resetLayoutCache.ts';
 
+/** Signs out and opens the login page at `loginPath`. */
 export function useLogout() {
-  const setCsrfToken = useSetAtom(csrfTokenAtom);
-  const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: logout,
-    onSuccess: () => {
-      // Clear all cached queries and mutations
-      queryClient.clear();
-      resetLayoutCache();
-      setCsrfToken(null);
+    mutationFn: async (loginPath: string) => {
+      // Signed out on this device even if the server can't be reached
+      await logout().catch(() => undefined);
       localStorage.clear();
       sessionStorage.clear();
+      // A full page load drops the cached data, state and timers at once. Clearing
+      // them while the mailbox is still shown made it reload everything without a
+      // session (406 errors).
+      window.location.replace(loginPath);
     },
   });
 }

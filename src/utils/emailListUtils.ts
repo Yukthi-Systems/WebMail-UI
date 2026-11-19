@@ -38,8 +38,8 @@ export const createSafeStringSet = (
  * in the settings (useSpecialFolderPaths().settingsKey(folder)).
  */
 /**
- * The list's count always shows emails. In conversation view pages count
- * conversations, so total_count is shown on hover and totalEmails is the label.
+ * The list's count matches its rows: emails in list view; conversations in
+ * conversation view, with their emails on hover.
  */
 export const listCountLabels = (
   totalCount: number,
@@ -47,7 +47,7 @@ export const listCountLabels = (
 ): { label: string; tooltip?: string } => {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
   if (totalEmails === undefined) return { label: plural(totalCount, 'email') };
-  return { label: plural(totalEmails, 'email'), tooltip: plural(totalCount, 'conversation') };
+  return { label: plural(totalCount, 'conversation'), tooltip: plural(totalEmails, 'email') };
 };
 
 export const isConversationView = (

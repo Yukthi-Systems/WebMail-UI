@@ -25,7 +25,8 @@ import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../../../../state/settings';
 import { useMemo, useRef } from 'react';
 import { findOpenEmail, useScrollToOpenEmail } from '../../../../../hooks/useScrollToOpenEmail';
-import type { EmailLike } from '../../../../../utils/threads';
+import { isUnreadThreadEmail, type EmailLike } from '../../../../../utils/threads';
+import { useUserTimezone } from '../../../../../hooks/useTimezone';
 
 interface ThreadViewProps {
   listofThreadEmails: EmailLike[];
@@ -82,6 +83,7 @@ export const ThreadView = ({
   onSaveAsContact,
 }: ThreadViewProps) => {
   const userSettings = useAtomValue(userSettingsAtom);
+  const { formatEmailDate } = useUserTimezone();
   const sortOrder = userSettings?.email?.thread_sort_order || 'desc';
 
   // Must run unconditionally (rules-of-hooks) — moved above the isLoadingInitial
@@ -108,6 +110,13 @@ export const ThreadView = ({
     !isLoadingInitial && !!openEmail
   );
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const unreadCount = listofThreadEmails.filter(isUnreadThreadEmail).length;
+  const showFirstUnread = () =>
+    listRef.current
+      ?.querySelector('[data-unread]')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   if (isLoadingInitial) {
     return (
       <div className="h-full flex flex-col">
@@ -115,6 +124,7 @@ export const ThreadView = ({
           listofThreadEmails={listofThreadEmails}
           date={date}
           formatUserDateNice={formatUserDateNice}
+          formatDateShort={formatEmailDate}
           splitView={splitView}
           onBack={onBack}
           showCount={false}
@@ -132,14 +142,17 @@ export const ThreadView = ({
         listofThreadEmails={listofThreadEmails}
         date={date}
         formatUserDateNice={formatUserDateNice}
+        formatDateShort={formatEmailDate}
         splitView={splitView}
         onBack={onBack}
         showCount={true}
+        unreadCount={unreadCount}
+        onShowUnread={showFirstUnread}
         isRefetching={isRefetching}
         onRefresh={reFetchMails}
       />
       {/* Mobile: remove side padding, Desktop: keep padding */}
-      <div className="flex-1 overflow-y-auto px-0 md:px-4 py-2 md:py-3">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-0 md:px-4 py-2 md:py-3">
         {listofThreadEmails.length === 0 ? (
           <NoMessagesFound />
         ) : (
@@ -148,6 +161,7 @@ export const ThreadView = ({
               <div
                 key={`${threadEmail.id}-${threadEmail.folderPath}`}
                 ref={threadEmail === openEmail ? openEmailRef : undefined}
+                data-unread={isUnreadThreadEmail(threadEmail) || undefined}
               >
                 <ThreadEmailCard
                   threadEmail={threadEmail}
@@ -192,18 +206,26 @@ const ThreadHeader = ({
   listofThreadEmails,
   date,
   formatUserDateNice,
+  formatDateShort,
   splitView,
   onBack,
   showCount,
+  unreadCount = 0,
+  onShowUnread,
   isRefetching,
   onRefresh,
 }: {
   listofThreadEmails: EmailLike[];
   date: string;
   formatUserDateNice: (date: string) => string;
+  /** Compact date like the list's; the full one is shown on hover. */
+  formatDateShort: (date: string) => string;
   splitView?: boolean;
   onBack?: () => void;
   showCount: boolean;
+  /** Emails not read yet; opening a card reads it. */
+  unreadCount?: number;
+  onShowUnread?: () => void;
   isRefetching: boolean;
   onRefresh: () => void;
 }) => (
@@ -220,6 +242,18 @@ const ThreadHeader = ({
           )}
         </h2>
 
+        {showCount && unreadCount > 0 && (
+          <button
+            type="button"
+            onClick={onShowUnread}
+            title="Not read yet. Open an email to read it. Click to go to the first one."
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--blue-6)] bg-[var(--blue-3)] hover:bg-[var(--blue-4)] px-2.5 py-0.5 text-xs font-medium text-[var(--blue-11)] transition-colors flex-shrink-0"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--blue-9)]" />
+            {unreadCount} unread
+          </button>
+        )}
+
         {/* Refresh indicator - mobile inline with title */}
         {isRefetching && (
           <div className="flex items-center gap-1.5 text-xs text-[var(--gray-11)]">
@@ -231,9 +265,12 @@ const ThreadHeader = ({
 
       {/* Actions Row - Mobile: Full width below, Desktop: Right side */}
       <div className="flex items-center justify-between md:justify-end gap-1.5 md:gap-3">
-        <div className="text-xs md:text-sm text-[var(--gray-11)] flex items-center gap-1">
+        <div
+          className="text-xs md:text-sm text-[var(--gray-11)] flex items-center gap-1 whitespace-nowrap"
+          title={`Latest: ${formatUserDateNice(date)}`}
+        >
           <span className="hidden sm:inline">Latest:</span>
-          <span>{formatUserDateNice(date)}</span>
+          <span>{formatDateShort(date)}</span>
         </div>
 
         <div className="flex items-center gap-2">

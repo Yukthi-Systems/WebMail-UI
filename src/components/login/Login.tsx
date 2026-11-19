@@ -41,6 +41,7 @@ import { API_CONFIG } from '../../constants/config';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { csrfTokenAtom } from '../../state/auth';
 import { confirmAndResetApp } from '../../utils/appUpdate';
+import { LoginAppInfo } from './LoginAppInfo';
 
 export interface LoginBranding {
   logoUrl: string | null;
@@ -414,27 +415,20 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
           </div>
         </div>
 
+        {/* Small screens: under the links, so it never overlaps them */}
+        <LoginAppInfo
+          className={`lg:hidden mt-4 text-center ${bgImageUrl ? 'text-white/80 drop-shadow' : 'text-gray-400'}`}
+        />
+
         {/* Footer */}
         {/* <div className="mt-4 text-center">
           <p className="text-[10px] text-gray-400 font-medium tracking-wide">© {new Date().getFullYear()} MAIL25 SYSTEMS</p>
         </div> */}
       </div>
-      <p
-        className={`absolute right-14 bottom-8 text-[11px] ${bgImageUrl ? 'text-white/80 drop-shadow' : 'text-gray-400'}`}
-      >
-        <button
-          type="button"
-          onClick={confirmAndResetApp}
-          className="mr-3 underline hover:text-orange-600"
-          title="Clears cached files and saved data in this browser"
-        >
-          Having trouble? Reset app
-        </button>
-        <span title={`Build ${API_CONFIG.bundleBuildId}`}>
-          v{API_CONFIG.version}
-          {API_CONFIG.bundleBuildId && ` · ${API_CONFIG.bundleBuildId.split('-')[0]}`}
-        </span>
-      </p>
+      {/* Large screens: bottom-right corner, clear of the centered form */}
+      <LoginAppInfo
+        className={`hidden lg:block absolute right-14 bottom-8 ${bgImageUrl ? 'text-white/80 drop-shadow' : 'text-gray-400'}`}
+      />
     </div>
   );
 };

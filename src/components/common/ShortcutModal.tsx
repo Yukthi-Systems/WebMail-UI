@@ -17,15 +17,16 @@
 
 import { Dialog, Table, Kbd, Flex, Text, Button, Grid, Box } from '@radix-ui/themes';
 import { RxCross1 } from 'react-icons/rx';
+import {
+  actionShortcuts,
+  navigationShortcuts,
+  selectionShortcuts,
+  type ShortcutItem,
+} from '../../constants/keyboardShortcuts';
 
 interface ShortcutsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-interface ShortcutItem {
-  keys: string[];
-  description: string;
 }
 
 const ShortcutSection = ({ title, shortcuts }: { title: string; shortcuts: ShortcutItem[] }) => (
@@ -57,35 +58,6 @@ const ShortcutSection = ({ title, shortcuts }: { title: string; shortcuts: Short
 );
 
 const ShortcutsModal = ({ open, onOpenChange }: ShortcutsModalProps) => {
-  const navigationShortcuts: ShortcutItem[] = [
-    { description: 'Next email', keys: ['j', '↓'] },
-    { description: 'Previous email', keys: ['k', '↑'] },
-    { description: 'Open email', keys: ['Enter', 'o'] },
-    { description: 'Back to list', keys: ['Esc'] },
-    { description: 'Go to next page', keys: ['n'] },
-    { description: 'Go to previous page', keys: ['p'] },
-    { description: 'Focus folders', keys: ['Shift', 'g'] },
-  ];
-
-  const actionShortcuts: ShortcutItem[] = [
-    { description: 'Compose', keys: ['c'] },
-    { description: 'Reply', keys: ['r'] },
-    { description: 'Reply All', keys: ['a'] },
-    { description: 'Forward', keys: ['f'] },
-    // { description: 'Search', keys: ['/'] },
-    { description: 'Show shortcuts', keys: ['Ctrl', '?'] },
-  ];
-
-  const selectionShortcuts: ShortcutItem[] = [
-    { description: 'Select conversation', keys: ['x'] },
-    { description: 'Select all', keys: ['Shift', '*'] },
-    { description: 'Mark as read', keys: ['Shift', 'i'] },
-    { description: 'Mark as unread', keys: ['Shift', 'u'] },
-    { description: 'Delete', keys: ['#'] },
-    { description: 'Mark as Flagged', keys: ['e'] },
-    { description: 'Mark as UnFlagged', keys: ['s'] },
-  ];
-
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content style={{ maxWidth: 800 }}>

@@ -241,6 +241,7 @@ const ThreadEmailCard = ({
     isUnread: !threadEmail.FLAGS?.includes('\\Seen'),
     isLoaded: !!emailViewData,
     isLoading: isViewLoading,
+    seenOnServer: !!emailViewData?.flags?.includes('\\Seen'),
     active: isExpanded && !pending,
   });
 
