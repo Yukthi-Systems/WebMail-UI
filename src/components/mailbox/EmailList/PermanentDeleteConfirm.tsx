@@ -16,15 +16,16 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Dialog, Button, Flex } from '@radix-ui/themes';
+import { Dialog, Button, Flex, Checkbox, Text } from '@radix-ui/themes';
 import { FaTrash, FaExclamationTriangle, FaTimes } from 'react-icons/fa';
 import { MdDeleteForever } from 'react-icons/md';
 
 interface PermanentDeleteConfirmProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPermanentDelete: () => void;
-  onMoveToTrash: () => void;
+  // dontAskAgain (either button): later deletes go to Trash without this prompt, for this session
+  onPermanentDelete: (dontAskAgain: boolean) => void;
+  onMoveToTrash: (dontAskAgain: boolean) => void;
   emailCount: number;
   isLoading?: boolean;
   quotaPercent?: number;
@@ -39,24 +40,19 @@ const PermanentDeleteConfirm = ({
   isLoading = false,
   quotaPercent,
 }: PermanentDeleteConfirmProps) => {
-  const [confirmText, setConfirmText] = useState('');
-  const isConfirmValid = confirmText === 'Delete';
+  const [dontAskAgain, setDontAskAgain] = useState(false);
 
-  // Reset input when dialog opens/closes
   useEffect(() => {
-    if (!open) {
-      setConfirmText('');
-    }
+    if (!open) setDontAskAgain(false);
   }, [open]);
 
   const handlePermanentDelete = () => {
-    if (!isConfirmValid) return;
-    onPermanentDelete();
+    onPermanentDelete(dontAskAgain);
     onOpenChange(false);
   };
 
   const handleMoveToTrash = () => {
-    onMoveToTrash();
+    onMoveToTrash(dontAskAgain);
     onOpenChange(false);
   };
 
@@ -118,38 +114,23 @@ const PermanentDeleteConfirm = ({
                 </p>
               </div>
             </Flex>
-
-            {/* Confirmation Input */}
-            <div className="mt-3">
-              <label
-                htmlFor="permanent-delete-confirm-input"
-                className="block text-sm text-[var(--gray-11)] mb-1.5"
-              >
-                Type <strong className="text-[var(--red-11)]">Delete</strong> to confirm permanent
-                deletion:
-              </label>
-              <input
-                id="permanent-delete-confirm-input"
-                type="text"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && isConfirmValid) {
-                    handlePermanentDelete();
-                  }
-                }}
-                placeholder="Type Delete here..."
-                autoComplete="off"
-                className="w-full px-3 py-2 text-sm rounded-md border transition-colors duration-150
-                  bg-[var(--gray-1)] text-[var(--gray-12)] placeholder-[var(--gray-8)]
-                  border-[var(--red-7)] focus:border-[var(--red-9)] focus:outline-none focus:ring-1 focus:ring-[var(--red-9)]"
-              />
-            </div>
           </div>
         </div>
 
+        <Flex asChild align="center" gap="2" mt="4">
+          <label className="cursor-pointer select-none">
+            <Checkbox
+              checked={dontAskAgain}
+              onCheckedChange={(value) => setDontAskAgain(value === true)}
+            />
+            <Text size="2" className="text-[var(--gray-11)]">
+              Don&apos;t ask again this session, just move to Trash
+            </Text>
+          </label>
+        </Flex>
+
         {/* Action Buttons */}
-        <Flex gap="3" justify="end" mt="5" wrap="wrap">
+        <Flex gap="3" justify="end" mt="4" wrap="wrap">
           <Button variant="soft" onClick={handleCancel} disabled={isLoading} size="3">
             Cancel
           </Button>
@@ -159,16 +140,7 @@ const PermanentDeleteConfirm = ({
             Move to Trash
           </Button>
 
-          <Button
-            color="red"
-            onClick={handlePermanentDelete}
-            disabled={!isConfirmValid || isLoading}
-            size="3"
-            style={{
-              opacity: isConfirmValid ? 1 : 0.5,
-              cursor: isConfirmValid ? 'pointer' : 'not-allowed',
-            }}
-          >
+          <Button color="red" onClick={handlePermanentDelete} disabled={isLoading} size="3">
             {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-1" />

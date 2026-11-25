@@ -86,6 +86,7 @@ import CustomModal from '../../composer/CustomModal';
 import { useIsMobile } from '../../../hooks/use-mobile';
 import { folderDetailsAtom, folderQuotaAtom } from '../../../state/folders';
 import PermanentDeleteConfirm from './PermanentDeleteConfirm';
+import { isDeletePromptSkipped, skipDeletePromptThisSession } from '../../../utils/deletePrompt';
 import EmptyFolderBanner from './EmptyFolderBanner';
 import {
   useUpdateAnyFolderUnreadCount,
@@ -882,7 +883,7 @@ const EmailList = ({
     const sourceFolder = folderOf(rowIds);
     const inTrash = specialFolders.isFolder(sourceFolder, 'trash');
 
-    if (isQuotaNearFull && !inTrash) {
+    if (isQuotaNearFull && !inTrash && !isDeletePromptSkipped()) {
       setPermanentDeleteEmails(uids);
       setPermanentDeleteFolder(sourceFolder);
       setIsPermanentDeleteDialogOpen(true);
@@ -2077,11 +2078,13 @@ const EmailList = ({
         onOpenChange={setIsPermanentDeleteDialogOpen}
         emailCount={permanentDeleteEmails.length}
         quotaPercent={folderQuota?.used_percent}
-        onMoveToTrash={() => {
+        onMoveToTrash={(dontAskAgain) => {
+          if (dontAskAgain) skipDeletePromptThisSession();
           setIsPermanentDeleteDialogOpen(false);
           doMoveToTrash(permanentDeleteEmails, permanentDeleteFolder || listFolder);
         }}
-        onPermanentDelete={() => {
+        onPermanentDelete={(dontAskAgain) => {
+          if (dontAskAgain) skipDeletePromptThisSession();
           setIsPermanentDeleteDialogOpen(false);
           doPermanentDelete(permanentDeleteEmails, permanentDeleteFolder || listFolder);
         }}

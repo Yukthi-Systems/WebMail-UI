@@ -1,0 +1,151 @@
+/*
+ * Copyright (C) 2026 Yukthi Systems Private Limited
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * version 3 along with this program. If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Editor } from '@tiptap/core';
+
+const fetchWithAuth = vi.fn();
+vi.mock('../../src/api/fetchWrapper.ts', () => ({ fetchWithAuth }));
+
+const { createEditorExtensions } = await import('../../src/components/composer/contentEditor');
+const { sendMailV2 } = await import('../../src/api/composer');
+const { addMissingTableBorders } = await import('../../src/utils/tableBorders');
+const { QUOTE_ATTR } = await import('../../src/utils/emailQuote');
+
+// jsdom has no ClipboardEvent; the editor creates one when pasting
+(globalThis as { ClipboardEvent?: unknown }).ClipboardEvent ??= class extends Event {
+  clipboardData = null;
+};
+
+// A table copied from a web page (like the admin users list): no borders of its own
+const WEB_PAGE_TABLE = `<meta charset="utf-8"><table><thead><tr>
+<th>Email Prefix</th><th>Domain</th><th>First Name</th></tr></thead><tbody>
+<tr><td>saif</td><td><a href="https://devtest1.example.com">devtest1.example.com</a></td><td>Saif</td></tr>
+<tr><td>joe</td><td><a href="https://devtest1.example.com">devtest1.example.com</a></td><td>joe</td></tr>
+</tbody></table>`;
+
+// What Excel puts on the clipboard: the borders are classes in a <style> block
+const EXCEL_TABLE = `<html><head><style><!--
+td { mso-ignore: padding; font-size: 11pt; }
+.xl65 { border: .5pt solid windowtext; }
+--></style></head><body><!--StartFragment-->
+<table border=0 cellpadding=0 cellspacing=0 style="border-collapse:collapse">
+<tr><td class=xl65 style="height:15pt">Ficus</td><td class=xl65>VADODARA391440</td></tr>
+<tr><td class=xl65 style="height:15pt">Ficus</td><td class=xl65>51,750</td></tr>
+</table><!--EndFragment--></body></html>`;
+
+let editor: Editor | undefined;
+afterEach(() => editor?.destroy());
+
+/** Pastes into the composer's editor, returns its html (what the composer sends) */
+const composeByPasting = (clipboardHtml: string) => {
+  editor = new Editor({ extensions: createEditorExtensions(), content: '<p></p>' });
+  editor.view.pasteHTML(clipboardHtml);
+  return editor.getHTML();
+};
+
+/** Sends like the composer does, returns the body_html that reaches the API. */
+const send = async (bodyHtml: string) => {
+  await sendMailV2({
+    from_id: { email: 'sender@example.com' },
+    to: [{ email: 'recipient@example.com' }],
+    cc: [],
+    bcc: [],
+    subject: 'Table',
+    body_html: bodyHtml,
+    attachments: [],
+    in_line_attachments: [],
+    is_draft: false,
+    draft_saved: false,
+  });
+  const form = fetchWithAuth.mock.calls[0][1].body as FormData;
+  return JSON.parse(form.get('data') as string).body_html as string;
+};
+
+const cellsOf = (html: string, selector = 'table') => {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return Array.from(doc.querySelectorAll(`${selector} td, ${selector} th`)) as HTMLElement[];
+};
+const bordered = (cell: HTMLElement) => cell.style.borderTopStyle === 'solid';
+
+describe('a pasted table in the sent email', () => {
+  beforeEach(() => {
+    fetchWithAuth.mockReset();
+    fetchWithAuth.mockResolvedValue({ ok: true, json: async () => ({}) });
+  });
+
+  it('before the fix: the composer html of a pasted table has no borders (the bug)', () => {
+    const cells = cellsOf(composeByPasting(WEB_PAGE_TABLE));
+    expect(cells).toHaveLength(9);
+    expect(cells.some(bordered)).toBe(false);
+  });
+
+  it('a table pasted from a web page is sent with a border on every cell', async () => {
+    const sent = await send(composeByPasting(WEB_PAGE_TABLE));
+    const cells = cellsOf(sent);
+    expect(cells).toHaveLength(9);
+    expect(cells.every(bordered)).toBe(true);
+    expect(sent).toContain('devtest1.example.com');
+    expect(sent).toContain('Email Prefix');
+  });
+
+  it('rows are as tall as in the composer (no extra space around the cell text)', async () => {
+    const sent = await send(composeByPasting(WEB_PAGE_TABLE));
+    const paragraphs = Array.from(
+      new DOMParser().parseFromString(sent, 'text/html').querySelectorAll('td p, th p')
+    ) as HTMLElement[];
+    expect(paragraphs.length).toBeGreaterThan(0);
+    expect(paragraphs.every((p) => p.style.margin === '0px' || p.style.margin === '0')).toBe(true);
+  });
+
+  it('a table pasted from Excel is sent with a border on every cell', async () => {
+    const cells = cellsOf(await send(composeByPasting(EXCEL_TABLE)));
+    expect(cells).toHaveLength(4);
+    expect(cells.every(bordered)).toBe(true);
+  });
+
+  it('a table made with the toolbar is sent exactly as before', async () => {
+    editor = new Editor({ extensions: createEditorExtensions(), content: '<p></p>' });
+    editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true });
+    const html = editor.getHTML();
+    expect(await send(html)).toBe(html);
+  });
+
+  it('a quoted email in a reply keeps its layout tables without borders', async () => {
+    const reply =
+      '<p>See below</p>' +
+      `<div ${QUOTE_ATTR}=""><table><tr><td>layout</td><td>cell</td></tr></table></div>`;
+    expect(await send(reply)).toBe(reply);
+  });
+
+  it('a signature laid out with a table and a logo is left alone', async () => {
+    const signature =
+      '<p>Thanks</p><table><tr><td><img src="cid:logo"></td><td>Name<br>Company</td></tr></table>';
+    expect(await send(signature)).toBe(signature);
+  });
+
+  it('a table that sets its own borders (even none) is left alone', async () => {
+    const own = '<table><tr><td style="border: none">a</td><td>b</td></tr></table>';
+    const withAttribute = '<table border="1"><tr><td>a</td></tr></table>';
+    expect(addMissingTableBorders(own)).toBe(own);
+    expect(addMissingTableBorders(withAttribute)).toBe(withAttribute);
+  });
+
+  it('an email without tables is sent unchanged', async () => {
+    expect(await send('<p>Hello</p>')).toBe('<p>Hello</p>');
+  });
+});
