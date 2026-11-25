@@ -81,6 +81,8 @@ const cellsOf = (html: string, selector = 'table') => {
   return Array.from(doc.querySelectorAll(`${selector} td, ${selector} th`)) as HTMLElement[];
 };
 const bordered = (cell: HTMLElement) => cell.style.borderTopStyle === 'solid';
+// Line breaks added after closing tags change nothing in how it looks
+const unbroken = (html: string) => html.replace(/>\n/g, '>');
 
 describe('a pasted table in the sent email', () => {
   beforeEach(() => {
@@ -122,20 +124,20 @@ describe('a pasted table in the sent email', () => {
     editor = new Editor({ extensions: createEditorExtensions(), content: '<p></p>' });
     editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true });
     const html = editor.getHTML();
-    expect(await send(html)).toBe(html);
+    expect(unbroken(await send(html))).toBe(html);
   });
 
   it('a quoted email in a reply keeps its layout tables without borders', async () => {
     const reply =
       '<p>See below</p>' +
       `<div ${QUOTE_ATTR}=""><table><tr><td>layout</td><td>cell</td></tr></table></div>`;
-    expect(await send(reply)).toBe(reply);
+    expect(unbroken(await send(reply))).toBe(reply);
   });
 
   it('a signature laid out with a table and a logo is left alone', async () => {
     const signature =
       '<p>Thanks</p><table><tr><td><img src="cid:logo"></td><td>Name<br>Company</td></tr></table>';
-    expect(await send(signature)).toBe(signature);
+    expect(unbroken(await send(signature))).toBe(signature);
   });
 
   it('a table that sets its own borders (even none) is left alone', async () => {
@@ -146,6 +148,38 @@ describe('a pasted table in the sent email', () => {
   });
 
   it('an email without tables is sent unchanged', async () => {
-    expect(await send('<p>Hello</p>')).toBe('<p>Hello</p>');
+    expect(unbroken(await send('<p>Hello</p>'))).toBe('<p>Hello</p>');
+  });
+
+  it('the composer table with an outer border but no cell borders (sent from ChatGPT paste)', async () => {
+    // body_html of the reported email, as the composer produced it
+    const rows = [
+      ['101', 'Rahul', 'IT', 'rahul@test.com', 'Delhi', 'Active'],
+      ['102', 'Amit', 'HR', 'amit@test.com', 'Mumbai', 'Active'],
+      ['103', 'Priya', 'Sales', 'priya@test.com', 'Noida', 'Active'],
+      ['104', 'Neha', 'Finance', 'neha@test.com', 'Pune', 'Inactive'],
+      ['105', 'Karan', 'Testing', 'karan@test.com', 'Jaipur', 'Active'],
+    ];
+    const cell = (tag: string, text: string) =>
+      `<${tag} colspan="1" rowspan="1"><p>${text}</p></${tag}>`;
+    const html =
+      '<table style="border-collapse: collapse; width: 100%; margin: 12px 0; border: 1px solid #ddd;"><tbody>' +
+      `<tr>${['Employee ID', 'Name', 'Department', 'Email', 'Location', 'Status'].map((t) => cell('th', t)).join('')}</tr>` +
+      rows.map((row) => `<tr>${row.map((t) => cell('td', t)).join('')}</tr>`).join('') +
+      '</tbody></table>';
+    expect(html.length).toBeGreaterThan(998); // one line, long enough to be cut on the way
+
+    const sent = await send(html);
+    const cells = cellsOf(sent);
+    expect(cells).toHaveLength(36);
+    expect(cells.every(bordered)).toBe(true);
+    // No line long enough for a server to cut ("103" arrived as "1 03")
+    expect(Math.max(...sent.split('\n').map((line) => line.length))).toBeLessThan(998);
+    expect(cells.map((c) => c.textContent?.trim())).toContain('103');
+  });
+
+  it('a code block keeps its lines exactly', async () => {
+    const code = '<pre><code>line one</p>\nline two</code></pre>';
+    expect(await send(`<p>Code:</p>${code}`)).toBe(`<p>Code:</p>\n${code}`);
   });
 });

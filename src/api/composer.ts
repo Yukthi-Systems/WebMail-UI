@@ -21,6 +21,7 @@ import { API_URL } from './config.ts';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchWithAuth } from './fetchWrapper.ts';
 import { addMissingTableBorders } from '../utils/tableBorders.ts';
+import { breakLongHtmlLines } from '../utils/emailLines.ts';
 
 export type EmailAddressObject = {
   email?: string;
@@ -73,8 +74,10 @@ export const sendMailV2 = async (composedData: ComposerRequest): Promise<void> =
 
   const dataJson: Record<string, unknown> = {
     ...rest,
-    // Pasted tables get the borders the composer showed
-    ...(rest.body_html ? { body_html: addMissingTableBorders(rest.body_html) } : {}),
+    // Pasted tables get the borders the composer showed; no line long enough to be cut
+    ...(rest.body_html
+      ? { body_html: breakLongHtmlLines(addMissingTableBorders(rest.body_html)) }
+      : {}),
     timestamp: new Date().toISOString(),
     headers: {
       ...rest.headers,

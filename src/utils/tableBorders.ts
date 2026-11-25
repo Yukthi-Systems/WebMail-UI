@@ -44,8 +44,8 @@ const addStyle = (element: Element, declarations: string[]) => {
  * one. Before sending, such tables get the same border the composer showed.
  *
  * Left as they are: quoted emails (a layout table must not gain borders),
- * tables with images or tables inside (signatures, layouts), and tables that
- * set any border themselves.
+ * tables with images or tables inside (signatures, layouts), and tables whose
+ * cells set a border themselves (or `border="1"`).
  */
 export const addMissingTableBorders = (html: string): string => {
   if (!/<table[\s>]/i.test(html)) return html;
@@ -56,7 +56,8 @@ export const addMissingTableBorders = (html: string): string => {
   doc.querySelectorAll('table').forEach((table) => {
     if (table.closest(`[${QUOTE_ATTR}], blockquote`)) return;
     if (table.querySelector('img, table')) return;
-    if (Number(table.getAttribute('border')) > 0 || declaresBorder(table)) return;
+    // The table's own outer border (the composer adds one) still leaves the cells without lines
+    if (Number(table.getAttribute('border')) > 0) return;
 
     const cells = Array.from(table.querySelectorAll('td, th')).filter(
       (cell) => cell.closest('table') === table
