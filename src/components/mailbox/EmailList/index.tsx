@@ -2083,7 +2083,8 @@ const EmailList = ({
           setIsPermanentDeleteDialogOpen(false);
           doMoveToTrash(permanentDeleteEmails, permanentDeleteFolder || listFolder);
         }}
-        onPermanentDelete={() => {
+        onPermanentDelete={(dontAskAgain) => {
+          if (dontAskAgain) skipDeletePromptThisSession();
           setIsPermanentDeleteDialogOpen(false);
           doPermanentDelete(permanentDeleteEmails, permanentDeleteFolder || listFolder);
         }}

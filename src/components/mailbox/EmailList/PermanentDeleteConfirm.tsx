@@ -23,8 +23,8 @@ import { MdDeleteForever } from 'react-icons/md';
 interface PermanentDeleteConfirmProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPermanentDelete: () => void;
-  // dontAskAgain: later deletes go to Trash without this prompt, for this session
+  // dontAskAgain (either button): later deletes go to Trash without this prompt, for this session
+  onPermanentDelete: (dontAskAgain: boolean) => void;
   onMoveToTrash: (dontAskAgain: boolean) => void;
   emailCount: number;
   isLoading?: boolean;
@@ -47,7 +47,7 @@ const PermanentDeleteConfirm = ({
   }, [open]);
 
   const handlePermanentDelete = () => {
-    onPermanentDelete();
+    onPermanentDelete(dontAskAgain);
     onOpenChange(false);
   };
 
