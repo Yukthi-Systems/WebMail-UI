@@ -22,6 +22,7 @@ import { type EmailAddress } from '../../state/composer';
 import { FaX, FaCheck } from 'react-icons/fa6';
 import { addressParser } from 'postal-mime';
 import { useDebounce } from 'use-debounce';
+import { parsePastedRecipients } from '../../utils/pastedRecipients';
 import { API_URL } from '../../api/config';
 import BIMIAvatar from '../common/BimiAvatar';
 
@@ -33,7 +34,11 @@ type RecipientFieldProps = {
 };
 
 export type RecipientFieldHandle = {
-  flush: () => EmailAddress | null;
+  /**
+   * Adds what is still typed in the box (one or several addresses) and returns
+   * them.
+   */
+  flush: () => EmailAddress[];
 };
 
 interface ContactSuggestion {
@@ -344,26 +349,13 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
 
     useImperativeHandle(ref, () => ({
       flush: () => {
-        const trimmed = inputValue.trim();
-        if (!trimmed) return null;
-        if (isValidEmail(trimmed)) {
-          const parsed = parseEmailInput(trimmed);
-          if (parsed) {
-            const exists = value.some(
-              (c) => c.address.toLowerCase() === parsed.address.toLowerCase()
-            );
-            if (!exists) {
-              onChange([...value, parsed]);
-              setInputValue('');
-              setValidationError(false);
-              return parsed;
-            } else {
-              setInputValue('');
-              setValidationError(false);
-            }
-          }
-        }
-        return null;
+        if (!inputValue.trim()) return [];
+        const { recipients, invalid } = parsePastedRecipients(inputValue);
+        const added = newRecipients(recipients);
+        if (added.length) onChange([...valueRef.current, ...added]);
+        setInputValue(invalid.join(', '));
+        setValidationError(invalid.length > 0);
+        return added;
       },
     }));
 
@@ -423,28 +415,33 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
       if (inputValue.trim() && validationError) setValidationError(false);
     }, [inputValue, validationError]);
 
-    const checkAndAddEmail = async (emailInput: string) => {
-      const trimmedInput = emailInput.trim();
-      if (!isValidEmail(trimmedInput)) {
-        setValidationError(true);
-        return false;
-      }
-      const parsed = parseEmailInput(trimmedInput);
-      if (!parsed) {
-        setValidationError(true);
-        return false;
-      }
-      const exists = valueRef.current.some(
-        (c) => c.address.toLowerCase() === parsed.address.toLowerCase()
-      );
-      if (exists) {
-        setInputValue('');
-        setValidationError(false);
-        return false;
-      }
+    /** Not yet in this field (by address, any letter case) */
+    const newRecipients = (recipients: EmailAddress[]) => {
+      const have = new Set(valueRef.current.map((c) => c.address.toLowerCase()));
+      return recipients.filter((r) => !have.has(r.address.toLowerCase()));
+    };
 
+    /**
+     * Several addresses at once (pasted, or typed as a list): all chips appear
+     * together; anything that looked like an address but isn't stays in the box
+     * to fix. Each is saved as a contact in the background, one at a time.
+     */
+    const addRecipients = (text: string) => {
+      const { recipients, invalid } = parsePastedRecipients(text);
+      const added = newRecipients(recipients);
+      if (added.length) onChange([...valueRef.current, ...added]);
+      setInputValue((typed) => [typed.trim(), ...invalid].filter(Boolean).join(', '));
+      setValidationError(invalid.length > 0);
+      setShowSuggestions(false);
+      void (async () => {
+        for (const recipient of added) await saveAsContact(recipient);
+      })();
+      return recipients.length > 0;
+    };
+
+    /** Remembers an address in the contacts, if it isn't one yet. */
+    const saveAsContact = async (parsed: EmailAddress) => {
       try {
-        setIsCheckingContact(true);
         const contactResponse = await fetch(`${API_URL}/contacts/exists/${parsed.address}`, {
           method: 'GET',
           headers: {
@@ -472,6 +469,36 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
         }
       } catch (error) {
         console.error('Failed to check/add contact:', error);
+      }
+    };
+
+    const checkAndAddEmail = async (emailInput: string) => {
+      const trimmedInput = emailInput.trim();
+      if (!isValidEmail(trimmedInput)) {
+        // A list, or "Name <address>": take every address in it
+        setInputValue('');
+        if (addRecipients(trimmedInput)) return true;
+        setInputValue(trimmedInput);
+        setValidationError(true);
+        return false;
+      }
+      const parsed = parseEmailInput(trimmedInput);
+      if (!parsed) {
+        setValidationError(true);
+        return false;
+      }
+      const exists = valueRef.current.some(
+        (c) => c.address.toLowerCase() === parsed.address.toLowerCase()
+      );
+      if (exists) {
+        setInputValue('');
+        setValidationError(false);
+        return false;
+      }
+
+      try {
+        setIsCheckingContact(true);
+        await saveAsContact(parsed);
       } finally {
         setIsCheckingContact(false);
       }
@@ -549,17 +576,13 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
       setTimeout(async () => {
         const trimmedValue = inputValue.trim();
         if (trimmedValue) {
-          if (isValidEmail(trimmedValue)) {
-            const isDuplicate = value.some(
-              (item) => item.address.toLowerCase() === trimmedValue.toLowerCase()
-            );
-            if (!isDuplicate && !isCheckingContact) {
-              await checkAndAddEmail(trimmedValue);
-            } else {
-              setInputValue('');
-            }
-          } else {
-            setValidationError(true);
+          const isDuplicate = value.some(
+            (item) => item.address.toLowerCase() === trimmedValue.toLowerCase()
+          );
+          if (isDuplicate) {
+            setInputValue('');
+          } else if (!isCheckingContact) {
+            await checkAndAddEmail(trimmedValue);
           }
         }
         setShowSuggestions(false);
@@ -676,6 +699,12 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
                 if (validationError) setValidationError(false);
               }}
               onKeyDown={handleKeyDown}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData('text/plain');
+                if (parsePastedRecipients(text).recipients.length === 0) return;
+                e.preventDefault();
+                addRecipients(text);
+              }}
               onBlur={handleBlur}
               onFocus={handleFocus}
               autoComplete="chrome-off"

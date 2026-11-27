@@ -785,14 +785,14 @@ const Composer = () => {
     }
 
     // 1. Flush any pending text in recipient fields
-    const pendingTo = toRef.current?.flush();
-    const pendingCc = ccRef.current?.flush();
-    const pendingBcc = bccRef.current?.flush();
+    const pendingTo = toRef.current?.flush() ?? [];
+    const pendingCc = ccRef.current?.flush() ?? [];
+    const pendingBcc = bccRef.current?.flush() ?? [];
 
     // 2. Calculate effective 'To' recipients to check if we have any
     const effectiveTo = [...(composerData.to || [])];
-    if (pendingTo) {
-      effectiveTo.push(pendingTo);
+    if (pendingTo.length) {
+      effectiveTo.push(...pendingTo);
     }
 
     // 3. Validation: Require at least one recipient
@@ -805,9 +805,9 @@ const Composer = () => {
 
     // 4. Prepare data overrides
     const overrides: Partial<ComposedEmailData> = {};
-    if (pendingTo) overrides.to = effectiveTo;
-    if (pendingCc) overrides.cc = [...(composerData.cc || []), pendingCc];
-    if (pendingBcc) overrides.bcc = [...(composerData.bcc || []), pendingBcc];
+    if (pendingTo.length) overrides.to = effectiveTo;
+    if (pendingCc.length) overrides.cc = [...(composerData.cc || []), ...pendingCc];
+    if (pendingBcc.length) overrides.bcc = [...(composerData.bcc || []), ...pendingBcc];
 
     // Check if message is empty
     if (isMessageEmpty) {
@@ -843,14 +843,14 @@ const Composer = () => {
     }
 
     // 1. Flush any pending text in recipient fields
-    const pendingTo = toRef.current?.flush();
-    const pendingCc = ccRef.current?.flush();
-    const pendingBcc = bccRef.current?.flush();
+    const pendingTo = toRef.current?.flush() ?? [];
+    const pendingCc = ccRef.current?.flush() ?? [];
+    const pendingBcc = bccRef.current?.flush() ?? [];
 
     // 2. Calculate effective 'To' recipients
     const effectiveTo = [...(composerData.to || [])];
-    if (pendingTo) {
-      effectiveTo.push(pendingTo);
+    if (pendingTo.length) {
+      effectiveTo.push(...pendingTo);
     }
 
     // 3. Validation: Require at least one recipient for drafts
@@ -875,9 +875,9 @@ const Composer = () => {
 
     // 4. Prepare data overrides
     const overrides: Partial<ComposedEmailData> = {};
-    if (pendingTo) overrides.to = effectiveTo;
-    if (pendingCc) overrides.cc = [...(composerData.cc || []), pendingCc];
-    if (pendingBcc) overrides.bcc = [...(composerData.bcc || []), pendingBcc];
+    if (pendingTo.length) overrides.to = effectiveTo;
+    if (pendingCc.length) overrides.cc = [...(composerData.cc || []), ...pendingCc];
+    if (pendingBcc.length) overrides.bcc = [...(composerData.bcc || []), ...pendingBcc];
 
     handleMailAction({
       isDraft: true,

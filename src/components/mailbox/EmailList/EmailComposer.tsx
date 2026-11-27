@@ -943,24 +943,24 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   const handleSend = () => {
     cancelDebouncedSaveToDraft();
 
-    const pendingTo = toRef.current?.flush();
-    const pendingCc = ccRef.current?.flush();
-    const pendingBcc = bccRef.current?.flush();
+    const pendingTo = toRef.current?.flush() ?? [];
+    const pendingCc = ccRef.current?.flush() ?? [];
+    const pendingBcc = bccRef.current?.flush() ?? [];
 
     // composerData.to/cc/bcc are declared as {email, name} (ComposerEmail) but
     // RecipientField actually stores/emits {address, name} at runtime — see the
     // ComposerBasicData note above. Cast once here to the shape actually used below.
     const effectiveTo: RecipientEmailAddress[] = [
       ...((composerData.to || []) as unknown as RecipientEmailAddress[]),
-      ...(pendingTo ? [pendingTo] : []),
+      ...pendingTo,
     ];
     const effectiveCc: RecipientEmailAddress[] = [
       ...((composerData.cc || []) as unknown as RecipientEmailAddress[]),
-      ...(pendingCc ? [pendingCc] : []),
+      ...pendingCc,
     ];
     const effectiveBcc: RecipientEmailAddress[] = [
       ...((composerData.bcc || []) as unknown as RecipientEmailAddress[]),
-      ...(pendingBcc ? [pendingBcc] : []),
+      ...pendingBcc,
     ];
 
     if (effectiveTo.length === 0) {
@@ -990,9 +990,9 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     // ─────────────────────────────────────────────────────────────────────────
 
     const overrides: Record<string, unknown> = {};
-    if (pendingTo) overrides.to = effectiveTo;
-    if (pendingCc) overrides.cc = effectiveCc;
-    if (pendingBcc) overrides.bcc = effectiveBcc;
+    if (pendingTo.length) overrides.to = effectiveTo;
+    if (pendingCc.length) overrides.cc = effectiveCc;
+    if (pendingBcc.length) overrides.bcc = effectiveBcc;
 
     const sendNow = () => {
       handleMailAction({
@@ -1025,15 +1025,15 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
   const handleSaveDraft = () => {
     // Flush any pending text in recipient fields
-    const pendingTo = toRef.current?.flush();
-    const pendingCc = ccRef.current?.flush();
-    const pendingBcc = bccRef.current?.flush();
+    const pendingTo = toRef.current?.flush() ?? [];
+    const pendingCc = ccRef.current?.flush() ?? [];
+    const pendingBcc = bccRef.current?.flush() ?? [];
 
     // Calculate effective recipients for validation
     const effectiveTo: RecipientEmailAddress[] = [
       ...((composerData.to || []) as unknown as RecipientEmailAddress[]),
     ];
-    if (pendingTo) effectiveTo.push(pendingTo);
+    if (pendingTo.length) effectiveTo.push(...pendingTo);
 
     if (isQuotaExceeded) {
       toast.error({
@@ -1057,9 +1057,9 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     hasAutoSavedRef.current = true;
 
     const overrides: Record<string, unknown> = {};
-    if (pendingTo) overrides.to = effectiveTo;
-    if (pendingCc) overrides.cc = [...(composerData.cc || []), pendingCc];
-    if (pendingBcc) overrides.bcc = [...(composerData.bcc || []), pendingBcc];
+    if (pendingTo.length) overrides.to = effectiveTo;
+    if (pendingCc.length) overrides.cc = [...(composerData.cc || []), ...pendingCc];
+    if (pendingBcc.length) overrides.bcc = [...(composerData.bcc || []), ...pendingBcc];
 
     handleMailAction({
       isDraft: true,
