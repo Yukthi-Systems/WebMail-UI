@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { isComposerBodyEmpty } from '../../utils/composerBody';
 import { Box, Button, Flex, Dialog, Text, AlertDialog } from '@radix-ui/themes';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
@@ -238,36 +239,13 @@ const Composer = () => {
     }
   }, []);
 
-  // Check if message body is empty (excluding signature)
+  // Nothing written in the body: empty, or only the signature it starts with
   const isMessageEmpty = useMemo(() => {
-    if (!composerData.html) return true;
-
-    // Get signature HTML
     const selectedSignatureName = userSettings?.general?.selected_signature;
     const signatures = userSettings?.general?.signature || [];
     const selectedSignature = signatures.find((sig) => sig.name === selectedSignatureName);
-    const signatureHtml = selectedSignature
-      ? `<p><br></p><p><br></p>${selectedSignature.content}`
-      : '';
-
-    // Remove signature from HTML to check actual content
-    let contentWithoutSignature = composerData.html;
-    if (signatureHtml && composerData.html.includes(signatureHtml)) {
-      contentWithoutSignature = composerData.html.replace(signatureHtml, '');
-    }
-
-    // Remove any HTML tags and whitespace
-    const textContent = contentWithoutSignature
-      .replace(/<[^>]*>/g, '') // Remove HTML tags
-      .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
-      .replace(/\s+/g, '') // Remove all whitespace
-      .trim();
-
-    // Also check plain text version
-    const plainText = composerData.text ? composerData.text.trim() : '';
-
-    return textContent.length === 0 && plainText.length === 0;
-  }, [composerData.html, composerData.text, userSettings?.general]);
+    return isComposerBodyEmpty(composerData.html, selectedSignature?.content);
+  }, [composerData.html, userSettings?.general]);
 
   // Detect body text mentioning an attachment when none has been added
   const mightHaveForgottenAttachment = useMemo(
@@ -388,8 +366,8 @@ const Composer = () => {
       (composerData.cc && composerData.cc.length > 0) ||
       (composerData.bcc && composerData.bcc.length > 0) ||
       (composerData.subject && composerData.subject.trim().length > 0) ||
-      (composerData.html && composerData.html.trim().length > 0 && !isMessageEmpty) ||
-      (composerData.text && composerData.text.trim().length > 0);
+      !isMessageEmpty ||
+      (composerData.attachments?.length ?? 0) > 0;
 
     return hasContent;
   }, [composerData, isMessageEmpty]);
