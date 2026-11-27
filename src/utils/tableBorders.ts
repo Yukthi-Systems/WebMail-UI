@@ -25,13 +25,16 @@ const declares = (element: Element, property: string) =>
   new RegExp(`(^|;)\\s*${property}\\s*:`, 'i').test(element.getAttribute('style') ?? '');
 
 /**
- * Any border line (border, border-top, border-width...), not border-collapse /
- * border-spacing.
+ * A cell that draws a line itself (border, border-top, border-width...). `none`
+ * or `0` only removes one: Excel puts `border-top: none` on cells whose border
+ * came from a class the composer drops, so those cells have no line at all.
  */
 const declaresBorder = (element: Element) =>
-  /(^|;)\s*border(-(top|right|bottom|left|width|style|color)[a-z-]*)?\s*:/i.test(
-    element.getAttribute('style') ?? ''
-  );
+  Array.from(
+    (element.getAttribute('style') ?? '').matchAll(
+      /(?:^|;)\s*border(?:-(?:top|right|bottom|left))?(?:-(?:width|style))?\s*:\s*([^;]*)/gi
+    )
+  ).some(([, value]) => !/^(none|hidden|0(\.0+)?([a-z]+)?)(\s|!|$)/i.test(value.trim()));
 
 const addStyle = (element: Element, declarations: string[]) => {
   const own = element.getAttribute('style')?.trim().replace(/;$/, '');
@@ -45,7 +48,7 @@ const addStyle = (element: Element, declarations: string[]) => {
  *
  * Left as they are: quoted emails (a layout table must not gain borders),
  * tables with images or tables inside (signatures, layouts), and tables whose
- * cells set a border themselves (or `border="1"`).
+ * cells draw a border themselves (or `border="1"`).
  */
 export const addMissingTableBorders = (html: string): string => {
   if (!/<table[\s>]/i.test(html)) return html;

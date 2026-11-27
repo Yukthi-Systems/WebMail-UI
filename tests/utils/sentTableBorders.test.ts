@@ -140,11 +140,29 @@ describe('a pasted table in the sent email', () => {
     expect(unbroken(await send(signature))).toBe(signature);
   });
 
-  it('a table that sets its own borders (even none) is left alone', async () => {
-    const own = '<table><tr><td style="border: none">a</td><td>b</td></tr></table>';
+  it('a table whose cells draw their own borders is left alone', async () => {
+    const own = '<table><tr><td style="border: 2px dashed red">a</td><td>b</td></tr></table>';
     const withAttribute = '<table border="1"><tr><td>a</td></tr></table>';
     expect(addMissingTableBorders(own)).toBe(own);
     expect(addMissingTableBorders(withAttribute)).toBe(withAttribute);
+  });
+
+  it('a range copied from Excel (cells with border-top/left: none) gets borders', async () => {
+    // Excel draws the lines with a class and removes the shared ones inline
+    const excelRange = `<html><head><style><!--.xl65{border:.5pt solid windowtext;}--></style></head>
+<body><!--StartFragment--><table border=0 cellpadding=0 cellspacing=0 style='border-collapse:collapse'>
+<tr><td class=xl65>Month</td><td class=xl65 style='border-left:none'>Vendor</td></tr>
+<tr><td class=xl65 style='border-top:none'>Aug-26</td>
+<td class=xl65 style='border-top:none;border-left:none'>Umar Traders</td></tr>
+</table><!--EndFragment--></body></html>`;
+    const cells = cellsOf(await send(composeByPasting(excelRange)));
+    expect(cells).toHaveLength(4);
+    // The added border comes after the inline "none", so it wins on every side
+    for (const cell of cells) {
+      for (const side of ['Top', 'Right', 'Bottom', 'Left'] as const) {
+        expect(cell.style[`border${side}Style`]).toBe('solid');
+      }
+    }
   });
 
   it('an email without tables is sent unchanged', async () => {
