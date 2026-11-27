@@ -16,6 +16,8 @@
  */
 
 // src/components/layout/header.tsx
+import { ssoProfileAtom } from '../../../state/auth';
+import { senderName } from '../../../utils/displayName';
 import { FaBars, FaChevronDown, FaEnvelope, FaMagnifyingGlass } from 'react-icons/fa6';
 import { BgImageService } from '../../../utils/bimiService';
 import { TbPinned, TbPinnedOff } from 'react-icons/tb';
@@ -41,7 +43,6 @@ import { getCompanySlugFromPath } from '../../../utils/routeUtils';
 import SearchDropdown from './search';
 import type { SimplifiedEmail } from '../../../utils/email';
 
-
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,6 +53,7 @@ const Header = () => {
   const [sidebarPinned, setSidebarPinned] = useAtom(sidebarPinnedAtom);
   const userDetails = useAtomValue(userDetailsAtom);
   const [, setEmail] = useAtom(emailAddress);
+  const ssoProfile = useAtomValue(ssoProfileAtom);
   const setSelectedEmail = useSetAtom(selectedEmailAtom);
   const userSettings = useAtomValue(userSettingsAtom);
   const setUserSettings = useSetAtom(userSettingsAtom);
@@ -177,8 +179,7 @@ const Header = () => {
   useEffect(() => {
     if (userDetails) {
       const name =
-        userSettings?.general?.from_address?.name ||
-        userDetails?.email?.split('@')[0] ||
+        senderName(userSettings?.general?.from_address?.name, ssoProfile, userDetails?.email) ||
         ' Unknown Sender';
       const value = {
         name: name,
@@ -193,7 +194,7 @@ const Header = () => {
 
       setEmail(value);
     }
-  }, [userSettings, userDetails, setEmail]);
+  }, [userSettings, userDetails, ssoProfile, setEmail]);
 
   // ✅ NEW: Sync sidebar states from API settings on mount
   useEffect(() => {

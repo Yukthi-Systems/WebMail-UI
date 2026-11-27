@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { authHeaders } from '../../../../api/session';
 import React, { useState, useEffect, useRef } from 'react';
 import { FaMagnifyingGlass, FaFilter, FaXmark, FaSpinner } from 'react-icons/fa6';
 import { useAtom, useAtomValue } from 'jotai';
@@ -29,7 +30,7 @@ import AdvancedFilters from './AdvancedFilters';
 import type { FilterState, SearchDropdownProps } from './types';
 import { convertToBytes, getActiveFilterBadges, hasActiveFilters, mapComparator } from './utils';
 import { useDebounce } from 'use-debounce';
-import { csrfTokenAtom } from '../../../../state/auth';
+import { sessionTokenAtom } from '../../../../state/auth';
 import { API_URL } from '../../../../api/config';
 
 const MAX_VISIBLE_BADGES = 2;
@@ -88,7 +89,7 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
   const emailValue = isSentOrDrafts ? filters.to || '' : filters.from || '';
   const [debouncedEmailValue] = useDebounce(emailValue, 300);
   const [suggestions, setSuggestions] = useState<ContactSuggestion[]>([]);
-  const csrfToken = useAtomValue(csrfTokenAtom);
+  const sessionToken = useAtomValue(sessionTokenAtom);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   // Fetch email suggestions
@@ -103,7 +104,7 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
               credentials: 'include',
               headers: {
                 'Content-Type': 'application/json',
-                ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+                ...authHeaders(),
               },
             }
           );
@@ -134,7 +135,7 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({ className = '' }) => {
       }
     };
     fetchSuggestions();
-  }, [debouncedEmailValue, csrfToken]);
+  }, [debouncedEmailValue, sessionToken]);
 
   const handleSelectSuggestion = (email: string) => {
     const newFilters = {

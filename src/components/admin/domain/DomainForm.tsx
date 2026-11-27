@@ -52,7 +52,8 @@ const schema = yup.object().shape({
     .max(65535)
     .required('Sieve port is required'),
   is_active: yup.boolean().default(true),
-  is_v2_user: yup.boolean().default(false),
+  // Only used when these servers don't have a configuration yet
+  config_name: yup.string().trim().max(255).default(''),
 });
 
 type FormData = yup.InferType<typeof schema>;
@@ -84,7 +85,7 @@ function DomainForm() {
       sieve_server: '',
       sieve_port: 4190,
       is_active: true,
-      is_v2_user: false,
+      config_name: '',
     },
   });
 
@@ -99,15 +100,16 @@ function DomainForm() {
         sieve_server: domainData.data.sieve_server,
         sieve_port: domainData.data.sieve_port,
         is_active: domainData.data.is_active,
-        is_v2_user: domainData.data.is_v2_user,
+        config_name: domainData.data.config_name ?? '',
       });
     }
   }, [domainData, reset, isEditMode]);
 
-  const onSubmit = (data: FormData) => {
+  const onSubmit = ({ config_name, ...domain }: FormData) => {
     if (isEditMode && params.domain) {
+      // The configuration follows the servers; its name is only set on create
       updateMutation.mutate(
-        { domain: params.domain, data },
+        { domain: params.domain, data: domain },
         {
           onSuccess: () => {
             navigate({ to: '/1219/admin/domain' });
@@ -115,7 +117,8 @@ function DomainForm() {
         }
       );
     } else {
-      createMutation.mutate(data as unknown as CreateDomainData, {
+      const data: CreateDomainData = { ...domain, ...(config_name ? { config_name } : {}) };
+      createMutation.mutate(data, {
         onSuccess: () => {
           navigate({ to: '/1219/admin/domain' });
         },
@@ -210,31 +213,29 @@ function DomainForm() {
                   )}
                 />
 
-                <Controller
-                  name="is_v2_user"
-                  control={control}
-                  render={({ field }) => (
-                    <Flex align="center" gap="3">
-                      <Switch
-                        id="is_v2_user"
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                      <div className="flex flex-col">
-                        <label
-                          htmlFor="is_v2_user"
-                          className="text-sm font-medium text-[var(--gray-12)] cursor-pointer"
-                        >
-                          Is External User
-                        </label>
-                        <Text size="1" color="gray">
-                          {' '}
-                          Users of this domain come from an external system
-                        </Text>
-                      </div>
-                    </Flex>
-                  )}
-                />
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="config_name"
+                    className="text-sm font-medium text-[var(--gray-12)]"
+                  >
+                    Configuration name <span className="text-[var(--gray-9)]">(optional)</span>
+                  </label>
+                  <input
+                    id="config_name"
+                    type="text"
+                    placeholder="e.g. Cloud 27"
+                    readOnly={isEditMode}
+                    className={`w-full px-4 py-2.5 bg-[var(--gray-1)] border border-[var(--gray-6)] rounded-lg text-[var(--gray-12)] placeholder:text-[var(--gray-9)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-9)] focus:border-[var(--accent-9)] transition-all ${
+                      isEditMode ? 'bg-[var(--gray-3)] cursor-not-allowed' : ''
+                    }`}
+                    {...register('config_name')}
+                  />
+                  <Text size="1" color="gray">
+                    {isEditMode
+                      ? 'Set by the mail servers; domains on the same servers share it'
+                      : 'Used only if these servers have no configuration yet'}
+                  </Text>
+                </div>
               </div>
             </div>
           </div>

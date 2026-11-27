@@ -19,7 +19,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, Outlet, redirect, useRouter } from '@tanstack/react-router';
 import { webmailStore } from '../store';
-import { csrfTokenAtom } from '../state/auth';
+import { sessionTokenAtom } from '../state/auth';
 import { useEffect } from 'react';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { GlobalLoader } from '../components/common/GlobalLoading'; // Add this import
@@ -39,8 +39,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       return;
     }
 
-    const csrfToken = webmailStore.get(csrfTokenAtom);
-    if (!csrfToken) {
+    const sessionToken = webmailStore.get(sessionTokenAtom);
+    if (!sessionToken) {
       throw redirect({
         to: '/login',
         search: { redirect: location.href },

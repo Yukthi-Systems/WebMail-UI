@@ -15,8 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store.ts';
+import { authHeaders } from './session';
 import { API_URL } from './config.ts';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchWithAuth } from './fetchWrapper.ts';
@@ -66,8 +65,6 @@ function base64ToBlob(base64: string, mimeType = 'application/octet-stream'): Bl
 }
 
 export const sendMailV2 = async (composedData: ComposerRequest): Promise<void> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   delete composedData.timestamp;
 
   const { attachments, in_line_attachments, message_id, is_draft, ...rest } = composedData;
@@ -114,7 +111,7 @@ export const sendMailV2 = async (composedData: ComposerRequest): Promise<void> =
     method: 'POST',
     credentials: 'include',
     headers: {
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: formData,
   });
@@ -127,8 +124,6 @@ export const sendMailV2 = async (composedData: ComposerRequest): Promise<void> =
 };
 
 export const sendMail = async (composedData: ComposerRequest): Promise<void> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   delete composedData.timestamp;
 
   const FinalComposedData = {
@@ -151,7 +146,7 @@ export const sendMail = async (composedData: ComposerRequest): Promise<void> => 
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(FinalComposedData),
   });
@@ -164,8 +159,6 @@ export const sendMail = async (composedData: ComposerRequest): Promise<void> => 
 };
 
 export const draftMail = async (composerData: ComposerRequest): Promise<void> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   const FinalComposedData = {
     ...composerData,
     headers: {
@@ -206,7 +199,7 @@ export const draftMail = async (composerData: ComposerRequest): Promise<void> =>
     method: 'POST',
     credentials: 'include',
     headers: {
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: formData,
   });

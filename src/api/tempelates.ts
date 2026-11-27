@@ -17,8 +17,7 @@
 
 // src/api/tempelates.ts
 
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store';
+import { authHeaders } from './session';
 import { API_URL } from './config';
 import { fetchWithAuth } from './fetchWrapper';
 
@@ -79,7 +78,6 @@ interface UpdateTemplateData {
 export const getEmailTemplates = async (
   isPublic: boolean = false
 ): Promise<EmailTemplateListItem[]> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const params = new URLSearchParams();
 
   if (isPublic !== undefined) {
@@ -93,7 +91,7 @@ export const getEmailTemplates = async (
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
 
@@ -107,14 +105,12 @@ export const getEmailTemplates = async (
 
 // Fetch single template by ID (full details)
 export const getEmailTemplateById = async (templateId: string): Promise<EmailTemplate> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   const res = await fetchWithAuth(`${API_URL}/email/template/${templateId}`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
 
@@ -130,14 +126,12 @@ export const getEmailTemplateById = async (templateId: string): Promise<EmailTem
 export const createEmailTemplate = async (
   templateData: CreateTemplateData
 ): Promise<EmailTemplate> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   const res = await fetchWithAuth(`${API_URL}/email/template`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(templateData),
   });
@@ -154,14 +148,12 @@ export const updateEmailTemplate = async (
   templateId: string,
   templateData: UpdateTemplateData
 ): Promise<EmailTemplate> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   const res = await fetchWithAuth(`${API_URL}/email/template/${templateId}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(templateData),
   });
@@ -175,14 +167,12 @@ export const updateEmailTemplate = async (
 };
 
 export const deleteEmailTemplate = async (templateId: string): Promise<void> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   const res = await fetchWithAuth(`${API_URL}/email/template/${templateId}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
 

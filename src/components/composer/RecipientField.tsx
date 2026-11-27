@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { authHeaders } from '../../api/session';
 import { Box, Flex, IconButton, Text, TextField } from '@radix-ui/themes';
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { type EmailAddress } from '../../state/composer';
@@ -22,8 +23,6 @@ import { FaX, FaCheck } from 'react-icons/fa6';
 import { addressParser } from 'postal-mime';
 import { useDebounce } from 'use-debounce';
 import { API_URL } from '../../api/config';
-import { csrfTokenAtom } from '../../state/auth';
-import { webmailStore } from '../../store';
 import BIMIAvatar from '../common/BimiAvatar';
 
 type RecipientFieldProps = {
@@ -324,7 +323,6 @@ const SuggestionRow = ({
 /* ── Main component ─────────────────────────────────────── */
 const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
   ({ label, placeholder, value, onChange }, ref) => {
-    const csrfToken = webmailStore.get(csrfTokenAtom);
     const inputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [inputValue, setInputValue] = useState('');
@@ -382,7 +380,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
                 credentials: 'include',
                 headers: {
                   'Content-Type': 'application/json',
-                  ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+                  ...authHeaders(),
                 },
               }
             );
@@ -419,7 +417,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
       return () => {
         cancelled = true;
       };
-    }, [debouncedInput, csrfToken]);
+    }, [debouncedInput]);
 
     useEffect(() => {
       if (inputValue.trim() && validationError) setValidationError(false);
@@ -451,7 +449,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+            ...authHeaders(),
           },
           credentials: 'include',
         });
@@ -461,7 +459,7 @@ const RecipientField = forwardRef<RecipientFieldHandle, RecipientFieldProps>(
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+              ...authHeaders(),
             },
             credentials: 'include',
             body: JSON.stringify({

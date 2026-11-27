@@ -18,14 +18,14 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import Layout from '../components/common/Layout';
 import { webmailStore } from '../store';
-import { csrfTokenAtom } from '../state/auth';
+import { sessionTokenAtom } from '../state/auth';
 import { loadWorkspaceFolders } from '../utils/workspaceFolders';
 import { loadUserSettings } from '../utils/workspaceSettings';
 
 export const Route = createFileRoute('/_baselayout')({
   beforeLoad: () => {
-    const csrfToken = webmailStore.get(csrfTokenAtom);
-    if (!csrfToken) {
+    const sessionToken = webmailStore.get(sessionTokenAtom);
+    if (!sessionToken) {
       throw redirect({ to: '/login' });
     }
   },

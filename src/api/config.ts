@@ -25,6 +25,13 @@ export const API_URL = API_CONFIG.baseURL;
 
 export const authCheck = async (status: number): Promise<void> => {
   if (status === 401 || status === 406) {
+    // An SSO user gets a new session silently: reload to redo the requests with it
+    const { renewSsoSession, clearSession } = await import('./session');
+    if (await renewSsoSession()) {
+      window.location.reload();
+      return;
+    }
+    clearSession();
     localStorage.clear();
     const slug = getCompanySlugFromPath(window.location.pathname);
     window.location.href = slug ? `/${slug}` : '/login';

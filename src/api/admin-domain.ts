@@ -28,7 +28,9 @@ export type Domain = {
   sieve_server: string;
   sieve_port: number;
   is_active: boolean;
-  is_v2_user: boolean;
+  /** Mail server configuration (shared by the domains on the same servers) */
+  config_id?: number | string;
+  config_name?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -42,7 +44,11 @@ export type CreateDomainData = {
   sieve_server: string;
   sieve_port: number;
   is_active: boolean;
-  is_v2_user: boolean;
+  /**
+   * Name for a new mail server configuration; not used when an existing one
+   * matches.
+   */
+  config_name?: string;
 };
 
 export type UpdateDomainData = Partial<CreateDomainData>;

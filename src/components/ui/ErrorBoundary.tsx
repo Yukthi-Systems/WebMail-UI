@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { clearSession } from '../../api/session';
 import { useRouter } from '@tanstack/react-router';
 import type { ErrorComponentProps } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
@@ -42,6 +43,7 @@ export function ErrorBoundary({ error }: ErrorComponentProps) {
 
   // Simulate logout function
   const handleLogout = () => {
+    clearSession();
     localStorage.clear();
     resetLayoutCache();
     router.navigate({ to: '/login' });

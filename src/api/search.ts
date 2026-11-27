@@ -16,8 +16,7 @@
  */
 
 // src/api/search.ts
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store';
+import { authHeaders } from './session';
 import { API_URL, authCheck } from './config';
 import { fetchWithAuth } from './fetchWrapper';
 import { sanitizeFolderPath } from './mailbox';
@@ -88,16 +87,15 @@ export interface SearchApiResponse {
   data: {
     data: SimplifiedEmail[];
     total_count: number;
-    /** Conversation search: emails in the matched conversations */
+    /** Conversation search: emails in the matched conversations. */
     total_messages?: number;
   };
 }
 
 const searchHeaders = () => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   return {
     'Content-Type': 'application/json',
-    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    ...authHeaders(),
   };
 };
 

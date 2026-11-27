@@ -16,14 +16,25 @@
  */
 
 import { useMutation } from '@tanstack/react-query';
+import { ssoLogout } from '@rjyspl/phoenix-sso-react';
 import { logout } from '../api/auth.ts';
+import { clearSession } from '../api/session';
+import { SSO_URL } from '../api/sso';
+import { loginMethodAtom } from '../state/auth';
+import { webmailStore } from '../store';
 
 /** Signs out and opens the login page at `loginPath`. */
 export function useLogout() {
   return useMutation({
     mutationFn: async (loginPath: string) => {
+      const signedInWithSso = webmailStore.get(loginMethodAtom) === 'sso';
       // Signed out on this device even if the server can't be reached
       await logout().catch(() => undefined);
+      // Only an SSO login ends the SSO session (it also signs out of the other apps)
+      if (signedInWithSso) {
+        await ssoLogout(SSO_URL).catch((err) => console.error('SSO logout failed', err));
+      }
+      clearSession();
       localStorage.clear();
       sessionStorage.clear();
       // A full page load drops the cached data, state and timers at once. Clearing

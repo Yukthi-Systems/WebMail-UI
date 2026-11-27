@@ -40,7 +40,11 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
   const [searchTerm, setSearchTerm] = useState('');
   const userDetails = useAtomValue(userDetailsAtom);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+  }>({
     left: 0,
   });
   const location = useLocation();
@@ -54,13 +58,15 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
     !!selectedTemplateId
   );
 
+  // Addresses are stored in lower case; the signed-in one may not be
+  const myEmail = userDetails?.email?.toLowerCase();
+  const isMine = (createdBy?: string) => createdBy?.toLowerCase() === myEmail;
+
   const personalList = (personalTemplates || []).filter(
-    (t) => !t.created_by || t.created_by === userDetails?.email
+    (t) => !t.created_by || isMine(t.created_by)
   );
 
-  const sharedList = (sharedTemplates || []).filter(
-    (t) => t.created_by && t.created_by !== userDetails?.email
-  );
+  const sharedList = (sharedTemplates || []).filter((t) => t.created_by && !isMine(t.created_by));
 
   const allTemplates = [
     ...personalList.map((t) => ({ ...t, source: 'personal' as const })),

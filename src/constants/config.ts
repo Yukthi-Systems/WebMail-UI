@@ -26,6 +26,8 @@ declare global {
       VITE_DNS_API_URL?: string;
       VITE_PASSWORD_RESET_URL?: string;
       VITE_BUILD_ID?: string;
+      VITE_SSO_URL?: string;
+      VITE_SSO_APP_ID?: string;
     };
   }
 }
@@ -38,16 +40,17 @@ export const API_CONFIG = {
 
   timeout: 30000,
   version: window._env_?.VITE_APP_VERSION || import.meta.env.VITE_APP_VERSION || '1.5.7-beta',
-  recaptch_key:
-    window._env_?.VITE_RECAPTCHA_KEY ||
-    import.meta.env.VITE_RECAPTCHA_KEY ||
-    '',
+  recaptch_key: window._env_?.VITE_RECAPTCHA_KEY || import.meta.env.VITE_RECAPTCHA_KEY || '',
   DNS_API_URL: window._env_?.VITE_DNS_API_URL || import.meta.env.VITE_DNS_API_URL,
   // Differs per deployment (prod vs RC), so it is a runtime setting
   passwordResetURL:
     window._env_?.VITE_PASSWORD_RESET_URL ||
     import.meta.env.VITE_PASSWORD_RESET_URL ||
     'https://admin.mailservice25.com/reset/admin?mode=identity',
+  // Single sign-on service, and this app's id registered in it
+  ssoURL:
+    window._env_?.VITE_SSO_URL || import.meta.env.VITE_SSO_URL || 'https://sso.test.yukthi.net',
+  ssoAppId: window._env_?.VITE_SSO_APP_ID || import.meta.env.VITE_SSO_APP_ID || 'webmail',
   // Deployed build (from env-config.js) vs the build of the running code
   serverBuildId: window._env_?.VITE_BUILD_ID || '',
   bundleBuildId: typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '',

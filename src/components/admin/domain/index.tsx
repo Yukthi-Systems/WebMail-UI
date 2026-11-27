@@ -133,7 +133,7 @@ function DomainList() {
       const result = await getDomainList(1, 100000, debouncedSearch || undefined);
       const domains = result?.data ?? [];
       const header =
-        'domain,smtp_server,smtp_port,imap_server,imap_port,sieve_server,sieve_port,is_active,is_v2_user\n';
+        'domain,smtp_server,smtp_port,imap_server,imap_port,sieve_server,sieve_port,is_active\n';
       const body = domains
         .map((d) =>
           [
@@ -145,7 +145,6 @@ function DomainList() {
             d.sieve_server,
             d.sieve_port,
             d.is_active,
-            d.is_v2_user,
           ].join(',')
         )
         .join('\n');
@@ -386,7 +385,7 @@ function DomainList() {
                             Status
                           </th>
                           <th className="py-3 px-6 text-left text-xs font-bold text-[var(--gray-11)] uppercase tracking-wide text-center">
-                            External User
+                            Server Config
                           </th>
                           <th className="py-3 px-6 text-left text-xs font-bold text-[var(--gray-11)] uppercase tracking-wide">
                             Created
@@ -436,16 +435,10 @@ function DomainList() {
                                 ></div>
                               </div>
                             </td>
-                            <td className="py-3 px-6">
-                              <div className="flex items-center justify-center w-full">
-                                <div
-                                  className={`w-6 h-6 rounded-full ${
-                                    domain.is_v2_user
-                                      ? 'bg-[var(--green-9)] text-white'
-                                      : 'bg-[var(--red-9)] text-white'
-                                  }`}
-                                ></div>
-                              </div>
+                            <td className="py-3 px-6 text-center">
+                              <span className="text-[var(--gray-11)] text-xs font-medium">
+                                {domain.config_name || '—'}
+                              </span>
                             </td>
                             <td className="py-3 px-6">
                               <span className="text-[var(--gray-11)] text-xs font-medium">

@@ -15,8 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store';
+import { authHeaders } from './session';
 import { API_URL, authCheck } from './config';
 import { fetchWithAuth } from './fetchWrapper';
 
@@ -179,13 +178,12 @@ export type GeneralSettings = {
 export type UserSettings = GeneralSettings;
 
 export const userSettings = async (): Promise<UserSettings> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/user/settings`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
 
@@ -205,13 +203,12 @@ export type UpdateResponse = {
 };
 
 export const updateUserSettings = async (data: UserSettings): Promise<UpdateResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/user/settings`, {
     method: 'PUT',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(data),
   });

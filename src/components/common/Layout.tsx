@@ -21,6 +21,7 @@ import LeftNavigation from './LeftPanel';
 import Header from './header';
 import ShortcutsModal from './ShortcutModal';
 import { useTourTipsSync } from '../../hooks/useTourTipsSync';
+import { useSsoSessionRefresh } from '../../hooks/useSsoSessionRefresh';
 import { useFoldersFullPath, useFolderQuota } from '../../hooks/useFolders';
 import { useSetAtom } from 'jotai';
 import { folderQuotaAtom } from '../../state/folders';
@@ -34,6 +35,7 @@ const Layout = () => {
   const setFolderQuota = useSetAtom(folderQuotaAtom);
   const setUserSettings = useSetAtom(userSettingsAtom);
   useTourTipsSync();
+  useSsoSessionRefresh();
   useFoldersFullPath();
 
   const { data: quotaData } = useFolderQuota();

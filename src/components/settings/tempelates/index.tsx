@@ -134,7 +134,11 @@ const EmailTemplateManager = () => {
       handleCloseModal();
     } catch (err) {
       console.error('Failed to save template:', err);
-      toast.error({ description: 'Failed to save template. Please try again.' });
+      // e.g. "You already have a template named '…'" (names are unique per user)
+      toast.error({
+        description:
+          (err instanceof Error && err.message) || 'Failed to save template. Please try again.',
+      });
     }
   };
 

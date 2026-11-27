@@ -110,9 +110,12 @@ const DomainDetailsModal = ({ isOpen, onClose, data }: DomainDetailsModalProps) 
                   Inactive
                 </span>
               )}
-              {data.is_v2_user && (
-                <span className="px-4 py-2 text-xs font-bold rounded-full bg-[var(--green-9)] text-white shadow-lg shadow-[var(--green-9)]/20 uppercase tracking-wide">
-                  External User
+              {data.config_name && (
+                <span
+                  className="px-4 py-2 text-xs font-bold rounded-full bg-[var(--gray-4)] text-[var(--gray-12)]"
+                  title="Mail server configuration, shared by the domains on the same servers"
+                >
+                  Config: {data.config_name}
                 </span>
               )}
             </div>

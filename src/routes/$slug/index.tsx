@@ -17,13 +17,13 @@
 
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { webmailStore } from '../../store';
-import { csrfTokenAtom } from '../../state/auth';
+import { sessionTokenAtom } from '../../state/auth';
 import { userSettingsAtom } from '../../state/settings';
 
 export const Route = createFileRoute('/$slug/')({
   beforeLoad: ({ params }) => {
-    const csrfToken = webmailStore.get(csrfTokenAtom);
-    if (!csrfToken) return; // parent CompanyRoot handles showing branded login
+    const sessionToken = webmailStore.get(sessionTokenAtom);
+    if (!sessionToken) return; // parent CompanyRoot handles showing branded login
 
     const cachedSettings = webmailStore.get(userSettingsAtom);
     const defaultFolder = cachedSettings?.email?.default_view || 'INBOX';
