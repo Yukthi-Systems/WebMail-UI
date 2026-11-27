@@ -31,6 +31,7 @@ import { folderDetailsAtom } from '../../../../state/folders';
 import { useSpecialFolderPaths } from '../../../../hooks/useFolders';
 import { getSentFolderPath } from '../../../../utils/folderUtils';
 import { useMarkSeenOnOpen } from '../../../../hooks/useMarkSeenOnOpen';
+import { useMarkConversationRead } from '../../../../hooks/useMarkConversationRead';
 import { isConversationView } from '../../../../utils/emailListUtils';
 import { userSettingsAtom } from '../../../../state/settings';
 import { useParams } from '@tanstack/react-router';
@@ -309,6 +310,14 @@ const EmailViewer = ({
     isLoading,
     seenOnServer: !!emailViewData?.flags?.includes('\\Seen'),
     active: isThreadSettled && !isThreadedViewActive,
+  });
+
+  // Shown as a conversation: opening it reads all of it (like Gmail)
+  useMarkConversationRead({
+    emails: listofThreadEmails,
+    folder: viewFolder,
+    openKey: `${viewFolder}:${uid}`,
+    active: isThreadedViewActive,
   });
 
   // The email itself is gone (404) is shown by the single view; other failures here

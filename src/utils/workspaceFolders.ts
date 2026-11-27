@@ -53,6 +53,30 @@ export const withFolderStatus = (
     ? folders.map((f) => (f.folder_name === folderName ? { ...f, status } : f))
     : folders;
 
+/** Sets one folder's unread count (from the server); other folders stay as they are. */
+export const withFolderUnreadCount = (
+  folders: FolderDetail[],
+  folderName: string,
+  unreadCount: number
+): FolderDetail[] =>
+  Array.isArray(folders)
+    ? folders.map((f) =>
+        f.folder_name === folderName && f.unread_count !== unreadCount
+          ? { ...f, unread_count: unreadCount }
+          : f
+      )
+    : folders;
+
+// Changes the app made to a folder's unread count itself (mark read, move...).
+// A server count asked for before such a change is older than what is shown.
+const localUnreadChanges = new Map<string, number>();
+
+export const noteLocalUnreadChange = (folderName: string) =>
+  localUnreadChanges.set(folderName, (localUnreadChanges.get(folderName) ?? 0) + 1);
+
+export const localUnreadChangeCount = (folderName: string) =>
+  localUnreadChanges.get(folderName) ?? 0;
+
 /**
  * Loads the folder list before the app renders (route loader, while the loading
  * screen is up), so everything derived from it is right on the first request:

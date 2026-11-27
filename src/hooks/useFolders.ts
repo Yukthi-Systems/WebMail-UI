@@ -19,7 +19,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { noteUidValidity } from '../utils/emailCache';
 import { folders, foldersFullPath, folderUidValidity, foldersQuota } from '../api/mailbox';
 import { buildFolderTree } from '../utils/folderUtils';
-import { FOLDERS_FULL_PATH_QUERY_KEY, mergeFolderDetails } from '../utils/workspaceFolders';
+import {
+  FOLDERS_FULL_PATH_QUERY_KEY,
+  localUnreadChangeCount,
+  mergeFolderDetails,
+  noteLocalUnreadChange,
+  withFolderUnreadCount,
+} from '../utils/workspaceFolders';
 
 import { type EmailFolders, defaultFolders } from '../api/mailbox';
 import { useEffect, useMemo, useCallback } from 'react';
@@ -91,9 +97,7 @@ interface FolderItem {
 
 // Update the hook to handle the correct data structure
 export const useFoldersDropdown = () => {
-  // Typed as a union (rather than the more specific FoldersFullPathResponse) to keep
-  // both branches below meaningful — this hook defends against the response arriving
-  // as either a bare array or the wrapped { folders } shape.
+ 
   const { data, ...queryResult } = useQuery<FolderItem[] | FoldersFullPathResponse>({
     queryKey: ['foldersFullPath'],
     queryFn: foldersFullPath as unknown as () => Promise<FolderItem[] | FoldersFullPathResponse>,
@@ -126,6 +130,7 @@ export function useUpdateFolderUnreadCount(folderName: string) {
 
   return useCallback(
     (delta: number) => {
+      noteLocalUnreadChange(folderName);
       setFolderDetails((prev: FolderDetail[]) =>
         Array.isArray(prev)
           ? prev.map((f) =>
@@ -147,6 +152,7 @@ export function useUpdateAnyFolderUnreadCount() {
 
   return useCallback(
     (folderName: string, delta: number) => {
+      noteLocalUnreadChange(folderName);
       setFolderDetails((prev: FolderDetail[]) =>
         Array.isArray(prev)
           ? prev.map((f) =>
@@ -163,12 +169,23 @@ export function useUpdateAnyFolderUnreadCount() {
 
 export function useFolderUidValidity(folderPath?: string) {
   const queryClient = useQueryClient();
-  return useQuery<{ MESSAGES: number; UIDNEXT: number; UIDVALIDITY: number }, Error>({
+  const setFolderDetails = useSetAtom(folderDetailsAtom);
+  return useQuery<
+    { MESSAGES: number; UIDNEXT: number; UIDVALIDITY: number; UNSEEN?: number },
+    Error
+  >({
     queryKey: ['folderUidValidity', folderPath],
     queryFn: async () => {
+      const changesBefore = localUnreadChangeCount(folderPath!);
       const response = await folderUidValidity(folderPath!);
       // A new UIDVALIDITY voids every UID cached for this folder
       noteUidValidity(queryClient, folderPath!, response.data?.UIDVALIDITY);
+      // The real unread count, so the folder's badge corrects itself (new mail,
+      // read on another device). Not if the app changed it meanwhile: that is newer.
+      const unseen = response.data?.UNSEEN;
+      if (typeof unseen === 'number' && localUnreadChangeCount(folderPath!) === changesBefore) {
+        setFolderDetails((prev) => withFolderUnreadCount(prev, folderPath!, unseen));
+      }
       return response.data;
     },
     enabled: !!folderPath,

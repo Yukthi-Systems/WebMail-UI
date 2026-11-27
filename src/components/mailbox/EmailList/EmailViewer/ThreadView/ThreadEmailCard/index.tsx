@@ -61,7 +61,6 @@ import {
   useUpdateFolderUnreadCount,
 } from '../../../../../../hooks/useFolders';
 import FolderDialog from '../../../MoveEmail';
-import { useMarkSeenOnOpen } from '../../../../../../hooks/useMarkSeenOnOpen';
 import { printEmail, viewEmailInWindow, viewEmailRaw } from '../../../../../../utils/emailPrint';
 import { userDetailsAtom } from '../../../../../../state/userDetails';
 import { useCreateEmailTemplate, useTemplateActions } from '../../../../../../hooks/useTempelate';
@@ -80,6 +79,11 @@ interface ThreadEmailCardProps {
   threadEmail: EmailLike;
   folderPath: string;
   isCurrentEmail: boolean;
+  /**
+   * Was unread when the conversation was opened: still shown as new while it is
+   * open.
+   */
+  isNew?: boolean;
   onContentLoaded?: (content: string) => void;
   foundedIn: string;
   onReply?: (email: EmailLike) => void;
@@ -102,6 +106,7 @@ const ThreadEmailCard = ({
   threadEmail,
   folderPath,
   isCurrentEmail,
+  isNew = false,
   onContentLoaded,
   foundedIn,
   onReply = () => {},
@@ -234,16 +239,7 @@ const ThreadEmailCard = ({
     onContentLoaded?.(parsedEmail.html || parsedEmail.text || '');
   }, [parsedEmail, threadEmail.id, folderPath, isExpanded, onContentLoaded]);
 
-  // Opening a card reads the email: mark it once (in its own folder)
-  useMarkSeenOnOpen({
-    uid,
-    folder: folderPath,
-    isUnread: !threadEmail.FLAGS?.includes('\\Seen'),
-    isLoaded: !!emailViewData,
-    isLoading: isViewLoading,
-    seenOnServer: !!emailViewData?.flags?.includes('\\Seen'),
-    active: isExpanded && !pending,
-  });
+  // Marked read with the whole conversation when it is opened (useMarkConversationRead)
 
   const renderHeaderInfo = () => {
     const omitKeys = [
@@ -290,6 +286,13 @@ const ThreadEmailCard = ({
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
+  };
+
+  // Anywhere on the header opens / closes the email (buttons and links stop
+  // their clicks). Not after selecting text in it, e.g. to copy an address.
+  const toggleFromHeader = () => {
+    if (window.getSelection()?.toString()) return;
+    toggleExpanded();
   };
 
   const handleFolderSelect = (folder: Folder, action: 'move' | 'copy') => {
@@ -532,8 +535,19 @@ const ThreadEmailCard = ({
           </div>
         )}
 
-        {/* Main Card Content */}
-        <div className="p-3">
+        {/* Main Card Content: the whole header is the click target */}
+        <div
+          className="p-3 cursor-pointer"
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
+          onClick={toggleFromHeader}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+            e.preventDefault();
+            toggleExpanded();
+          }}
+        >
           {/* Header: avatar + content column */}
           <div className="flex items-start gap-2 md:gap-3">
             <div className="mt-0.5 md:mt-1 flex-shrink-0">
@@ -544,19 +558,16 @@ const ThreadEmailCard = ({
               {/* Row 1: sender name (flex-1, truncates) | actions | expand */}
               <div className="flex items-center gap-2 mb-1">
                 {/* Clickable sender name */}
-                <div
-                  className="flex-1 min-w-0 flex items-center gap-1.5 cursor-pointer overflow-hidden"
-                  onClick={toggleExpanded}
-                >
-                  {!readStatus && (
+                <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+                  {(!readStatus || isNew) && (
                     <span
                       className="w-2 h-2 rounded-full bg-[var(--blue-9)] flex-shrink-0"
-                      title="Unread"
+                      title={readStatus ? 'New since you opened this conversation' : 'Unread'}
                     />
                   )}
                   <span
                     title={senderEmailParsed}
-                    className={`text-sm md:text-base truncate ${!readStatus ? 'font-bold text-[var(--gray-12)]' : 'font-medium text-[var(--gray-12)]'}`}
+                    className={`text-sm md:text-base truncate ${!readStatus || isNew ? 'font-bold text-[var(--gray-12)]' : 'font-medium text-[var(--gray-12)]'}`}
                   >
                     {senderName} &lt;{senderEmailParsed}&gt;
                   </span>
@@ -629,8 +640,7 @@ const ThreadEmailCard = ({
 
               {/* Row 2: Subject — always full width, never competes with toolbar */}
               <div
-                className={`text-sm ${readStatus ? 'font-medium' : ''} text-[var(--gray-11)] mb-2 line-clamp-2 md:line-clamp-1 cursor-pointer`}
-                onClick={toggleExpanded}
+                className={`text-sm ${readStatus ? 'font-medium' : ''} text-[var(--gray-11)] mb-2 line-clamp-2 md:line-clamp-1`}
               >
                 {decodeWords(threadEmail.Subject || '') || '(No Subject)'}
               </div>
@@ -667,10 +677,7 @@ const ThreadEmailCard = ({
 
           {/* ✅ Recipients section - FULL WIDTH, outside the flex container */}
           {isExpanded && (
-            <div
-              className="mt-3 ml-0 md:ml-9 text-xs text-[var(--gray-10)] space-y-1"
-              onClick={toggleExpanded}
-            >
+            <div className="mt-3 ml-0 md:ml-9 text-xs text-[var(--gray-10)] space-y-1">
               <RecipientSection recipients={toRecipients} label="To" />
               <RecipientSection recipients={ccRecipients} label="Cc" />
               <RecipientSection recipients={bccRecipients} label="Bcc" />

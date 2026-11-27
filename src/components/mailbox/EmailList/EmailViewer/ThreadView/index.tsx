@@ -58,6 +58,8 @@ interface ThreadViewProps {
   onSaveAsContact?: () => void;
 }
 
+/** UIDs are per folder. */
+const emailKey = (email: EmailLike) => `${email.folderPath ?? ''}:${email.id}`;
 export const ThreadView = ({
   listofThreadEmails,
   messageId,
@@ -110,8 +112,21 @@ export const ThreadView = ({
     !isLoadingInitial && !!openEmail
   );
 
+  // Unread when the conversation was opened: opening marks them read, but they
+  // stay marked as new while it is open, so it's clear which ones weren't read yet
+  const openKey = `${folderPath}:${messageId}`;
+  const newAtOpen = useRef({ openKey: '', keys: new Set<string>() });
+  if (!isLoadingInitial && listofThreadEmails.length > 0 && newAtOpen.current.openKey !== openKey) {
+    newAtOpen.current = {
+      openKey,
+      keys: new Set(listofThreadEmails.filter(isUnreadThreadEmail).map(emailKey)),
+    };
+  }
+  const isNew = (email: EmailLike) =>
+    isUnreadThreadEmail(email) || newAtOpen.current.keys.has(emailKey(email));
+
   const listRef = useRef<HTMLDivElement>(null);
-  const unreadCount = listofThreadEmails.filter(isUnreadThreadEmail).length;
+  const unreadCount = listofThreadEmails.filter(isNew).length;
   const showFirstUnread = () =>
     listRef.current
       ?.querySelector('[data-unread]')
@@ -161,12 +176,13 @@ export const ThreadView = ({
               <div
                 key={`${threadEmail.id}-${threadEmail.folderPath}`}
                 ref={threadEmail === openEmail ? openEmailRef : undefined}
-                data-unread={isUnreadThreadEmail(threadEmail) || undefined}
+                data-unread={isNew(threadEmail) || undefined}
               >
                 <ThreadEmailCard
                   threadEmail={threadEmail}
                   folderPath={threadEmail.folderPath || folderPath || ''}
                   // UIDs are per folder: the same number in Sent is another email
+                  isNew={isNew(threadEmail)}
                   isCurrentEmail={
                     threadEmail.folderPath === folderPath &&
                     (String(threadEmail.id) === messageId ||
@@ -246,11 +262,11 @@ const ThreadHeader = ({
           <button
             type="button"
             onClick={onShowUnread}
-            title="Not read yet. Open an email to read it. Click to go to the first one."
+            title="New in this conversation since you last read it. Click to go to the first one."
             className="inline-flex items-center gap-1.5 rounded-full border border-[var(--blue-6)] bg-[var(--blue-3)] hover:bg-[var(--blue-4)] px-2.5 py-0.5 text-xs font-medium text-[var(--blue-11)] transition-colors flex-shrink-0"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--blue-9)]" />
-            {unreadCount} unread
+            {unreadCount} new
           </button>
         )}
 

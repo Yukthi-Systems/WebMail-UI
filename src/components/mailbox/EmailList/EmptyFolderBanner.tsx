@@ -16,6 +16,7 @@
  */
 
 // EmptyFolderBanner.tsx
+import { noteLocalUnreadChange } from '../../../utils/workspaceFolders';
 import { AlertDialog, Button, Flex, Text } from '@radix-ui/themes';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSetAtom } from 'jotai';
@@ -70,6 +71,7 @@ const EmptyFolderBanner = ({
           (old: Record<string, unknown> | undefined) =>
             old ? { ...old, emails: [], total_count: 0, total_pages: 0 } : old
         );
+        noteLocalUnreadChange(folder);
         setFolderDetails((prev) =>
           Array.isArray(prev)
             ? prev.map((f) =>

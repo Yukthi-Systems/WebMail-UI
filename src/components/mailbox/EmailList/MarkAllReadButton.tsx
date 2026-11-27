@@ -16,6 +16,7 @@
  */
 
 // MarkAllReadButton.tsx
+import { noteLocalUnreadChange } from '../../../utils/workspaceFolders';
 import { Button } from '@radix-ui/themes';
 import { useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -56,6 +57,7 @@ const MarkAllReadButton = ({ variant = 'button' }: MarkAllReadButtonProps) => {
   const handleClick = () => {
     mutate(folder, {
       onSuccess: (res) => {
+        noteLocalUnreadChange(folder);
         setFolderDetails((prev) =>
           Array.isArray(prev)
             ? prev.map((f) => (f.folder_name === folder ? { ...f, unread_count: 0 } : f))

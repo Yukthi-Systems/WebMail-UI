@@ -689,7 +689,7 @@ export const editEmailFolder = async (oldpath: string, newpath: string): Promise
 export const folderUidValidity = async (
   folderPath: string
 ): Promise<{
-  data: { MESSAGES: number; UIDNEXT: number; UIDVALIDITY: number };
+  data: { MESSAGES: number; UIDNEXT: number; UIDVALIDITY: number; UNSEEN?: number };
   folder_path: string;
   message: string;
 }> => {
