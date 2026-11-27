@@ -632,6 +632,8 @@ const EmailList = ({
     );
   };
 
+  const isDraftsList = specialFolders.isFolder(listFolder, 'drafts');
+
   useKeyboardNavigation({
     emailCount: emailArray.length,
     currentIndex: currentEmailIndex,
@@ -668,9 +670,10 @@ const EmailList = ({
       }
     },
     onDelete: () => handleDelete(),
-    onReply: () => viewingEmail && handleReply(viewingEmail),
-    onReplyAll: () => viewingEmail && handleReplyAll(viewingEmail),
-    onForward: () => viewingEmail && handleForward(viewingEmail),
+    // A draft is edited and sent, not replied to or forwarded
+    onReply: () => viewingEmail && !isDraftsList && handleReply(viewingEmail),
+    onReplyAll: () => viewingEmail && !isDraftsList && handleReplyAll(viewingEmail),
+    onForward: () => viewingEmail && !isDraftsList && handleForward(viewingEmail),
     // Only emails not already in that state; nothing to do sends nothing
     onMarkAsRead: () => handleMarkAsRead(false),
     onMarkAsUnread: () => handleMarkAsRead(true),
@@ -755,6 +758,10 @@ const EmailList = ({
   };
 
   useEffect(() => {
+    if (selectedEmail && isDraftEmail(selectedEmail as unknown as Email)) {
+      openDraft(selectedEmail as unknown as Email);
+      return;
+    }
     if (selectedEmail) {
       setViewingEmail(selectedEmail);
       setViewingEmailFolder(folder);
@@ -1471,7 +1478,38 @@ const EmailList = ({
     return currentIndex > 0;
   };
 
+  /** In Drafts (its own folder, e.g. a search result, or the list's) */
+  const isDraftEmail = (email: Pick<Email, 'folderPath'> | null | undefined) =>
+    !!email && specialFolders.isFolder(email.folderPath || listFolder, 'drafts');
+
+  /**
+   * A draft opens in the composer, like Gmail: there is nothing to read, only to
+   * finish and send. Not a second time if it is already open; not over another
+   * email being written, which would lose it.
+   */
+  const openDraft = (email: Email) => {
+    setIsSelectionMode(false);
+    setIsKeyboardNavigating(false);
+    const index = emailArray.findIndex((e) => e.id === email.id);
+    if (index !== -1) setCurrentEmailIndex(index);
+
+    if (composerOpen) {
+      const sameDraft =
+        sendDraftEmail?.id === email.id &&
+        (sendDraftEmail?.folderPath || listFolder) === (email.folderPath || listFolder);
+      if (!sameDraft) {
+        toast({ description: 'Send or close the email you are writing first.' });
+      }
+      return;
+    }
+    handleSendDraft(email);
+  };
+
   const handleEmailClick = (email: Email) => {
+    if (isDraftEmail(email)) {
+      openDraft(email);
+      return;
+    }
     savedScrollPositionRef.current = emailListScrollRef.current?.scrollTop ?? 0;
     setIsSelectionMode(false);
     setIsKeyboardNavigating(false);
@@ -2009,8 +2047,9 @@ const EmailList = ({
                         ? 'editAsNew'
                         : 'new'
             }
-            onClose={() => {
-              handleRefresh();
+            onClose={(changed) => {
+              // Closed without sending or saving: nothing changed, nothing to reload
+              if (changed) handleRefresh();
               handleCloseComposer();
             }}
             onSend={() => {

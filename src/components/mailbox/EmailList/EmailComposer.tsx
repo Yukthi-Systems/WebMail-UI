@@ -113,7 +113,8 @@ interface ComposerBasicData {
 interface EmailComposerProps {
   email: Email | null;
   mode: 'reply' | 'replyAll' | 'forward' | 'new' | 'draft' | 'editAsNew';
-  onClose: () => void;
+  /** changed: something was sent or saved (the folder list needs a refresh) */
+  onClose: (changed?: boolean) => void;
   onSend: () => void;
   onSendDraft?: (email: Email) => void;
 }
@@ -159,6 +160,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   // State for storing original email headers
   const [originalHeaders, setOriginalHeaders] = useState<EmailHeaders>({});
   const [originalMessageId, setOriginalMessageId] = useState<string | string[]>('');
+  const originalMessageIdRef = useRef(originalMessageId);
+  originalMessageIdRef.current = originalMessageId;
   const [fullViewEnabled, setFullViewEnabled] = useState(false);
   const userSettings = useAtomValue(userSettingsAtom);
   const folderQuota = useAtomValue(folderQuotaAtom);
@@ -255,6 +258,18 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
   }, [folderQuota]);
 
   const hasAutoSavedRef = useRef(false);
+
+  /**
+   * The Message-ID of this draft: the same for every saved copy (auto-save and
+   * Save Draft), so sending finds and removes them all. An opened draft keeps
+   * its own; otherwise the composer's. A new one per save left the copies in
+   * Drafts after sending.
+   */
+  const draftMessageId = useCallback((): string => {
+    const opened = originalMessageIdRef.current;
+    const own = Array.isArray(opened) ? opened[0] : opened;
+    return (mode === 'draft' && own) || composerDataRef.current.messageId || '';
+  }, [mode]);
   const emailIdRef = useRef<string | null>(null);
   const isManualSaveRef = useRef(false);
   // Track latest composer data for debounced auto-save to prevent stale closure
@@ -664,12 +679,20 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     const draftData = hasQuote(currentComposerData.html)
       ? { ...currentComposerData, html: draftHtml, text: htmlToPlainText(draftHtml) }
       : currentComposerData;
-    const mailData = formatComposedEmailData(draftData, {
-      folder_path: saveDraft || 'Drafts',
-      priority,
-      isDraft: true,
-      readReceipt,
-    });
+    const draftId = draftMessageId();
+    const mailData = formatComposedEmailData(
+      {
+        ...draftData,
+        messageId: draftId,
+        headers: { ...(draftData.headers || {}), 'Message-ID': draftId },
+      },
+      {
+        folder_path: saveDraft || 'Drafts',
+        priority,
+        isDraft: true,
+        readReceipt,
+      }
+    );
 
     // formatComposedEmailData returns html/text fields; ComposerRequest expects
     // body_html/body_text. This autosave path (unlike handleMailAction) never
@@ -682,7 +705,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         console.error('error', err);
       },
     });
-  }, [priority, readReceipt, draftMutate, isQuotaExceeded, saveDraft]);
+  }, [priority, readReceipt, draftMutate, isQuotaExceeded, saveDraft, draftMessageId]);
 
   const [debouncedSaveToDraft, cancelDebouncedSaveToDraft] = useDebounce(saveToDraft, 15000);
 
@@ -712,6 +735,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
 
     // Generate new Message-ID
     const newMessageId = generateMessageId(domainUser?.domain || 'webmail.local');
+    const draftId = draftMessageId() || newMessageId;
 
     // Prepare headers based on mode
     let finalHeaders: EmailHeaders = {};
@@ -733,9 +757,9 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
         const value = rawHeaders[key];
         finalHeaders[key] = Array.isArray(value) ? value.join(', ') : String(value);
       });
-      if (!finalHeaders['Message-ID'] && !finalHeaders['Message-Id']) {
-        finalHeaders['Message-ID'] = newMessageId;
-      }
+      // Every saved copy of this draft has the same Message-ID (see draftMessageId)
+      delete finalHeaders['Message-Id'];
+      finalHeaders['Message-ID'] = draftId;
       if (!finalHeaders['Date']) {
         finalHeaders['Date'] = new Date().toUTCString();
       }
@@ -758,7 +782,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     const finalValue = {
       ...currentData,
       headers: finalHeaders,
-      messageId: newMessageId,
+      messageId: isDraft ? draftId : newMessageId,
       from_id: {
         email: currentEmail.address || '',
         name: currentEmail.name || '',
@@ -799,16 +823,14 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     // ── Attach draft deletion info so backend can clean up the draft on send ─
     if (!isDraft && mailData) {
       if (mode === 'draft' && email) {
-        const draftMsgId = Array.isArray(originalMessageId)
-          ? originalMessageId[0]
-          : originalMessageId;
+        const draftMsgId = draftMessageId();
         if (draftMsgId) {
           mailData.draft_saved = true;
           mailData.draft_folder_name = email.folderPath || saveDraft || 'Drafts';
           mailData.draft_message_id = draftMsgId;
         }
       } else if (hasAutoSavedRef.current) {
-        const draftMsgId = composerDataRef.current.messageId || '';
+        const draftMsgId = draftMessageId();
         if (draftMsgId) {
           mailData.draft_saved = true;
           mailData.draft_folder_name = saveDraft || 'Drafts';
@@ -921,7 +943,7 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
           duration: 5000,
         });
         autoDelete();
-        onClose();
+        onClose(true);
         resetComposerData();
         hasAutoSavedRef.current = false;
         emailIdRef.current = null;
@@ -1079,7 +1101,8 @@ const EmailComposer = ({ email, mode, onClose, onSend }: EmailComposerProps) => 
     cancelDebouncedSaveToDraft();
     isManualSaveRef.current = false;
 
-    onClose();
+    // Only an auto-saved draft changed anything (it is in Drafts now)
+    onClose(hasAutoSavedRef.current);
     resetComposerData();
     hasAutoSavedRef.current = false;
     emailIdRef.current = null;

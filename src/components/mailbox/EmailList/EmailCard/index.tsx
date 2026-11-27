@@ -257,7 +257,11 @@ const EmailCard = ({
     setIsWaitingForTooltip(true);
 
     prefetchTimerRef.current = setTimeout(() => {
-      if (email?.id && folder) prefetchEmailView(email.id.toString(), folder);
+      const emailFolder = email?.folderPath || folder;
+      // A draft opens in the composer, not in a view: nothing to load ahead
+      if (email?.id && emailFolder && !specialFolders.isFolder(emailFolder, 'drafts')) {
+        prefetchEmailView(email.id.toString(), emailFolder);
+      }
     }, 2150);
 
     showTooltipTimerRef.current = setTimeout(() => {

@@ -164,7 +164,9 @@ const EmailToolbar = ({
   const { folder: folderNameParam } = useParams({ strict: false });
   const folderName = folderNameParam ?? '';
   // Resolved Spam folder (e.g. "INBOX/spam"), plus the plain Junk/Spam names
-  const isSpamFolder = useSpecialFolderPaths().isFolder(folderName, 'spam');
+  const specialFolderPaths = useSpecialFolderPaths();
+  const isSpamFolder = specialFolderPaths.isFolder(folderName, 'spam');
+  const isDraftsFolder = specialFolderPaths.isFolder(folderName, 'drafts');
   const toast = useToast(); // Add toast
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<Folder | string | undefined | null>(
@@ -189,11 +191,14 @@ const EmailToolbar = ({
 
   const {
     show_delete_button = true,
-    show_forward_button = true,
+    show_forward_button: forwardSetting = true,
     show_mark_as_read_button = true,
     show_mark_as_unread_button = true,
-    show_reply_button = true,
+    show_reply_button: replySetting = true,
   } = userSettings?.email ?? {};
+  // A draft isn't replied to or forwarded: it is edited (its Edit button) and sent
+  const show_reply_button = replySetting && !isDraftsFolder;
+  const show_forward_button = forwardSetting && !isDraftsFolder;
 
   useEffect(() => {
     if (showBackButton && checkedEmails.length > 0) {
@@ -515,12 +520,16 @@ const EmailToolbar = ({
       icon: FaDownload,
       onSelect: onDownload,
     },
-    {
-      key: 'forward-as-attachment',
-      label: 'Forward as Attachment',
-      icon: MdAttachEmail,
-      onSelect: onForwardAsAttachment,
-    },
+    ...(show_forward_button
+      ? [
+          {
+            key: 'forward-as-attachment',
+            label: 'Forward as Attachment',
+            icon: MdAttachEmail,
+            onSelect: onForwardAsAttachment,
+          },
+        ]
+      : []),
     {
       key: 'window',
       label: 'View in Window',
@@ -943,12 +952,16 @@ const EmailToolbar = ({
                       icon: FaDownload,
                       onSelect: onDownload,
                     },
-                    {
-                      key: 'forward-as-attachment',
-                      label: 'Forward as Attachment',
-                      icon: MdAttachEmail,
-                      onSelect: () => onForwardAsAttachment?.(),
-                    },
+                    ...(show_forward_button
+                      ? [
+                          {
+                            key: 'forward-as-attachment',
+                            label: 'Forward as Attachment',
+                            icon: MdAttachEmail,
+                            onSelect: () => onForwardAsAttachment?.(),
+                          },
+                        ]
+                      : []),
                     {
                       key: 'window',
                       label: 'View ',
