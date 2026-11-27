@@ -16,6 +16,8 @@
  */
 
 // src/components/layout/Folders.tsx
+import { API_CONFIG } from '../../../constants/config';
+import { appVersionLabel } from '../../login/LoginAppInfo';
 import {
   FaInbox,
   FaPaperPlane,
@@ -554,6 +556,15 @@ const Folders = forwardRef<{ focusFirstFolder: () => void }, FoldersProps>(
 
           <div className="mb-2">
             <StorageQuota quota={folderQuota} isCollapsed={!isExpanded} />
+            {/* Version and build, as on the login page (for support) */}
+            {isExpanded && (
+              <p
+                className="px-3 pt-1 text-[10px] text-[var(--gray-9)] select-text"
+                title={`Build ${API_CONFIG.bundleBuildId || 'unknown'}`}
+              >
+                {appVersionLabel()}
+              </p>
+            )}
           </div>
         </div>
       </>

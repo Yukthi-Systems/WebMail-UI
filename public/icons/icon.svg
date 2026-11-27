@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed background: works as a normal and as a maskable (round / squircle) icon -->
+  <rect width="512" height="512" fill="#F97316"/>
+  <!-- Envelope, kept inside the maskable safe zone (centre 80%) -->
+  <rect x="112" y="148" width="288" height="216" rx="30" fill="#FFFFFF"/>
+  <path d="M136 182 L256 268 L376 182" fill="none" stroke="#F97316" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

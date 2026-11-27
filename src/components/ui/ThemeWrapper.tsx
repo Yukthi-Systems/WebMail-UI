@@ -15,7 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Theme } from '@radix-ui/themes';
 import { useAtomValue } from 'jotai';
 import { userSettingsAtom } from '../../state/settings';
@@ -30,6 +30,13 @@ const ThemeWrapper: React.FC<DynamicThemeProps> = ({ children }) => {
   // Get theme settings from user preferences or use defaults
   const appearance = userSettings?.ui?.theme === 'dark' ? 'dark' : 'light';
   const accentColor = userSettings?.ui?.color_scheme || 'orange';
+
+  useEffect(() => {
+    const color = appearance === 'dark' ? '#111111' : '#fcfcfc';
+    document
+      .querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
+      .forEach((meta) => meta.setAttribute('content', color));
+  }, [appearance]);
 
   return (
     <Theme

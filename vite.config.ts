@@ -70,8 +70,9 @@ export default defineConfig(({ mode }) => {
           name: 'Mail Service 25',
           short_name: 'Webmail',
           description: 'A modern, fast webmail client built with React and TanStack.',
-          theme_color: '#f97316',
-          background_color: '#ffffff',
+          // Status / title bar: the app's background, not the brand orange
+          theme_color: '#fcfcfc',
+          background_color: '#fcfcfc',
           display: 'standalone',
           start_url: '/', 
           scope: '/',
@@ -125,6 +126,20 @@ export default defineConfig(({ mode }) => {
               src: 'icons/icon-512x512.png',
               sizes: '512x512',
               type: 'image/png',
+            },
+            // Full-bleed with the envelope inside the safe zone: Android may crop it
+            // to its own shape (circle, squircle) without a white border
+            {
+              src: 'icons/icon-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+            {
+              src: 'icons/icon-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
             },
           ],
         },

@@ -16,7 +16,8 @@
  */
 
 import { useAtomValue } from 'jotai';
-import moment, { type MomentInput } from 'moment-timezone';
+
+import moment, { type MomentInput } from 'moment-timezone/builds/moment-timezone-with-data-1970-2030';
 import { userSettingsAtom } from '../state/settings';
 import { parseEmailDate } from '../utils/dateFormat';
 

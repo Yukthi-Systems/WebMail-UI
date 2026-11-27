@@ -18,6 +18,12 @@
 import { API_CONFIG } from '../../constants/config';
 import { confirmAndResetApp } from '../../utils/appUpdate';
 
+/** "v1.5.9 · mww0y4eu": the app version and the short build id (also in the sidebar) */
+export const appVersionLabel = () =>
+  `v${API_CONFIG.version}${
+    API_CONFIG.bundleBuildId ? ` · ${API_CONFIG.bundleBuildId.split('-')[0]}` : ''
+  }`;
+
 /** "Reset app" link, version and build id under the login form. */
 export const LoginAppInfo = ({ className = '' }: { className?: string }) => (
   <p className={`text-[11px] ${className}`}>
@@ -30,8 +36,7 @@ export const LoginAppInfo = ({ className = '' }: { className?: string }) => (
       Having trouble? Reset app
     </button>
     <span title={`Build ${API_CONFIG.bundleBuildId}`} className="whitespace-nowrap">
-      v{API_CONFIG.version}
-      {API_CONFIG.bundleBuildId && ` · ${API_CONFIG.bundleBuildId.split('-')[0]}`}
+      {appVersionLabel()}
     </span>
   </p>
 );

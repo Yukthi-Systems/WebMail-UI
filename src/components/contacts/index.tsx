@@ -376,26 +376,47 @@ function ContactPage() {
 
   return (
     <div className=" bg-[var(--gray-1)] flex flex-col">
-      <div className="flex-shrink-0 p-6 max-w-[1800px] mx-auto w-full">
-        <div className="mb-1 pb-4 flex justify-between border-b border-[var(--gray-5)]">
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--gray-12)]">Contact Manager</h1>
-            <p className="text-sm text-[var(--gray-11)] mt-1">Manage your contact directory</p>
+      {/* Mobile: compact header without the dividing line, buttons as icons */}
+      <div
+        className={`flex-shrink-0 max-w-[1800px] mx-auto w-full ${isMobile ? 'px-4 pt-4 pb-2' : 'p-6'}`}
+      >
+        <div
+          className={`flex justify-between items-center gap-3 ${
+            isMobile ? '' : 'mb-1 pb-4 border-b border-[var(--gray-5)]'
+          }`}
+        >
+          <div className="min-w-0">
+            <h1
+              className={`font-bold text-[var(--gray-12)] truncate ${isMobile ? 'text-xl' : 'text-2xl'}`}
+            >
+              {isMobile ? 'Contacts' : 'Contact Manager'}
+            </h1>
+            {!isMobile && (
+              <p className="text-sm text-[var(--gray-11)] mt-1">Manage your contact directory</p>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center flex-shrink-0 ${isMobile ? 'gap-2' : 'gap-3'}`}>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-[var(--accent-9)] text-white rounded-md hover:bg-[var(--accent-10)] transition-colors flex items-center gap-2 text-sm font-medium"
+              aria-label="Create contact"
+              title="Create contact"
+              className={`bg-[var(--accent-9)] text-white rounded-md hover:bg-[var(--accent-10)] transition-colors flex items-center gap-2 text-sm font-medium ${
+                isMobile ? 'p-2.5' : 'px-4 py-2'
+              }`}
             >
               <FaPlus className="w-3.5 h-3.5" />
-              {isMobile ? ' ' : 'Create Contact'}
+              {!isMobile && 'Create Contact'}
             </button>
 
             <DropdownWrapper
               items={bulkActionItems}
               trigger={
-                <button className="px-4 py-2 bg-[var(--gray-3)] text-[var(--gray-12)] border border-[var(--gray-6)] rounded-md hover:bg-[var(--gray-4)] transition-colors flex items-center gap-2 text-sm font-medium">
+                <button
+                  className={`bg-[var(--gray-3)] text-[var(--gray-12)] border border-[var(--gray-6)] rounded-md hover:bg-[var(--gray-4)] transition-colors flex items-center gap-2 text-sm font-medium ${
+                    isMobile ? 'px-3 py-2' : 'px-4 py-2'
+                  }`}
+                >
                   {!isMobile && <FaPlus className="w-3.5 h-3.5" />}
                   {isMobile ? 'Actions ' : 'Bulk Actions'}
                   <FaChevronDown className="w-3 h-3" />
@@ -406,17 +427,22 @@ function ContactPage() {
             {selectedContacts.length > 0 && !isError && (
               <button
                 onClick={handleBulkDelete}
-                className="px-4 py-2 bg-[var(--red-9)] text-white rounded-md hover:bg-[var(--red-10)] transition-colors flex items-center gap-2 text-sm font-medium"
+                aria-label={`Delete ${selectedContacts.length} contacts`}
+                className={`bg-[var(--red-9)] text-white rounded-md hover:bg-[var(--red-10)] transition-colors flex items-center gap-2 text-sm font-medium ${
+                  isMobile ? 'px-3 py-2' : 'px-4 py-2'
+                }`}
               >
                 <FaTrash className="w-3.5 h-3.5" />
-                Delete ({selectedContacts.length})
+                {isMobile ? selectedContacts.length : `Delete (${selectedContacts.length})`}
               </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 px-6 max-w-[1800px] mx-auto w-full pb-6">
+      <div
+        className={`flex-1 min-h-0 max-w-[1800px] mx-auto w-full ${isMobile ? 'pb-20' : 'px-6 pb-6'}`}
+      >
         {isError ? (
           <div className="bg-[var(--gray-1)] rounded-lg border border-[var(--red-5)] p-12 text-center">
             <FaExclamationTriangle className="w-12 h-12 text-[var(--red-9)] mx-auto mb-4" />
@@ -436,12 +462,17 @@ function ContactPage() {
             </button>
           </div>
         ) : (
-          <div className="bg-[var(--gray-1)] rounded-lg border border-[var(--gray-5)] flex flex-col h-full overflow-hidden">
+          <div
+            className={`bg-[var(--gray-1)] flex flex-col h-full ${
+              isMobile ? '' : 'rounded-lg border border-[var(--gray-5)] overflow-hidden'
+            }`}
+          >
             {hasContacts ? (
               <>
-                <div className="h-[70vh] overflow-auto">
+                {/* Mobile: the page scrolls, one plain list (no box around it) */}
+                <div className={isMobile ? '' : 'h-[70vh] overflow-auto'}>
                   {isMobile ? (
-                    <div className="p-4 space-y-3">
+                    <div className="divide-y divide-[var(--gray-4)] border-y border-[var(--gray-4)]">
                       {contacts.map((contact) => (
                         <ContactCard
                           key={contact.contact_id}
@@ -464,7 +495,11 @@ function ContactPage() {
                     />
                   )}
                 </div>
-                <div className="flex-shrink-0 p-4 border-t border-[var(--gray-5)] bg-[var(--gray-1)]">
+                <div
+                  className={`flex-shrink-0 bg-[var(--gray-1)] ${
+                    isMobile ? 'px-4 py-3' : 'p-4 border-t border-[var(--gray-5)]'
+                  }`}
+                >
                   <Pagination
                     perPage={perPage}
                     data={contactsData}

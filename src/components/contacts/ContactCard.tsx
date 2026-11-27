@@ -38,9 +38,10 @@ export function ContactCard({ contact, isSelected, onSelect, onEdit, onDelete }:
   };
 
   return (
+    // A row of the mobile list: the list draws the lines between rows
     <div
-      className={`bg-[var(--gray-2)] border rounded-lg p-4 transition-colors ${
-        isSelected ? 'border-[var(--accent-8)] bg-[var(--accent-3)]' : 'border-[var(--gray-6)]'
+      className={`px-4 py-3 transition-colors ${
+        isSelected ? 'bg-[var(--accent-3)]' : 'bg-[var(--gray-1)] active:bg-[var(--gray-3)]'
       }`}
     >
       <div className="flex items-start gap-3">
@@ -68,12 +69,14 @@ export function ContactCard({ contact, isSelected, onSelect, onEdit, onDelete }:
         <div className="flex items-center gap-1">
           <button
             onClick={onEdit}
+            aria-label="Edit contact"
             className="p-2 text-[var(--gray-11)] hover:text-[var(--accent-11)] hover:bg-[var(--gray-4)] rounded transition-colors"
           >
             <FaEdit className="w-4 h-4" />
           </button>
           <button
             onClick={onDelete}
+            aria-label="Delete contact"
             className="p-2 text-[var(--gray-11)] hover:text-[var(--red-11)] hover:bg-[var(--gray-4)] rounded transition-colors"
           >
             <FaTrash className="w-4 h-4" />
@@ -82,8 +85,8 @@ export function ContactCard({ contact, isSelected, onSelect, onEdit, onDelete }:
       </div>
 
       {contact.notes && (
-        <div className="mt-3 pt-3 border-t border-[var(--gray-6)]">
-          <p className="text-sm text-[var(--gray-11)] line-clamp-2">{contact.notes}</p>
+        <div className="mt-1 pl-[60px]">
+          <p className="text-xs text-[var(--gray-10)] line-clamp-2">{contact.notes}</p>
         </div>
       )}
     </div>
