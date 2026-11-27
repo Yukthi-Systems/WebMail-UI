@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { QUERY_RETRY } from '../api/retryPolicy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { noteUidValidity } from '../utils/emailCache';
 import { folders, foldersFullPath, folderUidValidity, foldersQuota } from '../api/mailbox';
@@ -38,7 +39,6 @@ import {
   type SpecialFolderKind,
 } from '../utils/folderUtils';
 
-const FOLDER_RETRY_DELAY = () => 500;
 
 export function useFolders() {
   return useQuery<EmailFolders, Error>({
@@ -47,8 +47,7 @@ export function useFolders() {
     initialData: [defaultFolders, []],
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 30,
-    retry: 5,
-    retryDelay: FOLDER_RETRY_DELAY,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
@@ -70,8 +69,7 @@ export function useFoldersFullPath() {
     queryFn: foldersFullPath as unknown as () => Promise<FoldersFullPathResponse>,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 30,
-    retry: 5,
-    retryDelay: FOLDER_RETRY_DELAY,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
@@ -189,8 +187,7 @@ export function useFolderUidValidity(folderPath?: string) {
       return response.data;
     },
     enabled: !!folderPath,
-    retry: 5,
-    retryDelay: 500,
+    ...QUERY_RETRY,
   });
 }
 
@@ -200,8 +197,7 @@ export function useFolderQuota(folderPath: string = 'User quota') {
     queryFn: () => foldersQuota(),
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
-    retry: 5,
-    retryDelay: 500,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
   });
 }

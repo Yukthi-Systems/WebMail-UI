@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { QUERY_RETRY } from '../api/retryPolicy';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listScripts,
@@ -33,7 +34,6 @@ import {
 } from '../api/sieve';
 import type { SieveFilters, SieveApiResponse } from '../api/sieve';
 
-const SIEVE_RETRY_DELAY = () => 500;
 
 // Script Hooks
 export function useScripts() {
@@ -42,8 +42,7 @@ export function useScripts() {
     queryFn: () => listScripts(),
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
-    retry: 5,
-    retryDelay: SIEVE_RETRY_DELAY,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
   });
 }
@@ -55,8 +54,7 @@ export function useScriptRaw(scriptName: string, enabled = true) {
     enabled: enabled && !!scriptName,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
-    retry: 5,
-    retryDelay: SIEVE_RETRY_DELAY,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
@@ -118,8 +116,7 @@ export function useFilters(scriptName: string, enabled = true) {
     enabled: enabled && !!scriptName,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
-    retry: 5,
-    retryDelay: SIEVE_RETRY_DELAY,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
   });
 }
@@ -131,8 +128,7 @@ export function useFilter(scriptName: string, filterName: string, enabled = true
     enabled: enabled && !!scriptName && !!filterName,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
-    retry: 5,
-    retryDelay: SIEVE_RETRY_DELAY,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });

@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { QUERY_RETRY } from '../api/retryPolicy';
 import { useQuery, keepPreviousData, useMutation } from '@tanstack/react-query';
 import {
   getContacts,
@@ -33,8 +34,7 @@ export function useContacts(page: number = 1, perPage: number = 50) {
     placeholderData: keepPreviousData,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
-    retry: 5,
-    retryDelay: () => 500,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
   });
 }

@@ -16,6 +16,7 @@
  */
 
 // src/hooks/useEmailView.ts
+import { QUERY_RETRY, retryDelay, shouldRetry } from '../api/retryPolicy';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import {
@@ -60,10 +61,6 @@ const CACHE_TIMES = {
   gcTime: 30 * 60 * 1000,
 };
 
-// 400 (bad id) and 404 (email / part gone) won't succeed on retry
-const retryUnlessGone = (failureCount: number, error: Error) =>
-  !(error instanceof HttpError && (error.status === 400 || error.status === 404)) &&
-  failureCount < 3;
 
 export const blobToBase64 = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -107,8 +104,7 @@ export function useEmailView(uid: string, folderPath: string, enabled = true, ma
     queryKey: emailViewCacheKey(folderPath, uid),
     queryFn: () => emailView(uid, folderPath, markAsRead),
     enabled: enabled && /^\d+$/.test(uid) && !!folderPath,
-    retry: retryUnlessGone,
-    retryDelay: () => 500,
+    ...QUERY_RETRY,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     ...CACHE_TIMES,
@@ -197,7 +193,8 @@ export function useParsedEmailView(
     queries: eagerParts.map((attachment) => ({
       queryKey: emailAttachmentCacheKey(folderPath, uid, attachment.part_id),
       queryFn: () => fetchPart(attachment.part_id, true),
-      retry: 1,
+      retry: shouldRetry(1),
+      retryDelay,
       refetchOnWindowFocus: false,
       ...CACHE_TIMES,
     })),

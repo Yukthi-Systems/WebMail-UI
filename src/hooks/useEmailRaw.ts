@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { QUERY_RETRY } from '../api/retryPolicy';
 import { useQuery } from '@tanstack/react-query';
 import { emailRaw } from '../api/mailbox';
 import { rawEmailCacheKey } from '../utils/emailCache';
@@ -33,8 +34,7 @@ export function useEmailRaw(uid: string, folderPath: string, enabled = true) {
 
     enabled: enabled && /^\d+$/.test(uid) && !!folderPath,
 
-    retry: 5,
-    retryDelay: () => 500,
+    ...QUERY_RETRY,
     // If it fails after retries, don't refetch automatically on window focus
     refetchOnWindowFocus: false,
 

@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { NO_RETRY, QUERY_RETRY, SAFE_CHANGE_RETRY } from '../api/retryPolicy';
 import {
   keepPreviousData,
   useMutation,
@@ -48,7 +49,6 @@ import {
   type UnReadEmailPayload,
 } from '../api/mailbox';
 import { useRef } from 'react';
-import { HttpError } from '../api/fetchWrapper';
 import { DEFAULT_EMAIL_SORT } from '../state/emailListView';
 import { noteUidValidity, removeEmailCaches } from '../utils/emailCache';
 import { keepUnread } from '../utils/keptUnread';
@@ -95,11 +95,6 @@ function useEffectivePage(viewKey: string, page: number) {
   return isViewChanged ? 1 : page;
 }
 
-// 400 (e.g. "Page number exceeds total pages") and 404 won't fix themselves
-const retryListFetch = (failureCount: number, error: Error) =>
-  !(error instanceof HttpError && (error.status === 400 || error.status === 404)) &&
-  failureCount < 5;
-
 export function useEmails(
   folder: string,
   page: number = 1,
@@ -140,8 +135,7 @@ export function useEmails(
       emails(folder, effectivePage, perPage, full_headers, { sortBy, sortOrder, filterBy }),
     enabled,
 
-    retry: retryListFetch,
-    retryDelay: () => 500,
+    ...QUERY_RETRY,
 
     // Keep the previous page on screen while fetching the new one
     placeholderData: keepPreviousData,
@@ -193,8 +187,7 @@ export function useEmailThreads(
       return data;
     },
     enabled,
-    retry: retryListFetch,
-    retryDelay: () => 500,
+    ...QUERY_RETRY,
     placeholderData: keepPreviousData,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
@@ -214,8 +207,7 @@ export function useMoveMail() {
       forgetEmails(queryClient, payload.sourceFolder, payload.body);
       invalidateFolderLists(queryClient, [payload.sourceFolder, payload.destFolder]);
     },
-    retry: 5,
-    retryDelay: 500,
+    ...NO_RETRY,
   });
 }
 
@@ -227,8 +219,7 @@ export function useCopyMail() {
       copyEmail(payload.path, payload.sourceFolder, payload.destFolder, payload.body),
     onSuccess: (_data, payload) =>
       invalidateFolderLists(queryClient, [payload.sourceFolder, payload.destFolder]),
-    retry: 5,
-    retryDelay: 500,
+    ...NO_RETRY,
   });
 }
 
@@ -241,8 +232,7 @@ export function useDeleteMail() {
       forgetEmails(queryClient, payload.path, payload.body);
       invalidateFolderLists(queryClient, [payload.path]);
     },
-    retry: 5,
-    retryDelay: 500,
+    ...NO_RETRY,
   });
 }
 
@@ -251,11 +241,10 @@ export function useSeenMail() {
   return useMutation<EmailFolders, Error, ReadEmailPayload>({
     mutationKey: ['mark_read_mails'],
     mutationFn: (payload: ReadEmailPayload) => markReadEmail(payload.path, payload.body),
-    // Idempotent — safe to retry once on transient IMAP failure
+    // Idempotent: safe to retry once on a transient failure
     onSuccess: (_data, payload) =>
       invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
-    retry: 5,
-    retryDelay: 500,
+    ...SAFE_CHANGE_RETRY,
   });
 }
 
@@ -268,8 +257,7 @@ export function useUnseenMail() {
     onMutate: (payload) => keepUnread(payload.path, payload.body),
     onSuccess: (_data, payload) =>
       invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
-    retry: 5,
-    retryDelay: 500,
+    ...SAFE_CHANGE_RETRY,
   });
 }
 
@@ -280,8 +268,7 @@ export function useFlaggedMail() {
     mutationFn: (payload: ReadEmailPayload) => markFlaggedEmail(payload.path, payload.body),
     onSuccess: (_data, payload) =>
       invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
-    retry: 5,
-    retryDelay: 500,
+    ...SAFE_CHANGE_RETRY,
   });
 }
 
@@ -292,8 +279,7 @@ export function useUnFlaggedMail() {
     mutationFn: (payload: UnReadEmailPayload) => markUnFlaggedEmail(payload.path, payload.body),
     onSuccess: (_data, payload) =>
       invalidateFolderLists(queryClient, [payload.path], { refetchActive: false }),
-    retry: 5,
-    retryDelay: 500,
+    ...SAFE_CHANGE_RETRY,
   });
 }
 
@@ -301,8 +287,7 @@ export function useCreateEmailFolder() {
   return useMutation<EmailFolders, Error, EmailFolderCreate>({
     mutationKey: ['create_email_folder'],
     mutationFn: (payload: EmailFolderCreate) => createEmailFolder(payload.path || ''),
-    retry: 5,
-    retryDelay: 500,
+    ...NO_RETRY,
   });
 }
 
@@ -311,8 +296,7 @@ export function useEditEmailFolder() {
     mutationKey: ['edit_email_folder'],
     mutationFn: (payload: EmailFolderEdit) =>
       editEmailFolder(payload.oldpath || '', payload.newpath || ''),
-    retry: 5,
-    retryDelay: 500,
+    ...NO_RETRY,
   });
 }
 
@@ -320,8 +304,7 @@ export function useDeleteEmailFolder() {
   return useMutation<EmailFolders, Error, EmailFolderCreate>({
     mutationKey: ['delete_email_folder'],
     mutationFn: (payload: EmailFolderCreate) => deleteEmailFolder(payload.path || ''),
-    retry: 5,
-    retryDelay: 500,
+    ...NO_RETRY,
   });
 }
 

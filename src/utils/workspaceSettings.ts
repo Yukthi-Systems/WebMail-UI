@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { QUERY_RETRY } from '../api/retryPolicy';
 import type { QueryClient } from '@tanstack/react-query';
 import { userSettings, type UserSettings } from '../api/user';
 import { userSettingsAtom } from '../state/settings';
@@ -30,8 +31,7 @@ export const userSettingsQuery = {
   queryFn: userSettings,
   staleTime: 10 * 60 * 1000,
   gcTime: 30 * 60 * 1000,
-  retry: 5,
-  retryDelay: () => 500,
+  ...QUERY_RETRY,
 };
 
 /**

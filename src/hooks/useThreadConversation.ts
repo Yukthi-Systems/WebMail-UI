@@ -15,10 +15,10 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { QUERY_RETRY } from '../api/retryPolicy';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { emailThread, type ThreadDetail } from '../api/mailbox';
-import { HttpError } from '../api/fetchWrapper';
 import { noteUidValidity, threadDetailCacheKey } from '../utils/emailCache';
 import { parseEmailDate } from '../utils/dateFormat';
 import type { EmailLike } from '../utils/threads';
@@ -53,10 +53,8 @@ export function useThreadConversation(
     staleTime: 3 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
-    // 404: the email is gone (moved / deleted elsewhere), retrying won't help
-    retry: (failureCount, error) =>
-      !(error instanceof HttpError && error.status === 404) && failureCount < 3,
-    retryDelay: () => 500,
+    // 404 (the email is gone) is not retried
+    ...QUERY_RETRY,
   });
 }
 

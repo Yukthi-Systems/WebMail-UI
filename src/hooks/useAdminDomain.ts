@@ -15,6 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { QUERY_RETRY } from '../api/retryPolicy';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { apiKeyAtom } from '../state/auth';
@@ -39,8 +40,7 @@ export function useListDomains(page = 1, size = 20, query?: string) {
     placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    retry: 5,
-    retryDelay: () => 500,
+    ...QUERY_RETRY,
   });
 }
 
