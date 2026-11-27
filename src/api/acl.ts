@@ -15,8 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store';
+import { authHeaders } from './session';
 import { API_URL, authCheck } from './config';
 
 // ACL Types
@@ -49,7 +48,6 @@ export interface DeleteACLPayload {
 
 // API Functions
 export const getACL = async (folder_path: string): Promise<ACLResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const url = new URL(`${API_URL}/folder/acl`);
   url.searchParams.append('folder_path', folder_path);
 
@@ -58,7 +56,7 @@ export const getACL = async (folder_path: string): Promise<ACLResponse> => {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
 
@@ -73,13 +71,12 @@ export const getACL = async (folder_path: string): Promise<ACLResponse> => {
 };
 
 export const setACL = async (payload: SetACLPayload): Promise<ACLResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetch(`${API_URL}/folder/acl`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(payload),
   });
@@ -95,7 +92,6 @@ export const setACL = async (payload: SetACLPayload): Promise<ACLResponse> => {
 };
 
 export const deleteACL = async (payload: DeleteACLPayload): Promise<ACLResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const url = new URL(`${API_URL}/folder/acl`);
   url.searchParams.append('folder_path', payload.folder_path);
   url.searchParams.append('intended_user', payload.intended_user);
@@ -105,7 +101,7 @@ export const deleteACL = async (payload: DeleteACLPayload): Promise<ACLResponse>
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
 
@@ -120,7 +116,6 @@ export const deleteACL = async (payload: DeleteACLPayload): Promise<ACLResponse>
 };
 
 export const getOwnACL = async (folder_path: string): Promise<ACLOwnResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const url = new URL(`${API_URL}/folder/acl/own`);
   url.searchParams.append('folder_path', folder_path);
 
@@ -129,7 +124,7 @@ export const getOwnACL = async (folder_path: string): Promise<ACLOwnResponse> =>
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
 

@@ -19,7 +19,7 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import { webmailStore } from '../store';
-import { csrfTokenAtom } from '../state/auth';
+import { sessionTokenAtom } from '../state/auth';
 import { userSettingsAtom } from '../state/settings';
 import { companyBrandingAtom } from '../state/branding';
 import { CompanyService, BgImageService } from '../utils/bimiService';
@@ -52,16 +52,16 @@ export const Route = createFileRoute('/$slug')({
 function CompanyRoot() {
   const { slug } = Route.useParams();
   const { logoUrl, bgUrl, company } = Route.useLoaderData();
-  const csrfToken = useAtomValue(csrfTokenAtom);
+  const sessionToken = useAtomValue(sessionTokenAtom);
   const navigate = useNavigate();
 
   // Track previous auth state to detect login/logout transitions
-  const prevCsrfRef = useRef(csrfToken);
+  const prevSessionRef = useRef(sessionToken);
 
   useEffect(() => {
-    const wasAuthed = !!prevCsrfRef.current;
-    const isAuthed = !!csrfToken;
-    prevCsrfRef.current = csrfToken;
+    const wasAuthed = !!prevSessionRef.current;
+    const isAuthed = !!sessionToken;
+    prevSessionRef.current = sessionToken;
 
     if (!wasAuthed && isAuthed) {
       // Just logged in — navigate to default folder under company prefix
@@ -72,9 +72,9 @@ function CompanyRoot() {
       // Just logged out — return to branded login at the same company URL
       navigate({ to: '/$slug', params: { slug }, replace: true });
     }
-  }, [csrfToken]);
+  }, [sessionToken]);
 
-  if (!csrfToken) {
+  if (!sessionToken) {
     return (
       <Login
         branding={{

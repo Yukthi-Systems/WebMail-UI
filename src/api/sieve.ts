@@ -15,8 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store';
+import { authHeaders } from './session';
 import { API_URL } from './config';
 import { fetchWithAuth } from './fetchWrapper';
 
@@ -97,13 +96,12 @@ export interface SieveApiResponse {
 
 // List all scripts
 export const listScripts = async (): Promise<ListScriptsApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/sieve/scripts`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -118,7 +116,6 @@ export const createScript = async (
   scriptName: string,
   scriptContent: string
 ): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/scripts/${encodeURIComponent(scriptName)}?script_content=${encodeURIComponent(scriptContent)}`,
     {
@@ -126,7 +123,7 @@ export const createScript = async (
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -139,13 +136,12 @@ export const createScript = async (
 
 // Delete a script
 export const deleteScript = async (scriptName: string): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/sieve/scripts/${encodeURIComponent(scriptName)}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -157,7 +153,6 @@ export const deleteScript = async (scriptName: string): Promise<SieveApiResponse
 
 // Enable a script
 export const enableScript = async (scriptName: string): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/scripts/${encodeURIComponent(scriptName)}/enable`,
     {
@@ -165,7 +160,7 @@ export const enableScript = async (scriptName: string): Promise<SieveApiResponse
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -181,7 +176,6 @@ export const renameScript = async (
   oldScriptName: string,
   newScriptName: string
 ): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/scripts/${encodeURIComponent(oldScriptName)}/rename/${encodeURIComponent(newScriptName)}`,
     {
@@ -189,7 +183,7 @@ export const renameScript = async (
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -202,7 +196,6 @@ export const renameScript = async (
 
 // Get raw script data
 export const getScriptRaw = async (scriptName: string): Promise<string> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/scripts/${encodeURIComponent(scriptName)}/raw`,
     {
@@ -210,7 +203,7 @@ export const getScriptRaw = async (scriptName: string): Promise<string> => {
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -224,13 +217,12 @@ export const getScriptRaw = async (scriptName: string): Promise<string> => {
 // Filter endpoints
 // List all filters in a script
 export const listFilters = async (scriptName: string): Promise<SieveFilterList> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/sieve/filters/${encodeURIComponent(scriptName)}`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -245,13 +237,12 @@ export const createFilter = async (
   scriptName: string,
   filter: SieveFilters
 ): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/sieve/filters/${encodeURIComponent(scriptName)}`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(filter),
   });
@@ -267,7 +258,6 @@ export const getFilter = async (
   scriptName: string,
   filterName: string
 ): Promise<GetFilterResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/filters/${encodeURIComponent(scriptName)}/${encodeURIComponent(filterName)}`,
     {
@@ -275,7 +265,7 @@ export const getFilter = async (
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -292,7 +282,6 @@ export const updateFilter = async (
   filterName: string,
   filter: SieveFilters
 ): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/filters/${encodeURIComponent(scriptName)}/${encodeURIComponent(filterName)}`,
     {
@@ -300,7 +289,7 @@ export const updateFilter = async (
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
       body: JSON.stringify(filter),
     }
@@ -317,7 +306,6 @@ export const deleteFilter = async (
   scriptName: string,
   filterName: string
 ): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/filters/${encodeURIComponent(scriptName)}/${encodeURIComponent(filterName)}`,
     {
@@ -325,7 +313,7 @@ export const deleteFilter = async (
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -341,7 +329,6 @@ export const disableFilter = async (
   scriptName: string,
   filterName: string
 ): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/filters/${encodeURIComponent(scriptName)}/${encodeURIComponent(filterName)}/disable`,
     {
@@ -349,7 +336,7 @@ export const disableFilter = async (
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -365,7 +352,6 @@ export const enableFilter = async (
   scriptName: string,
   filterName: string
 ): Promise<SieveApiResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(
     `${API_URL}/sieve/filters/${encodeURIComponent(scriptName)}/${encodeURIComponent(filterName)}/enable`,
     {
@@ -373,7 +359,7 @@ export const enableFilter = async (
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );

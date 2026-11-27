@@ -18,12 +18,12 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import Video from '../../../components/video';
 import { webmailStore } from '../../../store';
-import { csrfTokenAtom } from '../../../state/auth';
+import { sessionTokenAtom } from '../../../state/auth';
 
 export const Route = createFileRoute('/$slug/video/')({
   beforeLoad: ({ params }) => {
-    const csrfToken = webmailStore.get(csrfTokenAtom);
-    if (!csrfToken) {
+    const sessionToken = webmailStore.get(sessionTokenAtom);
+    if (!sessionToken) {
       throw redirect({ to: '/$slug', params: { slug: params.slug } });
     }
   },

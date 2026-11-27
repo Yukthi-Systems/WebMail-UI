@@ -17,9 +17,40 @@
 
 import { atomWithStorage } from 'jotai/utils';
 
-export const csrfTokenAtom = atomWithStorage<string | null>('auth', null, undefined, {
+/**
+ * The WebMail session: sent as `X-Session-Token` on every API request. Readable
+ * by JavaScript (unlike the old httponly cookie), so never log it or put it in
+ * a URL.
+ */
+export const sessionTokenAtom = atomWithStorage<string | null>('session_token', null, undefined, {
   getOnInit: true,
 });
+
+/**
+ * The SSO user's name and organization, from the SSO service (null for password
+ * users).
+ */
+export interface SsoProfile {
+  email: string;
+  firstName: string;
+  lastName: string | null;
+  organizationId: string;
+  organizationName: string;
+}
+export const ssoProfileAtom = atomWithStorage<SsoProfile | null>('sso_profile', null, undefined, {
+  getOnInit: true,
+});
+
+/** How the user signed in: logout ends the SSO session only for SSO users. */
+export type LoginMethod = 'sso' | 'password';
+export const loginMethodAtom = atomWithStorage<LoginMethod | null>(
+  'login_method',
+  null,
+  undefined,
+  {
+    getOnInit: true,
+  }
+);
 
 type ApiKeyState = string | null;
 

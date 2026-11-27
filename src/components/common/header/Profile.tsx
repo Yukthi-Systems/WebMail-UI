@@ -15,6 +15,8 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { ssoProfileAtom } from '../../../state/auth';
+import { ssoFullName } from '../../../utils/displayName';
 import React, { useState } from 'react';
 import BIMIAvatar from '../BimiAvatar';
 import { useLogout } from '../../../hooks/useLogout';
@@ -36,12 +38,11 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose }) =>
   const navigate = useNavigate();
   const userDetails = useAtomValue(userDetailsAtom);
   const userSettings = useAtomValue(userSettingsAtom);
+  const ssoProfile = useAtomValue(ssoProfileAtom);
   const location = useLocation();
   const slug = getCompanySlugFromPath(location.pathname);
 
-  const [deferredPrompt, setDeferredPrompt] = useState(
-    () => window._deferredPWAPrompt ?? null
-  );
+  const [deferredPrompt, setDeferredPrompt] = useState(() => window._deferredPWAPrompt ?? null);
 
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isInStandaloneMode =
@@ -51,7 +52,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose }) =>
 
   const currentUser = {
     email: userDetails?.email || '',
-    name: userSettings?.general?.from_address?.name || '',
+    name: userSettings?.general?.from_address?.name?.trim() || ssoFullName(ssoProfile),
   };
 
   const handleInstallApp = async () => {

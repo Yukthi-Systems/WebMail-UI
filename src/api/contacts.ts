@@ -15,8 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store';
+import { authHeaders } from './session';
 import type { CreateContactData } from '../utils/contact';
 import { API_URL } from './config';
 import { fetchWithAuth } from './fetchWrapper';
@@ -50,13 +49,12 @@ export const getContacts = async (
   page: number = 1,
   perPage: number = 15
 ): Promise<ContactResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/contacts/list?page=${page}&page_size=${perPage}`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -67,13 +65,12 @@ export const getContacts = async (
 };
 
 export const createContact = async (contactData: CreateContactData) => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/contacts/create`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(contactData),
   });
@@ -85,13 +82,12 @@ export const createContact = async (contactData: CreateContactData) => {
 };
 
 export const editContact = async (contactData: CreateContactData, contact_id: string | number) => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/contacts/item/${contact_id}`, {
     method: 'PUT',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify(contactData),
   });
@@ -103,13 +99,12 @@ export const editContact = async (contactData: CreateContactData, contact_id: st
 };
 
 export const deleteContact = async (contact_id: string | number) => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/contacts/item/${contact_id}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (res.status !== 200) {
@@ -126,15 +121,13 @@ export class BulkContactError extends Error {
 }
 
 export const createBulkContact = async (contactData: CreateContactData[]) => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   try {
     const res = await fetchWithAuth(`${API_URL}/contacts/bulk`, {
       method: 'POST',
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
       body: JSON.stringify(contactData),
     });

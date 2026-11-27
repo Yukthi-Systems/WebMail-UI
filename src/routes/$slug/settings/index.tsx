@@ -18,14 +18,14 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import Settings from '../../../components/settings';
 import { webmailStore } from '../../../store';
-import { csrfTokenAtom } from '../../../state/auth';
+import { sessionTokenAtom } from '../../../state/auth';
 import { userSettingsAtom } from '../../../state/settings';
 import { type UserSettings } from '../../../api/user';
 
 export const Route = createFileRoute('/$slug/settings/')({
   beforeLoad: ({ params }) => {
-    const csrfToken = webmailStore.get(csrfTokenAtom);
-    if (!csrfToken) {
+    const sessionToken = webmailStore.get(sessionTokenAtom);
+    if (!sessionToken) {
       throw redirect({ to: '/$slug', params: { slug: params.slug } });
     }
     const data = webmailStore.get(userSettingsAtom) as UserSettings;

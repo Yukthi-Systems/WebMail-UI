@@ -15,6 +15,8 @@
  * <https://www.gnu.org/licenses/>.
  */
 
+import { ssoProfileAtom } from '../../state/auth';
+import { ssoFullName } from '../../utils/displayName';
 import { useEffect, useState } from 'react';
 import { Tabs } from '@radix-ui/themes';
 import General from './general';
@@ -33,7 +35,24 @@ const Settings = () => {
   const user_settings = useAtomValue(userSettingsAtom);
   const folderData = useAtomValue(folderDetailsAtom);
   // Merge with defaults
-  const settingsWithDefaults = mergeWithDefaults(user_settings, folderData);
+  const ssoProfile = useAtomValue(ssoProfileAtom);
+  const merged = mergeWithDefaults(user_settings, folderData);
+  // No Display Name yet: start with the SSO user's first and last name
+  const ssoName = ssoFullName(ssoProfile);
+  const settingsWithDefaults =
+    ssoName && !merged.general?.from_address?.name?.trim()
+      ? {
+          ...merged,
+          general: {
+            ...merged.general,
+            from_address: {
+              ...merged.general?.from_address,
+              email: merged.general?.from_address?.email ?? '',
+              name: ssoName,
+            },
+          },
+        }
+      : merged;
 
   const getInitialTab = () => {
     const hash = window.location.hash.slice(1);

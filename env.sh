@@ -34,6 +34,9 @@ echo "  VITE_APP_VERSION: \"${VITE_APP_VERSION}\"," >> ./dist/env-config.js
 echo "  VITE_RECAPTCHA_KEY: \"${VITE_RECAPTCHA_KEY}\"," >> ./dist/env-config.js
 echo "  VITE_DNS_API_URL: \"${VITE_DNS_API_URL}\"," >> ./dist/env-config.js
 echo "  VITE_PASSWORD_RESET_URL: \"${VITE_PASSWORD_RESET_URL}\"," >> ./dist/env-config.js
+# Single sign-on service and the app id registered in it
+echo "  VITE_SSO_URL: \"${VITE_SSO_URL:-https://sso.test.yukthi.net}\"," >> ./dist/env-config.js
+echo "  VITE_SSO_APP_ID: \"${VITE_SSO_APP_ID:-webmail}\"," >> ./dist/env-config.js
 # Build id, used by the UI to detect an old cached build
 echo "  VITE_BUILD_ID: \"$(cat ./dist/build-id 2>/dev/null)\"," >> ./dist/env-config.js
 

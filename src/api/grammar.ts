@@ -16,8 +16,7 @@
  */
 
 // src/api/grammar.ts
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store';
+import { authHeaders } from './session';
 import { API_URL } from './config';
 import { fetchWithAuth } from './fetchWrapper';
 
@@ -43,18 +42,16 @@ export interface GrammarCheckResponse {
   match_count: number;
 }
 
-
 export const checkSpellGrammar = async (
   text: string,
   signal?: AbortSignal
 ): Promise<GrammarCheckResponse> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/email/check-spell-grammar`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
     body: JSON.stringify({ text }),
     signal,

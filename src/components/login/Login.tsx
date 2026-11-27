@@ -15,7 +15,9 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useLogin } from '../../hooks/useLogin';
+import { useLogin, useSsoLogin } from '../../hooks/useLogin';
+import { LoginError } from '../../api/auth';
+import { isPopupClosed, isSsoRedirectReturn } from '../../api/sso';
 import { Spinner } from '@radix-ui/themes';
 import { useForm, FormProvider, useFormContext } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -36,10 +38,11 @@ import {
   FaHdd,
   FaSync,
   FaLock,
+  FaKey,
 } from 'react-icons/fa';
 import { API_CONFIG } from '../../constants/config';
 import ReCAPTCHA from 'react-google-recaptcha';
-import { csrfTokenAtom } from '../../state/auth';
+import { sessionTokenAtom } from '../../state/auth';
 import { confirmAndResetApp } from '../../utils/appUpdate';
 import { LoginAppInfo } from './LoginAppInfo';
 
@@ -133,11 +136,15 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
   const toast = useToast();
   const navigate = useNavigate();
   const loginMutation = useLogin();
+  const ssoLogin = useSsoLogin();
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  // The password login said this domain signs in with SSO only
+  const [ssoRequired, setSsoRequired] = useState(false);
+  const isBusy = isLoading || ssoLogin.isPending;
   const [, setUserDetails] = useAtom(userDetailsAtom);
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const recaptchaRef = useRef<ReCAPTCHA>(null);
-  const [csrfToken] = useAtom(csrfTokenAtom);
+  const [sessionToken] = useAtom(sessionTokenAtom);
   const bgImageUrl = branding?.bgUrl ?? null;
   const logoImageUrl = branding?.logoUrl ?? null;
   const methods = useForm<FormData>({
@@ -177,10 +184,28 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
   };
 
   useEffect(() => {
-    if (csrfToken) {
+    if (sessionToken) {
       navigate({ to: '/' });
     }
-  }, [csrfToken, navigate]);
+  }, [sessionToken, navigate]);
+
+  const startSso = () => {
+    ssoLogin.mutate(undefined, {
+      onError: (error) => {
+        if (isPopupClosed(error)) return;
+        toast.error({ description: error.message || 'Single sign-on failed.', duration: 6000 });
+      },
+    });
+  };
+
+  // Back from SSO after the popup was blocked: finish signing in
+  const ssoReturnHandled = useRef(false);
+  useEffect(() => {
+    if (ssoReturnHandled.current || !isSsoRedirectReturn()) return;
+    ssoReturnHandled.current = true;
+    startSso();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onSubmit = (data: FormData) => {
     if (!recaptchaToken) {
@@ -226,6 +251,7 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
           // Reset reCAPTCHA on error
           recaptchaRef.current?.reset();
           setRecaptchaToken(null);
+          if (error instanceof LoginError && error.loginMethod === 'sso') setSsoRequired(true);
 
           toast.error({
             description: error.message || 'Failed to submit form. Please try again.',
@@ -347,18 +373,18 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
 
               <button
                 type="submit"
-                disabled={isLoading || !recaptchaToken}
+                disabled={isBusy || !recaptchaToken}
                 className="w-full py-3 mt-6 px-4 text-center flex items-center justify-center text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-sm hover:shadow-md active:scale-[0.98]"
                 style={{
-                  backgroundColor: isLoading || !recaptchaToken ? undefined : PRIMARY_COLOR[600],
+                  backgroundColor: isBusy || !recaptchaToken ? undefined : PRIMARY_COLOR[600],
                 }}
                 onMouseEnter={(e) => {
-                  if (!isLoading && recaptchaToken) {
+                  if (!isBusy && recaptchaToken) {
                     e.currentTarget.style.backgroundColor = PRIMARY_COLOR[700];
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (!isLoading && recaptchaToken) {
+                  if (!isBusy && recaptchaToken) {
                     e.currentTarget.style.backgroundColor = PRIMARY_COLOR[600];
                   }
                 }}
@@ -374,6 +400,40 @@ const Login = ({ branding }: { branding?: LoginBranding }) => {
               </button>
             </form>
           </FormProvider>
+
+          {/* Single sign-on: no password and no reCAPTCHA here */}
+          <div className="flex items-center gap-3 my-5" aria-hidden>
+            <div className="h-px flex-1 bg-gray-200" />
+            <span className="text-xs text-gray-400">or</span>
+            <div className="h-px flex-1 bg-gray-200" />
+          </div>
+          {ssoRequired && (
+            <p className="mb-3 text-center text-sm text-orange-700">
+              Your organization signs in with single sign-on.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={startSso}
+            disabled={isBusy}
+            className={`w-full py-3 px-4 flex items-center justify-center gap-2 rounded-lg border font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98] ${
+              ssoRequired
+                ? 'border-orange-500 bg-orange-50 text-orange-700 ring-2 ring-orange-200'
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {ssoLogin.isPending ? (
+              <>
+                <Spinner size="2" />
+                <span>Waiting for single sign-on...</span>
+              </>
+            ) : (
+              <>
+                <FaKey className="w-4 h-4" />
+                <span>Sign in with SSO</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* Separated Services Section */}

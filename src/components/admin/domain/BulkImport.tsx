@@ -43,7 +43,6 @@ interface DomainRow {
   sieve_server: string;
   sieve_port: number;
   is_active: boolean;
-  is_v2_user: boolean;
 }
 
 interface ParsedRow extends DomainRow {
@@ -78,9 +77,9 @@ const PORT_DEFAULTS: Record<string, number> = {
 };
 
 const TEMPLATE_CSV =
-  'domain,smtp_server,smtp_port,imap_server,imap_port,sieve_server,sieve_port,is_active,is_v2_user\n' +
-  'example.com,smtp.example.com,587,imap.example.com,993,sieve.example.com,4190,true,false\n' +
-  'another.org,smtp.another.org,587,imap.another.org,993,sieve.another.org,4190,true,false\n';
+  'domain,smtp_server,smtp_port,imap_server,imap_port,sieve_server,sieve_port,is_active\n' +
+  'example.com,smtp.example.com,587,imap.example.com,993,sieve.example.com,4190,true\n' +
+  'another.org,smtp.another.org,587,imap.another.org,993,sieve.another.org,4190,true\n';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -117,9 +116,6 @@ function validateRow(raw: Record<string, string>, rowIndex: number): ParsedRow {
   const is_active_raw = (raw.is_active ?? 'true').trim().toLowerCase();
   const is_active = is_active_raw !== 'false' && is_active_raw !== '0';
 
-  const is_v2_user_raw = (raw.is_v2_user ?? 'false').trim().toLowerCase();
-  const is_v2_user = is_v2_user_raw === 'true' || is_v2_user_raw === '1';
-
   return {
     domain,
     smtp_server,
@@ -129,7 +125,6 @@ function validateRow(raw: Record<string, string>, rowIndex: number): ParsedRow {
     sieve_server,
     sieve_port,
     is_active,
-    is_v2_user,
     _rowIndex: rowIndex,
     _validationErrors: errors,
   };
@@ -321,7 +316,6 @@ export default function DomainBulkImportModal({ isOpen, onClose }: Props) {
               sieve_server: row.sieve_server,
               sieve_port: row.sieve_port,
               is_active: row.is_active,
-              is_v2_user: row.is_v2_user,
             },
             {
               onSuccess: () => {
@@ -474,9 +468,6 @@ export default function DomainBulkImportModal({ isOpen, onClose }: Props) {
           ))}
           <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--gray-3)] text-[var(--gray-10)] font-mono">
             is_active <span className="text-[var(--gray-9)]">(optional)</span>
-          </code>
-          <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--gray-3)] text-[var(--gray-10)] font-mono">
-            is_v2_user <span className="text-[var(--gray-9)]">(optional)</span>
           </code>
         </div>
       </div>

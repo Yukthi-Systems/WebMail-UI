@@ -18,13 +18,12 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import Login from '../components/login/Login';
 import { webmailStore } from '../store';
-import { csrfTokenAtom } from '../state/auth';
+import { sessionTokenAtom } from '../state/auth';
 
 export const Route = createFileRoute('/login')({
   beforeLoad: async () => {
-    const csrfToken = webmailStore.get(csrfTokenAtom);
-
-    if (csrfToken) {
+    const sessionToken = webmailStore.get(sessionTokenAtom);
+    if (sessionToken) {
       // If token exists, the user is already logged in.
       // Do not allow them to see the login page; send them to the home path.
       throw redirect({

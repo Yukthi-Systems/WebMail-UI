@@ -15,8 +15,7 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { csrfTokenAtom } from '../state/auth';
-import { webmailStore } from '../store.ts';
+import { authHeaders } from './session';
 import { API_URL } from './config.ts';
 import { fetchListWithAuth, fetchWithAuth } from './fetchWrapper.ts';
 import type { FolderQuota } from '../state/folders.ts';
@@ -42,7 +41,7 @@ interface Email {
   Bcc?: string;
   bcc?: string;
   Subject: string;
-  /** The IMAP UID (never the sequence number), unique inside folderPath */
+  /** The IMAP UID (never the sequence number), unique inside folderPath. */
   id: string;
   uid?: string;
   folderPath?: string;
@@ -113,7 +112,7 @@ interface EmailListOptions {
   filterBy?: EmailFilterBy;
 }
 
-/** Conversation list: one row per conversation, same shape as EmailResponse */
+/** Conversation list: one row per conversation, same shape as EmailResponse. */
 interface ThreadListResponse extends EmailResponse {
   /** Emails in all the conversations (total_count counts conversations) */
   total_messages: number;
@@ -128,9 +127,12 @@ interface ThreadListOptions {
   sentFolder?: string;
 }
 
-/** A conversation opened in the viewer */
+/** A conversation opened in the viewer. */
 interface ThreadDetail {
-  /** All emails, oldest first: this folder's and your replies (each with folderPath) */
+  /**
+   * All emails, oldest first: this folder's and your replies (each with
+   * folderPath)
+   */
   emails: EmailLike[];
   row: EmailLike;
   uid_validity: string;
@@ -209,13 +211,12 @@ export const emailFolders = (folders: FolderResponse[]): [DefaultFolders, string
 };
 
 export const folders = async (): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/folder/path`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -228,13 +229,12 @@ export const folders = async (): Promise<EmailFolders> => {
 };
 
 export const foldersFullPath = async (): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/folder/path`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -247,13 +247,12 @@ export const foldersFullPath = async (): Promise<EmailFolders> => {
 };
 
 export const foldersQuota = async (): Promise<{ quota: FolderQuota }> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/folder/quota?folder_path=INBOX`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -265,11 +264,10 @@ export const foldersQuota = async (): Promise<{ quota: FolderQuota }> => {
   return body;
 };
 
-const authHeaders = (contentType?: string): Record<string, string> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
+const requestHeaders = (contentType?: string): Record<string, string> => {
   return {
     ...(contentType ? { 'Content-Type': contentType } : {}),
-    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    ...authHeaders(),
   };
 };
 
@@ -308,7 +306,7 @@ export const emails = async (
     method: 'GET',
     credentials: 'include',
     timeout: 120000,
-    headers: authHeaders('application/json'),
+    headers: requestHeaders('application/json'),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res, 'Unable to list emails'));
@@ -320,8 +318,8 @@ export const emails = async (
 };
 
 /**
- * One page of conversations: the API groups the whole folder, so a
- * conversation is never split over pages and the totals count conversations.
+ * One page of conversations: the API groups the whole folder, so a conversation
+ * is never split over pages and the totals count conversations.
  */
 export const emailThreads = async (
   folder: string,
@@ -341,7 +339,7 @@ export const emailThreads = async (
     method: 'GET',
     credentials: 'include',
     timeout: 120000,
-    headers: authHeaders('application/json'),
+    headers: requestHeaders('application/json'),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res, 'Unable to list conversations'));
@@ -362,7 +360,7 @@ export const emailThreads = async (
   };
 };
 
-/** The conversation containing email `uid` of `folder`, with all its emails */
+/** The conversation containing email `uid` of `folder`, with all its emails. */
 export const emailThread = async (
   uid: string,
   folder: string,
@@ -377,7 +375,7 @@ export const emailThread = async (
   const res = await fetchWithAuth(`${API_URL}/email/thread/${uid}?${params}`, {
     method: 'GET',
     credentials: 'include',
-    headers: authHeaders('application/json'),
+    headers: requestHeaders('application/json'),
   });
   const data = await res.json();
   return {
@@ -398,7 +396,7 @@ export const emailRaw = async (
   const res = await fetchWithAuth(`${API_URL}/email/raw/${uid}?${params}`, {
     method: 'GET',
     credentials: 'include',
-    headers: authHeaders('message/rfc822'),
+    headers: requestHeaders('message/rfc822'),
   });
 
   if (!res.ok) {
@@ -422,7 +420,7 @@ export const emailView = async (
   const res = await fetchWithAuth(`${API_URL}/email/view/${uid}?${params}`, {
     method: 'GET',
     credentials: 'include',
-    headers: authHeaders('application/json'),
+    headers: requestHeaders('application/json'),
   });
 
   return res.json();
@@ -430,7 +428,7 @@ export const emailView = async (
 
 /**
  * Downloads a single attachment part as a Blob. Needs fetch() (not <a href> /
- * <img src>) because the request must carry the X-CSRF-Token header.
+ * <img src>) because the request must carry the X-Session-Token header.
  */
 export const emailAttachment = async (
   uid: string,
@@ -442,13 +440,13 @@ export const emailAttachment = async (
   const res = await fetchWithAuth(`${API_URL}/email/attachment/${uid}/${partId}?${params}`, {
     method: 'GET',
     credentials: 'include',
-    headers: authHeaders(),
+    headers: requestHeaders(),
   });
 
   return res.blob();
 };
 
-/** PUT/PATCH/DELETE with a JSON list of UIDs as body */
+/** PUT/PATCH/DELETE with a JSON list of UIDs as body. */
 const sendUidList = async (
   method: 'PUT' | 'PATCH' | 'DELETE',
   path: string,
@@ -459,7 +457,7 @@ const sendUidList = async (
   const res = await fetchWithAuth(`${API_URL}${path}?${params}`, {
     method,
     credentials: 'include',
-    headers: authHeaders('application/json'),
+    headers: requestHeaders('application/json'),
     body: uids.length ? JSON.stringify(uids) : undefined,
   });
   if (!res.ok) {
@@ -542,11 +540,11 @@ export type BulkAction = 'read' | 'unread' | 'flag' | 'unflag' | 'move' | 'delet
 export interface BulkEmailRequest {
   folder_path: string;
   action: BulkAction;
-  /** UIDNEXT - 1 when the user selected all: newer emails are not touched */
+  /** UIDNEXT - 1 when the user selected all: newer emails are not touched. */
   max_uid: number;
   uid_validity: string;
   dest_folder?: string;
-  /** Emails the user unselected */
+  /** Emails the user unselected. */
   exclude_uids: number[];
   filter_by: string;
   search?: SearchRequest;
@@ -557,24 +555,29 @@ export interface BulkEmailResponse {
   folder_path: string;
   action: BulkAction;
   done: number;
-  /** Above 0: send the same request again */
+  /** Above 0: send the same request again. */
   remaining: number;
-  /** Unread emails among those moved or deleted */
+  /** Unread emails among those moved or deleted. */
   unread_affected: number;
 }
 
-/** Runs an action on all emails of a folder, filter or search, not only the loaded page. */
+/**
+ * Runs an action on all emails of a folder, filter or search, not only the
+ * loaded page.
+ */
 export const bulkEmails = async (request: BulkEmailRequest): Promise<BulkEmailResponse> => {
   const clean = (path: string) => sanitizeFolderPath(unquoteFolder(path));
   const res = await fetchWithAuth(`${API_URL}/email/bulk`, {
     method: 'POST',
     credentials: 'include',
-    headers: authHeaders('application/json'),
+    headers: requestHeaders('application/json'),
     body: JSON.stringify({
       ...request,
       folder_path: clean(request.folder_path),
       dest_folder: request.dest_folder ? clean(request.dest_folder) : undefined,
-      search: request.search ? { ...request.search, folder: clean(request.search.folder) } : undefined,
+      search: request.search
+        ? { ...request.search, folder: clean(request.search.folder) }
+        : undefined,
     }),
   });
   if (!res.ok) {
@@ -583,43 +586,45 @@ export const bulkEmails = async (request: BulkEmailRequest): Promise<BulkEmailRe
   return res.json();
 };
 
-/** Marks every unread email in the folder as read, including ones not loaded in the UI. */
+/**
+ * Marks every unread email in the folder as read, including ones not loaded in
+ * the UI.
+ */
 export const markFolderRead = async (
   folderPath: string
 ): Promise<{ message: string; folder_path: string; marked_count: number }> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const params = new URLSearchParams({ folder_path: folderPath });
   const res = await fetchWithAuth(`${API_URL}/folder/mark-read?${params}`, {
     method: 'PUT',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   return res.json();
 };
 
-/** Permanently deletes every email in a Trash or Spam folder (the API refuses other folders). */
+/**
+ * Permanently deletes every email in a Trash or Spam folder (the API refuses
+ * other folders).
+ */
 export const emptyFolder = async (
   folderPath: string
 ): Promise<{ message: string; folder_path: string; deleted_count: number }> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const params = new URLSearchParams({ folder_path: folderPath });
   const res = await fetchWithAuth(`${API_URL}/folder/empty?${params}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   return res.json();
 };
 
 export const createEmailFolder = async (path: string): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
-
   const encodedPath = sanitizeFolderPath(path);
 
   const res = await fetchWithAuth(`${API_URL}/folder/path?folder_path=${encodedPath}`, {
@@ -627,7 +632,7 @@ export const createEmailFolder = async (path: string): Promise<EmailFolders> => 
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -640,14 +645,13 @@ export const createEmailFolder = async (path: string): Promise<EmailFolders> => 
 };
 
 export const deleteEmailFolder = async (path: string): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const sanitizedFolder = sanitizeFolderPath(path);
   const res = await fetchWithAuth(`${API_URL}/folder/path?folder_path=${sanitizedFolder}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
@@ -660,7 +664,6 @@ export const deleteEmailFolder = async (path: string): Promise<EmailFolders> => 
 };
 
 export const editEmailFolder = async (oldpath: string, newpath: string): Promise<EmailFolders> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const sanitizedOldFolder = sanitizeFolderPath(oldpath);
   const sanitizedNewFolder = sanitizeFolderPath(newpath);
   const res = await fetchWithAuth(
@@ -670,7 +673,7 @@ export const editEmailFolder = async (oldpath: string, newpath: string): Promise
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...authHeaders(),
       },
     }
   );
@@ -690,13 +693,12 @@ export const folderUidValidity = async (
   folder_path: string;
   message: string;
 }> => {
-  const csrfToken = webmailStore.get(csrfTokenAtom);
   const res = await fetchWithAuth(`${API_URL}/folder/uid-validity?folder_path=${folderPath}`, {
     method: 'GET',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...authHeaders(),
     },
   });
   if (!res.ok) {
