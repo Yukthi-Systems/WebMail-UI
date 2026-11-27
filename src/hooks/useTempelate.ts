@@ -44,12 +44,14 @@ export const emailTemplateKeys = {
   detail: (id: string) => [...emailTemplateKeys.details(), id] as const,
 };
 
-// Fetch all email templates (list view - minimal data)
-export const useEmailTemplates = (isPublic?: boolean) => {
+// Fetch all email templates (list view - minimal data). enabled: false waits
+// until they are needed (e.g. the composer's Template menu is opened)
+export const useEmailTemplates = (isPublic?: boolean, enabled: boolean = true) => {
   return useQuery({
     queryKey: emailTemplateKeys.list(isPublic),
     queryFn: () => getEmailTemplates(isPublic),
     staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled,
   });
 };
 

@@ -50,8 +50,9 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ onTemplateSelect })
   const location = useLocation();
   const slug = getCompanySlugFromPath(location.pathname);
 
-  const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates(false);
-  const { data: sharedTemplates, isLoading: loadingShared } = useEmailTemplates(true);
+  // Loaded only once the Template menu is opened, not with every composer
+  const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates(false, isOpen);
+  const { data: sharedTemplates, isLoading: loadingShared } = useEmailTemplates(true, isOpen);
 
   const { data: fullTemplate, isLoading: loadingTemplate } = useEmailTemplate(
     selectedTemplateId || '',
