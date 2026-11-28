@@ -28,30 +28,82 @@ export type Domain = {
   sieve_server: string;
   sieve_port: number;
   is_active: boolean;
-  /** Mail server configuration (shared by the domains on the same servers) */
-  config_id?: number | string;
+  /**
+   * Mail server configuration; null for an internal domain (SSO sign-in only,
+   * no mail server)
+   */
+  config_id?: number | null;
   config_name?: string | null;
   created_at: string;
   updated_at: string;
 };
 
-export type CreateDomainData = {
-  domain: string;
+/**
+ * The servers and ports of a domain, the old way (bulk import / edit): the API
+ * finds or creates their configuration.
+ */
+export type DomainServers = {
   smtp_server: string;
   smtp_port: number;
   imap_server: string;
   imap_port: number;
   sieve_server: string;
   sieve_port: number;
-  is_active: boolean;
-  /**
-   * Name for a new mail server configuration; not used when an existing one
-   * matches.
-   */
-  config_name?: string;
 };
 
-export type UpdateDomainData = Partial<CreateDomainData>;
+/**
+ * A domain's mail server is a configuration (config_id; null = SSO sign-in
+ * only), or its servers and ports.
+ */
+export type UpdateDomainData = { is_active: boolean } & (
+  | { config_id: number | null }
+  | DomainServers
+);
+
+export type CreateDomainData = { domain: string } & UpdateDomainData;
+
+/** A mail server configuration, shared by the domains on these servers. */
+export type MailServerConfig = {
+  config_id: number;
+  config_name: string;
+  smtp_host: string;
+  smtp_port: number;
+  imap_host: string;
+  imap_port: number;
+  sieve_host: string;
+  sieve_port: number;
+  /** How many domains use it. */
+  domain_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MailServerConfigData = {
+  /** Optional on create: named after its hosts if empty. */
+  config_name: string;
+  smtp_host: string;
+  smtp_port: number;
+  imap_host: string;
+  imap_port: number;
+  sieve_host: string;
+  sieve_port: number;
+};
+
+/** The API's error message, without its "Oops! " prefix. */
+const errorMessage = async (res: Response, fallback: string): Promise<string> => {
+  if (res.status === 401) {
+    webmailStore.set(apiKeyAtom, null);
+    sessionStorage.removeItem('apiKey');
+    return 'Unauthorized - please log in.';
+  }
+  try {
+    const body = await res.json();
+    const message = typeof body?.message === 'string' ? body.message : '';
+    return message.replace(/^Oops!\s*/, '') || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 // Helper to get headers
 const getHeaders = () => {
@@ -91,14 +143,7 @@ export const getDomainList = async (
     headers: getHeaders(),
   });
 
-  if (res.status === 401) {
-    webmailStore.set(apiKeyAtom, null);
-    sessionStorage.removeItem('apiKey');
-    throw new Error('Unauthorized - please log in.');
-  } else if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Failed to fetch domains.');
-  }
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to fetch domains.'));
   return res.json();
 };
 
@@ -109,10 +154,7 @@ export const getDomain = async (domain: string): Promise<Domain> => {
     headers: getHeaders(),
   });
 
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Failed to fetch domain details.');
-  }
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to fetch domain details.'));
 
   return res.json();
 };
@@ -125,10 +167,7 @@ export const createDomain = async (data: CreateDomainData): Promise<Domain> => {
     body: JSON.stringify(data),
   });
 
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Failed to create domain.');
-  }
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to create domain.'));
 
   return res.json();
 };
@@ -141,10 +180,7 @@ export const updateDomain = async (domain: string, data: UpdateDomainData): Prom
     body: JSON.stringify(data),
   });
 
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Failed to update domain.');
-  }
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to update domain.'));
 
   return res.json();
 };
@@ -156,8 +192,50 @@ export const deleteDomain = async (domain: string): Promise<void> => {
     headers: getHeaders(),
   });
 
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Failed to delete domain.');
-  }
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to delete domain.'));
+};
+
+export const getConfigList = async (): Promise<MailServerConfig[]> => {
+  const res = await fetch(`${API_URL}/user/admin/configs`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to fetch configurations.'));
+  const body: { data?: MailServerConfig[] } = await res.json();
+  return body.data ?? [];
+};
+
+export const createConfig = async (data: MailServerConfigData): Promise<MailServerConfig> => {
+  const res = await fetch(`${API_URL}/user/admin/config`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to create configuration.'));
+  return (await res.json()).data;
+};
+
+export const updateConfig = async (
+  configId: number,
+  data: Partial<MailServerConfigData>
+): Promise<MailServerConfig> => {
+  const res = await fetch(`${API_URL}/user/admin/config/${configId}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to update configuration.'));
+  return (await res.json()).data;
+};
+
+export const deleteConfig = async (configId: number): Promise<void> => {
+  const res = await fetch(`${API_URL}/user/admin/config/${configId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, 'Failed to delete configuration.'));
 };

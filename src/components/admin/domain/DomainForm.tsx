@@ -15,48 +15,29 @@
  * <https://www.gnu.org/licenses/>.
  */
 
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
+// Add or edit a domain: its name, whether it is active and its mail server configuration
+
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { FiArrowLeft } from 'react-icons/fi';
-import { Flex, Switch, Text } from '@radix-ui/themes';
-import { Controller } from 'react-hook-form';
-import { useCreateDomain, useUpdateDomain, useGetDomain } from '../../../hooks/useAdminDomain';
-import { apiKeyAtom } from '../../../state/auth';
+import { FiArrowLeft, FiEdit2, FiPlus } from 'react-icons/fi';
+import { Switch } from '@radix-ui/themes';
 import { useAtomValue } from 'jotai';
-import type { CreateDomainData } from '../../../api/admin-domain';
+import {
+  useCreateDomain,
+  useGetDomain,
+  useListConfigs,
+  useUpdateDomain,
+} from '../../../hooks/useAdminDomain';
+import { apiKeyAtom } from '../../../state/auth';
+import type { MailServerConfig } from '../../../api/admin-domain';
+import { MAIL_SERVICES } from '../../../utils/mailServerConfig';
+import ConfigFormDialog from './ConfigFormDialog';
+import ConfigPicker, { SSO_ONLY } from './ConfigPicker';
 
-const schema = yup.object().shape({
-  domain: yup.string().required('Domain name is required'),
-  smtp_server: yup.string().required('SMTP server is required'),
-  smtp_port: yup
-    .number()
-    .typeError('Port must be a number')
-    .min(1, 'Port must be between 1-65535')
-    .max(65535)
-    .required('SMTP port is required'),
-  imap_server: yup.string().required('IMAP server is required'),
-  imap_port: yup
-    .number()
-    .typeError('Port must be a number')
-    .min(1, 'Port must be between 1-65535')
-    .max(65535)
-    .required('IMAP port is required'),
-  sieve_server: yup.string().required('Sieve server is required'),
-  sieve_port: yup
-    .number()
-    .typeError('Port must be a number')
-    .min(1, 'Port must be between 1-65535')
-    .max(65535)
-    .required('Sieve port is required'),
-  is_active: yup.boolean().default(true),
-  // Only used when these servers don't have a configuration yet
-  config_name: yup.string().trim().max(255).default(''),
-});
+const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
-type FormData = yup.InferType<typeof schema>;
+const toSelection = (configId: number | null | undefined) =>
+  configId == null ? SSO_ONLY : String(configId);
 
 function DomainForm() {
   const navigate = useNavigate();
@@ -65,74 +46,82 @@ function DomainForm() {
   const isEditMode = !!params.domain;
 
   const { data: domainData, isLoading } = useGetDomain(params.domain);
+  const { data: configs = [], isLoading: configsLoading } = useListConfigs();
   const createMutation = useCreateDomain();
   const updateMutation = useUpdateDomain();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    control,
-    formState: { errors, isDirty },
-  } = useForm<FormData>({
-    resolver: yupResolver(schema),
-    defaultValues: {
-      domain: '',
-      smtp_server: '',
-      smtp_port: 587,
-      imap_server: '',
-      imap_port: 993,
-      sieve_server: '',
-      sieve_port: 4190,
-      is_active: true,
-      config_name: '',
-    },
-  });
+  const [domain, setDomain] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [selection, setSelection] = useState('');
+  const [errors, setErrors] = useState<{ domain?: string; config?: string }>({});
+  const [configDialog, setConfigDialog] = useState<'new' | 'edit' | null>(null);
 
+  const original = domainData?.data;
   useEffect(() => {
-    if (isEditMode && domainData) {
-      reset({
-        domain: domainData.data?.domain,
-        smtp_server: domainData.data.smtp_server,
-        smtp_port: domainData.data.smtp_port,
-        imap_server: domainData.data.imap_server,
-        imap_port: domainData.data.imap_port,
-        sieve_server: domainData.data.sieve_server,
-        sieve_port: domainData.data.sieve_port,
-        is_active: domainData.data.is_active,
-        config_name: domainData.data.config_name ?? '',
-      });
+    if (isEditMode && original) {
+      setDomain(original.domain);
+      setIsActive(original.is_active);
+      setSelection(toSelection(original.config_id));
     }
-  }, [domainData, reset, isEditMode]);
+  }, [isEditMode, original]);
 
-  const onSubmit = ({ config_name, ...domain }: FormData) => {
-    if (isEditMode && params.domain) {
-      // The configuration follows the servers; its name is only set on create
-      updateMutation.mutate(
-        { domain: params.domain, data: domain },
-        {
-          onSuccess: () => {
-            navigate({ to: '/1219/admin/domain' });
-          },
-        }
-      );
-    } else {
-      const data: CreateDomainData = { ...domain, ...(config_name ? { config_name } : {}) };
-      createMutation.mutate(data, {
-        onSuccess: () => {
-          navigate({ to: '/1219/admin/domain' });
-        },
-      });
+  // A new domain on the only configuration there is
+  useEffect(() => {
+    if (!isEditMode && !selection && configs.length === 1) {
+      setSelection(String(configs[0].config_id));
     }
-  };
-
-  const isPending = createMutation.isPending || updateMutation.isPending;
+  }, [isEditMode, selection, configs]);
 
   useEffect(() => {
     if (!apiKey && !sessionStorage.getItem('apiKey')) {
       navigate({ to: '/1219/admin/login' });
     }
   }, [apiKey, navigate]);
+
+  const selectedConfig = useMemo(
+    () => configs.find((config) => String(config.config_id) === selection) ?? null,
+    [configs, selection]
+  );
+  // Other domains on the selected configuration (editing it changes them too)
+  const otherDomains = selectedConfig
+    ? selectedConfig.domain_count -
+      (isEditMode && original?.config_id === selectedConfig.config_id ? 1 : 0)
+    : 0;
+
+  const isDirty =
+    !isEditMode ||
+    (!!original &&
+      (original.is_active !== isActive || toSelection(original.config_id) !== selection));
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = domain.trim().toLowerCase();
+    const found: typeof errors = {};
+    if (!isEditMode) {
+      if (!name) found.domain = 'Domain name is required';
+      else if (!DOMAIN_PATTERN.test(name)) found.domain = 'Enter a domain like example.com';
+    }
+    if (!selection) found.config = 'Choose a mail server configuration';
+    setErrors(found);
+    if (found.domain || found.config) return;
+
+    const config_id = selection === SSO_ONLY ? null : Number(selection);
+    const done = { onSuccess: () => navigate({ to: '/1219/admin/domain' }) };
+    if (isEditMode && params.domain) {
+      updateMutation.mutate(
+        { domain: params.domain, data: { is_active: isActive, config_id } },
+        done
+      );
+    } else {
+      createMutation.mutate({ domain: name, is_active: isActive, config_id }, done);
+    }
+  };
+
+  const onConfigSaved = (config: MailServerConfig) => {
+    setSelection(String(config.config_id));
+    setErrors((previous) => ({ ...previous, config: undefined }));
+  };
 
   if (isEditMode && isLoading) {
     return (
@@ -142,192 +131,162 @@ function DomainForm() {
     );
   }
 
+  const fieldClass = (error?: string, extra = '') =>
+    `w-full px-4 py-2.5 bg-[var(--gray-1)] border rounded-lg text-[var(--gray-12)] placeholder:text-[var(--gray-9)] focus:outline-none focus:ring-2 transition-all ${
+      error
+        ? 'border-[var(--red-9)] focus:ring-[var(--red-8)]'
+        : 'border-[var(--gray-6)] focus:ring-[var(--accent-8)] focus:border-[var(--accent-9)]'
+    } ${extra}`;
+
   return (
     <div className="min-h-screen bg-[var(--gray-2)] p-4 md:p-8">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="mb-8 flex items-start justify-between">
-          <div>
-            <button
-              onClick={() => navigate({ to: '/1219/admin/domain' })}
-              className="inline-flex items-center gap-2 text-sm text-[var(--gray-11)] hover:text-[var(--gray-12)] mb-3 transition-colors"
-            >
-              <FiArrowLeft className="w-4 h-4" />
-              Back to domains
-            </button>
-            <h1 className="text-3xl font-semibold text-[var(--gray-12)]">
-              {isEditMode ? 'Edit Domain' : 'Add New Domain'}
-            </h1>
-            <p className="text-[var(--gray-11)] mt-2">
-              Configure email server settings for this domain
-            </p>
-          </div>
+        <div className="mb-8">
+          <button
+            onClick={() => navigate({ to: '/1219/admin/domain' })}
+            className="inline-flex items-center gap-2 text-sm text-[var(--gray-11)] hover:text-[var(--gray-12)] mb-3 transition-colors"
+          >
+            <FiArrowLeft className="w-4 h-4" />
+            Back to domains
+          </button>
+          <h1 className="text-3xl font-semibold text-[var(--gray-12)]">
+            {isEditMode ? 'Edit Domain' : 'Add New Domain'}
+          </h1>
+          <p className="text-[var(--gray-11)] mt-2">
+            Pick the mail server configuration this domain uses
+          </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-10">
-          {/* Domain Information */}
-          <div className="space-y-2">
+        <form onSubmit={handleSubmit} noValidate className="space-y-8">
+          {/* Domain */}
+          <section className="space-y-4">
             <h2 className="text-sm font-semibold text-[var(--gray-12)] uppercase tracking-wider">
-              Domain Information
+              Domain
             </h2>
-
-            <div className="space-y-5">
-              <FormField label="Domain Name" error={errors.domain?.message}>
-                <input
-                  type="text"
-                  placeholder="example.com"
-                  readOnly={isEditMode}
-                  className={`w-full px-4 py-2.5 bg-[var(--gray-1)] border rounded-lg text-[var(--gray-12)] placeholder:text-[var(--gray-9)] focus:outline-none focus:ring-2 transition-all ${
-                    errors.domain
-                      ? 'border-[var(--red-9)] focus:ring-[var(--red-9)]'
-                      : 'border-[var(--gray-6)] focus:ring-[var(--accent-9)] focus:border-[var(--accent-9)]'
-                  } ${isEditMode ? 'bg-[var(--gray-3)] cursor-not-allowed' : ''}`}
-                  {...register('domain')}
-                />
-                {isEditMode && (
-                  <p className="text-xs text-[var(--gray-11)] mt-1.5">
-                    Domain name cannot be changed
-                  </p>
+            <div className="space-y-1.5">
+              <label htmlFor="domain" className="block text-sm font-medium text-[var(--gray-12)]">
+                Domain name {!isEditMode && <span className="text-[var(--red-9)]">*</span>}
+              </label>
+              <input
+                id="domain"
+                type="text"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoFocus={!isEditMode}
+                placeholder="example.com"
+                readOnly={isEditMode}
+                value={domain}
+                onChange={(event) => {
+                  setDomain(event.target.value);
+                  if (errors.domain) setErrors((previous) => ({ ...previous, domain: undefined }));
+                }}
+                className={fieldClass(
+                  errors.domain,
+                  `font-mono ${isEditMode ? 'bg-[var(--gray-3)] cursor-not-allowed' : ''}`
                 )}
-              </FormField>
+              />
+              {errors.domain ? (
+                <p className="text-sm text-[var(--red-11)]">{errors.domain}</p>
+              ) : (
+                isEditMode && (
+                  <p className="text-xs text-[var(--gray-11)]">Domain name cannot be changed</p>
+                )
+              )}
+            </div>
+            <label className="flex items-center gap-3 cursor-pointer w-fit">
+              <Switch checked={isActive} onCheckedChange={setIsActive} />
+              <span className="text-sm font-medium text-[var(--gray-12)]">Domain is active</span>
+            </label>
+          </section>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <Controller
-                  name="is_active"
-                  control={control}
-                  render={({ field }) => (
-                    <Flex align="center" gap="3">
-                      <Switch
-                        id="is_active"
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                      <label
-                        htmlFor="is_active"
-                        className="text-sm font-medium text-[var(--gray-12)] cursor-pointer"
-                      >
-                        Domain is active
-                      </label>
-                    </Flex>
-                  )}
-                />
+          <div className="border-t border-[var(--gray-5)]" />
 
-                <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor="config_name"
-                    className="text-sm font-medium text-[var(--gray-12)]"
+          {/* Mail server */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-[var(--gray-12)] uppercase tracking-wider">
+                Mail server
+              </h2>
+              <button
+                type="button"
+                onClick={() => setConfigDialog('new')}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent-11)] hover:text-[var(--accent-12)]"
+              >
+                <FiPlus className="w-4 h-4" />
+                New configuration
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="config" className="block text-sm font-medium text-[var(--gray-12)]">
+                Configuration <span className="text-[var(--red-9)]">*</span>
+              </label>
+              <ConfigPicker
+                id="config"
+                configs={configs}
+                value={selection}
+                loading={configsLoading}
+                error={errors.config}
+                onChange={(next) => {
+                  setSelection(next);
+                  if (errors.config) setErrors((previous) => ({ ...previous, config: undefined }));
+                }}
+              />
+              {errors.config && <p className="text-sm text-[var(--red-11)]">{errors.config}</p>}
+            </div>
+
+            {selectedConfig && (
+              <div className="rounded-xl border border-[var(--gray-5)] bg-[var(--gray-1)] overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-[var(--gray-3)] border-b border-[var(--gray-5)]">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[var(--gray-12)] truncate">
+                      {selectedConfig.config_name}
+                    </div>
+                    <div className="text-xs text-[var(--gray-11)]">
+                      {otherDomains > 0
+                        ? `Also used by ${otherDomains} other domain${otherDomains === 1 ? '' : 's'}`
+                        : 'Not used by other domains'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfigDialog('edit')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--gray-11)] hover:text-[var(--gray-12)] hover:bg-[var(--gray-4)] rounded-md shrink-0"
                   >
-                    Configuration name <span className="text-[var(--gray-9)]">(optional)</span>
-                  </label>
-                  <input
-                    id="config_name"
-                    type="text"
-                    placeholder="e.g. Cloud 27"
-                    readOnly={isEditMode}
-                    className={`w-full px-4 py-2.5 bg-[var(--gray-1)] border border-[var(--gray-6)] rounded-lg text-[var(--gray-12)] placeholder:text-[var(--gray-9)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-9)] focus:border-[var(--accent-9)] transition-all ${
-                      isEditMode ? 'bg-[var(--gray-3)] cursor-not-allowed' : ''
-                    }`}
-                    {...register('config_name')}
-                  />
-                  <Text size="1" color="gray">
-                    {isEditMode
-                      ? 'Set by the mail servers; domains on the same servers share it'
-                      : 'Used only if these servers have no configuration yet'}
-                  </Text>
+                    <FiEdit2 className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
                 </div>
+                <dl className="divide-y divide-[var(--gray-4)]">
+                  {MAIL_SERVICES.map((service) => (
+                    <div
+                      key={service}
+                      className="grid grid-cols-[64px_1fr_auto] gap-3 px-4 py-2 text-sm"
+                    >
+                      <dt className="font-semibold text-[var(--gray-11)] uppercase text-xs pt-0.5">
+                        {service}
+                      </dt>
+                      <dd className="font-mono text-xs text-[var(--gray-12)] break-all pt-0.5">
+                        {selectedConfig[`${service}_host`]}
+                      </dd>
+                      <dd className="font-mono text-xs text-[var(--gray-11)] pt-0.5">
+                        {selectedConfig[`${service}_port`]}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
-            </div>
-          </div>
+            )}
 
-          <div className="border-t border-[var(--gray-5)]"></div>
+            {selection === SSO_ONLY && (
+              <p className="text-sm text-[var(--gray-11)] p-3 rounded-lg bg-[var(--gray-3)]">
+                Internal domain: its users sign in with SSO only, there is no password sign-in.
+              </p>
+            )}
+          </section>
 
-          {/* SMTP Configuration */}
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-[var(--gray-12)] uppercase tracking-wider">
-              SMTP Configuration
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <FormField label="SMTP Server" error={errors.smtp_server?.message}>
-                <input
-                  type="text"
-                  placeholder="smtp.example.com"
-                  className="form-input"
-                  {...register('smtp_server')}
-                />
-              </FormField>
-
-              <FormField label="SMTP Port" error={errors.smtp_port?.message}>
-                <input
-                  type="number"
-                  placeholder="587"
-                  className="form-input"
-                  {...register('smtp_port', { valueAsNumber: true })}
-                />
-              </FormField>
-            </div>
-          </div>
-
-          <div className="border-t border-[var(--gray-5)]"></div>
-
-          {/* IMAP Configuration */}
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-[var(--gray-12)] uppercase tracking-wider">
-              IMAP Configuration
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <FormField label="IMAP Server" error={errors.imap_server?.message}>
-                <input
-                  type="text"
-                  placeholder="imap.example.com"
-                  className="form-input"
-                  {...register('imap_server')}
-                />
-              </FormField>
-
-              <FormField label="IMAP Port" error={errors.imap_port?.message}>
-                <input
-                  type="number"
-                  placeholder="993"
-                  className="form-input"
-                  {...register('imap_port', { valueAsNumber: true })}
-                />
-              </FormField>
-            </div>
-          </div>
-
-          <div className="border-t border-[var(--gray-5)]"></div>
-
-          {/* Sieve Configuration */}
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-[var(--gray-12)] uppercase tracking-wider">
-              Sieve Configuration
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <FormField label="Sieve Server" error={errors.sieve_server?.message}>
-                <input
-                  type="text"
-                  placeholder="sieve.example.com"
-                  className="form-input"
-                  {...register('sieve_server')}
-                />
-              </FormField>
-
-              <FormField label="Sieve Port" error={errors.sieve_port?.message}>
-                <input
-                  type="number"
-                  placeholder="4190"
-                  className="form-input"
-                  {...register('sieve_port', { valueAsNumber: true })}
-                />
-              </FormField>
-            </div>
-          </div>
-
-          <div className="border-t border-[var(--gray-5)] pt-3"></div>
+          <div className="border-t border-[var(--gray-5)]" />
 
           {/* Actions */}
           <div className="flex justify-end gap-3">
@@ -340,7 +299,7 @@ function DomainForm() {
             </button>
             <button
               type="submit"
-              disabled={isPending || (isEditMode && !isDirty)}
+              disabled={isPending || !isDirty}
               className="px-5 py-2.5 text-sm font-medium text-white bg-[var(--accent-9)] hover:bg-[var(--accent-10)] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
             >
               {isPending && (
@@ -352,52 +311,19 @@ function DomainForm() {
         </form>
       </div>
 
-      <style>{`
-        .form-input {
-          width: 100%;
-          padding: 0.625rem 1rem;
-          background-color: var(--gray-1);
-          border: 1px solid var(--gray-6);
-          border-radius: 0.5rem;
-          color: var(--gray-12);
-          transition: all 0.2s;
-        }
-        .form-input::placeholder {
-          color: var(--gray-9);
-        }
-        .form-input:focus {
-          outline: none;
-          border-color: var(--accent-9);
-          ring: 2px;
-          ring-color: var(--accent-9);
-        }
-        .form-input[aria-invalid="true"] {
-          border-color: var(--red-9);
-        }
-        .form-input[aria-invalid="true"]:focus {
-          ring-color: var(--red-9);
-        }
-      `}</style>
+      <ConfigFormDialog
+        open={configDialog === 'new'}
+        onOpenChange={(open) => !open && setConfigDialog(null)}
+        onSaved={onConfigSaved}
+      />
+      <ConfigFormDialog
+        open={configDialog === 'edit'}
+        onOpenChange={(open) => !open && setConfigDialog(null)}
+        config={selectedConfig}
+        onSaved={onConfigSaved}
+      />
     </div>
   );
 }
-
-const FormField = ({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) => (
-  <div className="space-y-2">
-    <label className="block text-sm font-medium text-[var(--gray-12)]">
-      {label} <span className="text-[var(--red-9)]">*</span>
-    </label>
-    {children}
-    {error && <p className="text-sm text-[var(--red-9)]">{error}</p>}
-  </div>
-);
 
 export default DomainForm;

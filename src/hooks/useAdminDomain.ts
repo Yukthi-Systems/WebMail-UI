@@ -25,6 +25,12 @@ import {
   createDomain,
   updateDomain,
   deleteDomain,
+  getConfigList,
+  createConfig,
+  updateConfig,
+  deleteConfig,
+  type MailServerConfig,
+  type MailServerConfigData,
   type Domain,
   type CreateDomainData,
   type UpdateDomainData,
@@ -67,9 +73,10 @@ export function useCreateDomain() {
     onSuccess: () => {
       toast.success({ description: 'Domain created successfully' });
       queryClient.invalidateQueries({ queryKey: ['domains'] });
+      queryClient.invalidateQueries({ queryKey: ['mailServerConfigs'] });
     },
     onError: (error: Error) => {
-      toast.error({ description: error.message || 'Failed to update domain' });
+      toast.error({ description: error.message || 'Failed to create domain' });
     },
   });
 }
@@ -84,6 +91,7 @@ export function useUpdateDomain() {
       toast.success({ description: 'Domain updated successfully' });
       queryClient.invalidateQueries({ queryKey: ['domains'] });
       queryClient.invalidateQueries({ queryKey: ['domain'] });
+      queryClient.invalidateQueries({ queryKey: ['mailServerConfigs'] });
     },
     onError: (error: Error) => {
       toast.error({ description: error.message || 'Failed to update domain' });
@@ -99,6 +107,7 @@ export function useDeleteDomain() {
     mutationFn: (domain: string) => deleteDomain(domain),
     onSuccess: (_data, domain) => {
       toast.success({ description: 'Domain deleted successfully' });
+      queryClient.invalidateQueries({ queryKey: ['mailServerConfigs'] });
       // Update all cached domain list pages — remove the deleted entry and decrement count
       queryClient.setQueriesData<DomainListResponse>({ queryKey: ['domains'] }, (old) => {
         if (!old?.data) return old;
@@ -111,6 +120,72 @@ export function useDeleteDomain() {
     },
     onError: (error: Error) => {
       toast.error({ description: error.message || 'Failed to delete domain' });
+    },
+  });
+}
+
+export function useListConfigs() {
+  const apiKey = useAtomValue(apiKeyAtom);
+  return useQuery<MailServerConfig[], Error>({
+    queryKey: ['mailServerConfigs', apiKey],
+    queryFn: getConfigList,
+    enabled: !!apiKey,
+    staleTime: 60 * 1000,
+    ...QUERY_RETRY,
+  });
+}
+
+export function useCreateConfig() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation<MailServerConfig, Error, MailServerConfigData>({
+    mutationFn: createConfig,
+    onSuccess: (config) => {
+      toast.success({ description: `Configuration "${config.config_name}" created` });
+      queryClient.invalidateQueries({ queryKey: ['mailServerConfigs'] });
+    },
+    onError: (error) => {
+      toast.error({ description: error.message || 'Failed to create configuration' });
+    },
+  });
+}
+
+export function useUpdateConfig() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation<
+    MailServerConfig,
+    Error,
+    { configId: number; data: Partial<MailServerConfigData> }
+  >({
+    mutationFn: ({ configId, data }) => updateConfig(configId, data),
+    onSuccess: (config) => {
+      toast.success({ description: `Configuration "${config.config_name}" updated` });
+      queryClient.invalidateQueries({ queryKey: ['mailServerConfigs'] });
+      // Its domains show its name and servers
+      queryClient.invalidateQueries({ queryKey: ['domains'] });
+      queryClient.invalidateQueries({ queryKey: ['domain'] });
+    },
+    onError: (error) => {
+      toast.error({ description: error.message || 'Failed to update configuration' });
+    },
+  });
+}
+
+export function useDeleteConfig() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation<void, Error, number>({
+    mutationFn: deleteConfig,
+    onSuccess: () => {
+      toast.success({ description: 'Configuration deleted' });
+      queryClient.invalidateQueries({ queryKey: ['mailServerConfigs'] });
+    },
+    onError: (error) => {
+      toast.error({ description: error.message || 'Failed to delete configuration' });
     },
   });
 }

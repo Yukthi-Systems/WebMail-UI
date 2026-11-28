@@ -18,6 +18,7 @@
 import { useNavigate, Link } from '@tanstack/react-router';
 import { useEffect, useState, useRef } from 'react';
 import BrandingManager from './BrandingManager';
+import ConfigManager from './ConfigManager';
 import { FiLayers, FiGlobe } from 'react-icons/fi';
 import {
   FiEdit2,
@@ -50,7 +51,9 @@ import { useDebounce } from '../../../hooks/useDebounce';
 function DomainList() {
   const navigate = useNavigate();
   const apiKey = useAtomValue(apiKeyAtom);
-  const [activeTab, setActiveTab] = useState<'domains' | 'branding'>('domains');
+  const [activeTab, setActiveTab] = useState<'domains' | 'configs' | 'branding'>('domains');
+  const [configSearch, setConfigSearch] = useState('');
+  const [configCreateOpen, setConfigCreateOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10);
   const [pageInput, setPageInput] = useState('1');
@@ -224,12 +227,22 @@ function DomainList() {
             <div className="flex items-end justify-between flex-wrap gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-[var(--gray-12)] mb-1 tracking-tight">
-                  {activeTab === 'domains' ? 'Domain Management' : 'Company Branding'}
+                  {
+                    {
+                      domains: 'Domain Management',
+                      configs: 'Mail Server Configurations',
+                      branding: 'Company Branding',
+                    }[activeTab]
+                  }
                 </h1>
                 <p className="text-base text-[var(--gray-11)] font-medium">
-                  {activeTab === 'domains'
-                    ? 'Configure and manage your email domain infrastructure'
-                    : 'Manage logos and backgrounds for company login pages'}
+                  {
+                    {
+                      domains: 'Configure and manage your email domain infrastructure',
+                      configs: 'Mail servers saved once and shared by the domains that use them',
+                      branding: 'Manage logos and backgrounds for company login pages',
+                    }[activeTab]
+                  }
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -245,6 +258,17 @@ function DomainList() {
                   >
                     <FiGlobe className="w-3.5 h-3.5" />
                     Domains
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('configs')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      activeTab === 'configs'
+                        ? 'bg-[var(--gray-1)] text-[var(--gray-12)] shadow-sm'
+                        : 'text-[var(--gray-10)] hover:text-[var(--gray-12)]'
+                    }`}
+                  >
+                    <FiServer className="w-3.5 h-3.5" />
+                    Configurations
                   </button>
                   <button
                     onClick={() => setActiveTab('branding')}
@@ -326,9 +350,36 @@ function DomainList() {
                     </Link>
                   </>
                 )}
+
+                {activeTab === 'configs' && (
+                  <>
+                    <input
+                      type="text"
+                      value={configSearch}
+                      onChange={(e) => setConfigSearch(e.target.value)}
+                      placeholder="Search name or server..."
+                      className="px-4 py-2 rounded-lg border border-[var(--gray-5)] bg-[var(--gray-1)] focus:outline-none focus:border-[var(--accent-9)] focus:ring-2 focus:ring-[var(--accent-8)] transition-all"
+                    />
+                    <button
+                      onClick={() => setConfigCreateOpen(true)}
+                      className="group px-4 py-2.5 text-sm font-semibold text-white bg-[var(--accent-9)] hover:bg-[var(--accent-10)] rounded-lg transition-all duration-200 flex items-center gap-2 shadow-sm"
+                    >
+                      <FiPlus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
+                      New Configuration
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
+
+          {activeTab === 'configs' && (
+            <ConfigManager
+              search={configSearch}
+              createOpen={configCreateOpen}
+              onCreateOpenChange={setConfigCreateOpen}
+            />
+          )}
 
           {/* Branding Tab */}
           {activeTab === 'branding' && <BrandingManager />}
@@ -436,9 +487,18 @@ function DomainList() {
                               </div>
                             </td>
                             <td className="py-3 px-6 text-center">
-                              <span className="text-[var(--gray-11)] text-xs font-medium">
-                                {domain.config_name || '—'}
-                              </span>
+                              {domain.config_id == null ? (
+                                <span
+                                  className="text-[var(--gray-10)] text-xs italic"
+                                  title="No mail server: users sign in with SSO only"
+                                >
+                                  SSO only
+                                </span>
+                              ) : (
+                                <span className="text-[var(--gray-11)] text-xs font-medium">
+                                  {domain.config_name || '—'}
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 px-6">
                               <span className="text-[var(--gray-11)] text-xs font-medium">
